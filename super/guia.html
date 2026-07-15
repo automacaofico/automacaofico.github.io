@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Como atualizar o Painel Unifilar FICO</title>
+</head>
+<body>
+<style>
+  :root{
+    --bg:        #f6f3ec;
+    --paper:     #fffdf9;
+    --ink:       #201d16;
+    --ink-mid:   #514c3e;
+    --ink-soft:  #86806e;
+    --line:      #ded6c2;
+    --accent:    #2f5fd6;
+    --accent-ink:#12245e;
+    --accent-bg: #e8edfc;
+    --good:      #1f7a4d;
+    --good-bg:   #e4f3e9;
+    --warn:      #9a5b12;
+    --warn-bg:   #fbf0dd;
+    --chip-bg:   #eee8d8;
+    --mono-bg:   #efe9da;
+    --shadow: 0 1px 2px rgba(32,29,22,.06), 0 8px 24px -12px rgba(32,29,22,.18);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:        #1a1812;
+      --paper:     #221f18;
+      --ink:       #f1ede1;
+      --ink-mid:   #cac2ac;
+      --ink-soft:  #8f886f;
+      --line:      #3a352728;
+      --line:      #3d372a;
+      --accent:    #7c9cff;
+      --accent-ink:#dbe4ff;
+      --accent-bg: #26305a;
+      --good:      #6fd39c;
+      --good-bg:   #163524;
+      --warn:      #e8b573;
+      --warn-bg:   #3a2c11;
+      --chip-bg:   #2e2a1f;
+      --mono-bg:   #2a2619;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:        #1a1812;
+    --paper:     #221f18;
+    --ink:       #f1ede1;
+    --ink-mid:   #cac2ac;
+    --ink-soft:  #8f886f;
+    --line:      #3d372a;
+    --accent:    #7c9cff;
+    --accent-ink:#dbe4ff;
+    --accent-bg: #26305a;
+    --good:      #6fd39c;
+    --good-bg:   #163524;
+    --warn:      #e8b573;
+    --warn-bg:   #3a2c11;
+    --chip-bg:   #2e2a1f;
+    --mono-bg:   #2a2619;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+  :root[data-theme="light"]{
+    --bg:        #f6f3ec;
+    --paper:     #fffdf9;
+    --ink:       #201d16;
+    --ink-mid:   #514c3e;
+    --ink-soft:  #86806e;
+    --line:      #ded6c2;
+    --accent:    #2f5fd6;
+    --accent-ink:#12245e;
+    --accent-bg: #e8edfc;
+    --good:      #1f7a4d;
+    --good-bg:   #e4f3e9;
+    --warn:      #9a5b12;
+    --warn-bg:   #fbf0dd;
+    --chip-bg:   #eee8d8;
+    --mono-bg:   #efe9da;
+    --shadow: 0 1px 2px rgba(32,29,22,.06), 0 8px 24px -12px rgba(32,29,22,.18);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family: Georgia, 'Iowan Old Style', 'Palatino Linotype', serif;
+    line-height:1.55;
+  }
+  .sans{ font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+  code, .mono{
+    font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+    font-size: .92em;
+  }
+
+  .wrap{ max-width: 760px; margin: 0 auto; padding: 56px 24px 96px; }
+
+  /* ---------- Header ---------- */
+  .kicker{
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    margin: 0 0 10px;
+  }
+  h1{
+    font-size: clamp(28px, 4.4vw, 40px);
+    line-height: 1.12;
+    margin: 0 0 14px;
+    text-wrap: balance;
+    letter-spacing: -.01em;
+  }
+  .lede{
+    font-size: 17px;
+    color: var(--ink-mid);
+    max-width: 58ch;
+    margin: 0 0 28px;
+  }
+  .meta-row{
+    display:flex; gap:10px; flex-wrap:wrap;
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-size: 13px; color: var(--ink-soft);
+    margin-bottom: 36px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--line);
+  }
+  .meta-row span{ display:inline-flex; align-items:center; gap:6px; }
+  .dot{ width:5px; height:5px; border-radius:50%; background:var(--ink-soft); }
+
+  /* ---------- Summary box ---------- */
+  .summary{
+    background: var(--accent-bg);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 44px;
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  .summary h2{
+    font-family: inherit;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--accent-ink);
+    margin: 0 0 10px;
+  }
+  .summary ol{
+    margin: 0; padding-left: 20px; color: var(--ink);
+    font-size: 14.5px;
+  }
+  .summary li{ margin-bottom: 4px; }
+  .summary li::marker{ color: var(--accent); font-weight:700; }
+
+  /* ---------- Steps ---------- */
+  .phase-label{
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    color: var(--ink-soft);
+    margin: 48px 0 18px;
+    display:flex; align-items:center; gap:12px;
+  }
+  .phase-label::after{ content:''; flex:1; height:1px; background:var(--line); }
+
+  .step{
+    display:grid;
+    grid-template-columns: 44px 1fr;
+    gap: 18px;
+    padding: 26px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .step:last-child{ border-bottom:none; }
+  .step-num{
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-weight: 800;
+    font-size: 17px;
+    width:40px; height:40px;
+    border-radius:50%;
+    background: var(--paper);
+    border: 1.5px solid var(--accent);
+    color: var(--accent);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .step h3{
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-size: 17px;
+    margin: 4px 0 8px;
+    color: var(--ink);
+  }
+  .step p{ margin: 0 0 10px; font-size: 15.5px; color: var(--ink-mid); }
+  .step p:last-child{ margin-bottom:0; }
+
+  .btn-ref{
+    display:inline-flex; align-items:center; gap:6px;
+    background: var(--accent); color:#fff;
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-weight:600; font-size:13px;
+    padding: 3px 10px; border-radius: 6px;
+  }
+  .btn-ref.ghost{ background:transparent; color:var(--accent); border:1.3px solid var(--accent); }
+  .filename{
+    background: var(--mono-bg);
+    padding: 2px 7px;
+    border-radius: 5px;
+    color: var(--ink);
+  }
+
+  /* ---------- Mockups ---------- */
+  .mock{
+    margin: 14px 0 4px;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+    background: var(--paper);
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  .mock-bar{
+    display:flex; align-items:center; gap:6px;
+    padding: 8px 12px;
+    background: color-mix(in srgb, var(--ink) 6%, var(--paper));
+    border-bottom: 1px solid var(--line);
+  }
+  .mock-dot{ width:8px; height:8px; border-radius:50%; background: var(--line); }
+  .mock-url{
+    margin-left: 8px;
+    font-size: 11px;
+    color: var(--ink-soft);
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 3px 10px;
+    flex:1;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .mock-body{ padding: 16px; font-size: 13px; }
+
+  .mock-toprow{ display:flex; justify-content:flex-end; margin-bottom:12px; }
+  .fake-btn{
+    font-size:12.5px; font-weight:600; padding:6px 12px; border-radius:6px;
+    border:1px solid var(--line); color: var(--ink-mid); background: var(--paper);
+  }
+  .fake-btn.primary{ background: var(--good); color:#fff; border-color: var(--good); }
+  .fake-btn.highlight{
+    outline: 2.5px solid var(--accent);
+    outline-offset: 2px;
+    color: var(--ink);
+    position:relative;
+  }
+  .callout-tag{
+    position:absolute; top:-11px; right:-8px;
+    background:var(--accent); color:#fff;
+    font-size:10px; font-weight:700; padding:2px 6px; border-radius:20px;
+    white-space:nowrap;
+  }
+
+  .file-list{ border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  .file-row{
+    display:flex; align-items:center; gap:8px;
+    padding:9px 12px; font-size:13px; color:var(--ink-mid);
+    border-bottom:1px solid var(--line);
+  }
+  .file-row:last-child{ border-bottom:none; }
+  .file-row.target{ background: var(--accent-bg); color: var(--ink); font-weight:600; }
+  .file-icon{ opacity:.55; }
+
+  .dropzone{
+    border: 2px dashed color-mix(in srgb, var(--accent) 45%, var(--line));
+    border-radius: 10px;
+    padding: 28px 16px;
+    text-align:center;
+    color: var(--ink-soft);
+    background: color-mix(in srgb, var(--accent) 4%, var(--paper));
+    font-size: 13px;
+  }
+  .dropzone strong{ color:var(--accent-ink); }
+
+  .commit-box{
+    margin-top:14px; padding-top:14px; border-top:1px dashed var(--line);
+  }
+  .commit-input{
+    font-size:12.5px; color:var(--ink-mid);
+    background:var(--paper); border:1px solid var(--line); border-radius:6px;
+    padding:8px 10px; margin-bottom:10px;
+  }
+
+  .status-pill{
+    display:inline-flex; align-items:center; gap:6px;
+    background: var(--good-bg); color: var(--good);
+    font-size: 12.5px; font-weight:600;
+    padding: 5px 11px; border-radius: 20px;
+  }
+  .status-pill::before{ content:'✓'; font-weight:800; }
+
+  /* ---------- Callout blocks ---------- */
+  .note{
+    display:flex; gap:12px;
+    background: var(--warn-bg);
+    border-left: 3px solid var(--warn);
+    border-radius: 0 8px 8px 0;
+    padding: 14px 16px;
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    color: var(--ink);
+    margin-top: 14px;
+  }
+  .note b{ color: var(--warn); }
+
+  /* ---------- Troubleshooting ---------- */
+  .faq{ margin-top: 14px; }
+  .faq-item{ padding: 16px 0; border-bottom:1px solid var(--line); }
+  .faq-item:last-child{ border-bottom:none; }
+  .faq-q{
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-weight:700; font-size:14.5px; color:var(--ink);
+    margin:0 0 6px;
+    display:flex; gap:8px;
+  }
+  .faq-q::before{ content:'?'; color:var(--accent); font-weight:800; }
+  .faq-a{ font-size:14.5px; color:var(--ink-mid); margin:0; padding-left:20px; }
+
+  /* ---------- Footer chip ---------- */
+  .endcap{
+    margin-top: 56px;
+    padding: 22px 24px;
+    background: var(--good-bg);
+    border-radius: 12px;
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: var(--ink);
+  }
+  .endcap b{ color: var(--good); }
+
+  a{ color: var(--accent); }
+
+  @media print{
+    body{ background:#fff; }
+    .mock{ box-shadow:none; }
+  }
+</style>
+
+<div class="wrap">
+
+  <p class="kicker sans">Guia de uso &middot; Painel FICO</p>
+  <h1>Como atualizar o Painel Unifilar</h1>
+  <p class="lede">Passo a passo para publicar uma planilha nova no painel <span class="mono">automacaofico.github.io/super</span>. Leva cerca de 2 minutos e não exige nenhum conhecimento técnico.</p>
+
+  <div class="meta-row">
+    <span>⏱ 2 minutos</span>
+    <span class="dot"></span>
+    <span>🔁 Repita toda vez que a planilha for atualizada</span>
+    <span class="dot"></span>
+    <span>🌐 Só precisa de um navegador</span>
+  </div>
+
+  <div class="summary">
+    <h2>Resumo em 3 passos</h2>
+    <ol>
+      <li>Abrir o repositório no GitHub</li>
+      <li>Enviar (upload) a planilha nova, com o nome exatamente igual</li>
+      <li>Clicar em "Commit changes" para confirmar</li>
+    </ol>
+  </div>
+
+  <p class="phase-label">Antes de começar</p>
+
+  <div class="step">
+    <div class="step-num sans">i</div>
+    <div>
+      <h3>O que você vai precisar</h3>
+      <p>Um login no GitHub com acesso ao repositório <span class="filename mono">automacaofico/super</span>, e o arquivo da planilha atualizado no computador, salvo com este nome <b>exato</b>:</p>
+      <p><span class="filename mono">Modelo Acompanhamento Super - FINAL.xlsx</span></p>
+      <div class="note">
+        <div>⚠️</div>
+        <div><b>O nome do arquivo importa.</b> O painel só encontra a planilha se o nome for idêntico a esse, letra por letra (incluindo maiúsculas/minúsculas e espaços). Não renomeie o arquivo.</div>
+      </div>
+    </div>
+  </div>
+
+  <p class="phase-label">Enviando a planilha nova</p>
+
+  <div class="step">
+    <div class="step-num sans">1</div>
+    <div>
+      <h3>Abra o repositório</h3>
+      <p>Acesse este endereço no navegador e faça login no GitHub se for pedido:</p>
+      <p><a href="https://github.com/automacaofico/super" class="btn-ref sans">github.com/automacaofico/super ↗</a></p>
+
+      <div class="mock">
+        <div class="mock-bar">
+          <div class="mock-dot"></div><div class="mock-dot"></div><div class="mock-dot"></div>
+          <div class="mock-url">github.com/automacaofico/super</div>
+        </div>
+        <div class="mock-body">
+          <div class="mock-toprow">
+            <div class="fake-btn highlight">＋ Add file ▾
+              <span class="callout-tag">clique aqui</span>
+            </div>
+          </div>
+          <div class="file-list">
+            <div class="file-row"><span class="file-icon">📁</span> .git</div>
+            <div class="file-row target"><span class="file-icon">📊</span> Modelo Acompanhamento Super - FINAL.xlsx</div>
+            <div class="file-row"><span class="file-icon">📄</span> index.html</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num sans">2</div>
+    <div>
+      <h3>Clique em "Add file" → "Upload files"</h3>
+      <p>No canto superior direito da lista de arquivos, clique no botão <span class="filename mono">Add file</span> e escolha a opção <span class="filename mono">Upload files</span> no menu que aparece.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num sans">3</div>
+    <div>
+      <h3>Envie a planilha atualizada</h3>
+      <p>Arraste o arquivo <span class="filename mono">Modelo Acompanhamento Super - FINAL.xlsx</span> para a área pontilhada da página (ou clique nela para escolher o arquivo pelo Explorador de Arquivos).</p>
+
+      <div class="mock">
+        <div class="mock-bar">
+          <div class="mock-dot"></div><div class="mock-dot"></div><div class="mock-dot"></div>
+          <div class="mock-url">github.com/automacaofico/super/upload/main</div>
+        </div>
+        <div class="mock-body">
+          <div class="dropzone">
+            📤 Arraste os arquivos aqui para adicioná-los ao seu repositório<br>
+            <strong>ou escolha os arquivos</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="note">
+        <div>💡</div>
+        <div>Como o nome é igual ao arquivo que já existe no repositório, o GitHub vai simplesmente <b>substituir a versão antiga pela nova</b> — não cria um arquivo duplicado.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num sans">4</div>
+    <div>
+      <h3>Confirme o envio ("Commit changes")</h3>
+      <p>Espere a barra de envio terminar (fica verde), role a página para baixo até a seção <span class="filename mono">Commit changes</span> e clique no botão verde para confirmar.</p>
+
+      <div class="mock">
+        <div class="mock-bar">
+          <div class="mock-dot"></div><div class="mock-dot"></div><div class="mock-dot"></div>
+          <div class="mock-url">github.com/automacaofico/super/upload/main</div>
+        </div>
+        <div class="mock-body">
+          <div class="commit-box">
+            <div class="commit-input sans">Atualização da planilha — 15/07/2026</div>
+            <div class="mock-toprow" style="justify-content:flex-start">
+              <div class="fake-btn primary highlight">Commit changes
+                <span class="callout-tag">clique aqui</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p>Não precisa mudar nada nos campos — o texto sugerido pelo próprio GitHub já serve. Só clicar no botão verde.</p>
+    </div>
+  </div>
+
+  <p class="phase-label">Conferindo se deu certo</p>
+
+  <div class="step">
+    <div class="step-num sans">5</div>
+    <div>
+      <h3>Abra o painel e confira a barra do topo</h3>
+      <p>Espere cerca de 1 minuto e abra (ou atualize, com <span class="filename mono">F5</span>) o painel público:</p>
+      <p><a href="https://automacaofico.github.io/super/" class="btn-ref sans">automacaofico.github.io/super ↗</a></p>
+
+      <div class="mock">
+        <div class="mock-bar">
+          <div class="mock-dot"></div><div class="mock-dot"></div><div class="mock-dot"></div>
+          <div class="mock-url">automacaofico.github.io/super</div>
+        </div>
+        <div class="mock-body">
+          <span class="status-pill">Atualizado do GitHub · 15/07/2026, 09:14</span>
+        </div>
+      </div>
+
+      <p>Se a data e hora ali baterem com o momento em que você acabou de enviar o arquivo, deu tudo certo — o painel já está mostrando os dados novos para qualquer pessoa que abrir o link.</p>
+    </div>
+  </div>
+
+  <div class="endcap">
+    <b>Pronto.</b> É só isso — sempre que a planilha for atualizada, repita esses 5 passos. Não é preciso mexer em mais nada no site.
+  </div>
+
+  <p class="phase-label">Se algo não sair como esperado</p>
+
+  <div class="faq">
+    <div class="faq-item">
+      <p class="faq-q sans">O painel abriu com os dados antigos</p>
+      <p class="faq-a">Espere mais um pouco (às vezes leva até 2 minutos) e atualize a página forçando o recarregamento: no Windows, <span class="filename mono">Ctrl + F5</span>. Se ainda assim não mudar, clique no botão <span class="filename mono">↻ Atualizar agora</span> na barra no topo do painel.</p>
+    </div>
+    <div class="faq-item">
+      <p class="faq-q sans">Apareceu uma mensagem de erro/aviso amarelo no topo do painel</p>
+      <p class="faq-a">Confira se o nome do arquivo enviado é exatamente <span class="filename mono">Modelo Acompanhamento Super - FINAL.xlsx</span> e se a planilha mantém as abas originais (ENTRADA, MATERIAIS etc.). Se o problema continuar, mande um print da mensagem para quem configurou o painel.</p>
+    </div>
+    <div class="faq-item">
+      <p class="faq-q sans">Não tenho acesso para fazer login no GitHub</p>
+      <p class="faq-a">Peça para o responsável pelo repositório (<span class="filename mono">automacaofico</span>) te adicionar como colaborador. Sem isso, o botão "Add file" não aparece.</p>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
