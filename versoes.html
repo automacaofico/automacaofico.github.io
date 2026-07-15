@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notas de versão — FICO Central de Acesso</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 10 10%22><rect width=%2210%22 height=%2210%22 rx=%222%22 fill=%22%233578bc%22/></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy-deep: #10203a; --navy: #1f4e79; --blue: #3578bc;
+    --orange: #f89b32; --orange-dk: #e07d12;
+    --bg: #eef2f8; --paper: #ffffff; --ink: #16233a; --ink-mid: #45566f; --ink-soft: #7c8aa3;
+    --line: #d7e0ee;
+    --shadow: 0 1px 2px rgba(16,32,58,.06), 0 12px 28px -16px rgba(16,32,58,.26);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --navy-deep:#0a1424; --navy:#132842; --blue:#6fa1d8; --orange:#f8ab52; --orange-dk:#ffbf75;
+      --bg:#0e1626; --paper:#151f34; --ink:#eef2f8; --ink-mid:#b7c3d9; --ink-soft:#7c8aa3; --line:#263a55;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 28px -16px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --navy-deep:#0a1424; --navy:#132842; --blue:#6fa1d8; --orange:#f8ab52; --orange-dk:#ffbf75;
+    --bg:#0e1626; --paper:#151f34; --ink:#eef2f8; --ink-mid:#b7c3d9; --ink-soft:#7c8aa3; --line:#263a55;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 28px -16px rgba(0,0,0,.6);
+  }
+  :root[data-theme="light"]{
+    --navy-deep: #10203a; --navy: #1f4e79; --blue: #3578bc; --orange: #f89b32; --orange-dk: #e07d12;
+    --bg: #eef2f8; --paper: #ffffff; --ink: #16233a; --ink-mid: #45566f; --ink-soft: #7c8aa3; --line: #d7e0ee;
+    --shadow: 0 1px 2px rgba(16,32,58,.06), 0 12px 28px -16px rgba(16,32,58,.26);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{ background:var(--bg); color:var(--ink); font-family:'DM Sans',-apple-system,'Segoe UI',Roboto,sans-serif; line-height:1.55; }
+  .mono{ font-family: ui-monospace,'SFMono-Regular',Menlo,Consolas,monospace; font-size:.9em; }
+  .display{ font-family:'Bebas Neue','DM Sans',sans-serif; letter-spacing:.01em; }
+
+  .band{
+    background: linear-gradient(135deg, var(--navy-deep) 0%, var(--navy) 55%, #16324f 100%);
+    padding: 26px 24px 30px;
+  }
+  .band-inner{ max-width: 640px; margin:0 auto; }
+  .back{ font-size:12.5px; color:#c7d6ea; text-decoration:none; }
+  .back:hover{ color:#fff; }
+  .band-inner h1{ font-size:clamp(24px,4vw,30px); line-height:1; margin:14px 0 0; color:#fff; }
+
+  .wrap{ max-width: 640px; margin:0 auto; padding: 32px 24px 80px; }
+
+  .entry{ padding:22px 0; border-bottom:1px solid var(--line); }
+  .entry:first-child{ padding-top:0; }
+  .entry-head{ display:flex; align-items:baseline; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+  .ver{ font-family:'Bebas Neue','DM Sans',sans-serif; font-size:20px; color:var(--blue); letter-spacing:.02em; }
+  .date{ font-size:12.5px; color:var(--ink-soft); }
+  .entry ul{ margin:0; padding-left:20px; }
+  .entry li{ font-size:14px; color:var(--ink-mid); margin-bottom:5px; }
+  .entry li::marker{ color:var(--orange); }
+
+  footer{
+    border-top:1px solid var(--line); margin-top:8px; padding: 26px 24px 34px;
+    display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center;
+    font-size:12px; color:var(--ink-soft);
+  }
+</style>
+</head>
+<body>
+
+<div class="band">
+  <div class="band-inner">
+    <a class="back" href="./index.html">← Central de acesso</a>
+    <h1 class="display">Notas de versão</h1>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="entry">
+    <div class="entry-head"><span class="ver">v1.0.0</span><span class="date">15/07/2026</span></div>
+    <ul>
+      <li>Lançamento da Central de Acesso com os 3 painéis (Superestrutura, Gestão de Pendências, Infraestrutura)</li>
+      <li>Cada painel busca a planilha correspondente direto do GitHub e se atualiza sozinho, sem edição manual do HTML</li>
+      <li>Página de upload para atualizar qualquer planilha sem precisar entrar no GitHub, protegida por senha</li>
+      <li>Identidade visual FICO (logo oficial e cores da marca) aplicada em toda a central</li>
+      <li>URLs próprias por painel (<span class="mono">/super</span>, <span class="mono">/pendencia</span>, <span class="mono">/infra</span>)</li>
+      <li>Selo de "última atualização" em cada card, lido do histórico de commits de cada planilha</li>
+      <li>Domínio próprio <span class="mono">obrafico.online</span> configurado (aguardando certificado HTTPS)</li>
+    </ul>
+  </div>
+
+</div>
+
+<footer>
+  <span>FICO · Central de Acesso</span>
+</footer>
+</body>
+</html>
