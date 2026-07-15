@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atualizar planilha — FICO</title>
+<style>
+  :root{
+    --bg:        #f6f3ec;
+    --paper:     #fffdf9;
+    --ink:       #201d16;
+    --ink-mid:   #514c3e;
+    --ink-soft:  #86806e;
+    --line:      #ded6c2;
+    --accent:    #2f5fd6;
+    --accent-ink:#12245e;
+    --accent-bg: #e8edfc;
+    --good:      #1f7a4d;
+    --good-bg:   #e4f3e9;
+    --bad:       #b3261e;
+    --bad-bg:    #fbe6e4;
+    --warn:      #9a5b12;
+    --warn-bg:   #fbf0dd;
+    --mono-bg:   #efe9da;
+    --shadow: 0 1px 2px rgba(32,29,22,.06), 0 10px 28px -14px rgba(32,29,22,.22);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#1a1812; --paper:#221f18; --ink:#f1ede1; --ink-mid:#cac2ac; --ink-soft:#8f886f;
+      --line:#3d372a; --accent:#7c9cff; --accent-ink:#dbe4ff; --accent-bg:#26305a;
+      --good:#6fd39c; --good-bg:#163524; --bad:#ff8a80; --bad-bg:#3a1d1a;
+      --warn:#e8b573; --warn-bg:#3a2c11; --mono-bg:#2a2619;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px -14px rgba(0,0,0,.55);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#1a1812; --paper:#221f18; --ink:#f1ede1; --ink-mid:#cac2ac; --ink-soft:#8f886f;
+    --line:#3d372a; --accent:#7c9cff; --accent-ink:#dbe4ff; --accent-bg:#26305a;
+    --good:#6fd39c; --good-bg:#163524; --bad:#ff8a80; --bad-bg:#3a1d1a;
+    --warn:#e8b573; --warn-bg:#3a2c11; --mono-bg:#2a2619;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px -14px rgba(0,0,0,.55);
+  }
+  :root[data-theme="light"]{
+    --bg:#f6f3ec; --paper:#fffdf9; --ink:#201d16; --ink-mid:#514c3e; --ink-soft:#86806e;
+    --line:#ded6c2; --accent:#2f5fd6; --accent-ink:#12245e; --accent-bg:#e8edfc;
+    --good:#1f7a4d; --good-bg:#e4f3e9; --bad:#b3261e; --bad-bg:#fbe6e4;
+    --warn:#9a5b12; --warn-bg:#fbf0dd; --mono-bg:#efe9da;
+    --shadow: 0 1px 2px rgba(32,29,22,.06), 0 10px 28px -14px rgba(32,29,22,.22);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family: -apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5;
+  }
+  .mono{ font-family: ui-monospace,'SFMono-Regular',Menlo,Consolas,monospace; font-size:.92em; }
+  .wrap{ max-width: 560px; margin:0 auto; padding: 56px 24px 96px; }
+
+  .back{ font-size:13px; color:var(--ink-soft); text-decoration:none; }
+  .back:hover{ color:var(--accent); }
+
+  .kicker{ text-transform:uppercase; letter-spacing:.14em; font-size:12px; font-weight:700; color:var(--accent); margin:22px 0 12px; }
+  h1{ font-size:clamp(24px,4vw,32px); line-height:1.15; margin:0 0 10px; font-family: Georgia,'Iowan Old Style',serif; }
+  .lede{ font-size:15px; color:var(--ink-mid); margin:0 0 36px; }
+
+  .field{ margin-bottom: 22px; }
+  .field label{ display:block; font-size:13px; font-weight:700; color:var(--ink); margin-bottom:8px; }
+  .field .hint{ font-size:12.5px; color:var(--ink-soft); margin-top:6px; }
+
+  select, input[type=password]{
+    width:100%; font-size:15px; font-family:inherit; color:var(--ink);
+    background:var(--paper); border:1.5px solid var(--line); border-radius:8px;
+    padding:11px 13px;
+  }
+  select:focus, input:focus{ outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent); }
+
+  .repo-options{ display:grid; gap:8px; }
+  .repo-opt{
+    display:flex; align-items:center; gap:10px;
+    border:1.5px solid var(--line); border-radius:10px; padding:12px 14px;
+    cursor:pointer; background:var(--paper);
+  }
+  .repo-opt:has(input:checked){ border-color:var(--accent); background:var(--accent-bg); }
+  .repo-opt input{ accent-color: var(--accent); width:16px; height:16px; }
+  .repo-opt .ro-name{ font-size:14.5px; font-weight:600; color:var(--ink); }
+  .repo-opt .ro-file{ font-size:12px; color:var(--ink-soft); }
+
+  .dropzone{
+    border:2px dashed var(--line); border-radius:12px; padding:30px 16px; text-align:center;
+    color:var(--ink-soft); font-size:13.5px; cursor:pointer; background:var(--paper);
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .dropzone.drag{ border-color:var(--accent); background:var(--accent-bg); }
+  .dropzone strong{ color:var(--accent-ink); }
+  .dropzone .picked{ color:var(--ink); font-weight:600; margin-top:6px; display:block; }
+  input[type=file]{ display:none; }
+
+  label.check{ display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-mid); cursor:pointer; margin-top:10px; }
+  label.check input{ accent-color:var(--accent); width:15px; height:15px; }
+
+  .submit-btn{
+    width:100%; margin-top:8px;
+    background: var(--accent); color:#fff; border:none; border-radius:9px;
+    font-size:15.5px; font-weight:700; padding:13px; cursor:pointer;
+    font-family:inherit;
+  }
+  .submit-btn:disabled{ opacity:.55; cursor:not-allowed; }
+  .submit-btn:not(:disabled):hover{ filter:brightness(1.08); }
+
+  .status{
+    margin-top:18px; padding:13px 16px; border-radius:10px; font-size:14px;
+    display:none; align-items:flex-start; gap:10px;
+  }
+  .status.show{ display:flex; }
+  .status.ok{ background:var(--good-bg); color:var(--good); }
+  .status.err{ background:var(--bad-bg); color:var(--bad); }
+  .status.busy{ background:var(--accent-bg); color:var(--accent-ink); }
+
+  .setup-warn{
+    background:var(--warn-bg); border-left:3px solid var(--warn); border-radius:0 8px 8px 0;
+    padding:14px 16px; font-size:13.5px; color:var(--ink); margin-bottom:32px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <a class="back" href="./index.html">← Central de acesso</a>
+  <p class="kicker">FICO · Atualização de planilha</p>
+  <h1>Enviar planilha nova</h1>
+  <p class="lede">Escolha o painel, selecione o arquivo atualizado no seu computador e envie. Some direto para o GitHub, sem precisar abrir o site do GitHub.</p>
+
+  <div class="setup-warn" id="setup-warn" style="display:none">
+    ⚠️ Esta página ainda não foi conectada ao serviço de envio (falta configurar <span class="mono">WORKER_URL</span> no código). Fale com quem configurou o painel.
+  </div>
+
+  <form id="upload-form">
+    <div class="field">
+      <label>Qual painel você está atualizando?</label>
+      <div class="repo-options">
+        <label class="repo-opt">
+          <input type="radio" name="repoKey" value="super" checked>
+          <div>
+            <div class="ro-name">Unifilar FICO</div>
+            <div class="ro-file mono">Modelo Acompanhamento Super - FINAL.xlsx</div>
+          </div>
+        </label>
+        <label class="repo-opt">
+          <input type="radio" name="repoKey" value="pendenciasr1">
+          <div>
+            <div class="ro-name">Pendências FICO Infra</div>
+            <div class="ro-file mono">Base_Pendencias_FICO.xlsx</div>
+          </div>
+        </label>
+        <label class="repo-opt">
+          <input type="radio" name="repoKey" value="base_fico_unificada">
+          <div>
+            <div class="ro-name">Base Unificada FICO</div>
+            <div class="ro-file mono">Base_FICO_Unificada.xlsx</div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Arquivo da planilha (.xlsx)</label>
+      <div class="dropzone" id="dropzone">
+        📤 Arraste o arquivo aqui, ou <strong>clique para escolher</strong>
+        <span class="picked" id="picked-name"></span>
+      </div>
+      <input type="file" id="file-input" accept=".xlsx,.xls">
+    </div>
+
+    <div class="field">
+      <label for="senha">Senha de acesso</label>
+      <input type="password" id="senha" autocomplete="off" placeholder="Peça a senha para o responsável pelo painel">
+      <label class="check">
+        <input type="checkbox" id="lembrar">
+        Lembrar a senha neste navegador
+      </label>
+    </div>
+
+    <button type="submit" class="submit-btn" id="submit-btn">Enviar e atualizar painel</button>
+
+    <div class="status" id="status"></div>
+  </form>
+
+</div>
+
+<script>
+  // Preencher com a URL do Worker depois de publicado (ex.: "https://fico-uploader.SEUUSUARIO.workers.dev")
+  const WORKER_URL = "";
+
+  if (!WORKER_URL) document.getElementById('setup-warn').style.display = 'block';
+
+  const dz = document.getElementById('dropzone');
+  const fileInput = document.getElementById('file-input');
+  const pickedName = document.getElementById('picked-name');
+  const senhaInput = document.getElementById('senha');
+  const lembrarChk = document.getElementById('lembrar');
+  const statusEl = document.getElementById('status');
+  const submitBtn = document.getElementById('submit-btn');
+  let chosenFile = null;
+
+  const savedSenha = localStorage.getItem('fico_upload_senha');
+  if (savedSenha) { senhaInput.value = savedSenha; lembrarChk.checked = true; }
+
+  dz.addEventListener('click', () => fileInput.click());
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('drag');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+
+  function setFile(f) {
+    chosenFile = f;
+    pickedName.textContent = '📄 ' + f.name;
+  }
+
+  function setStatus(kind, msg) {
+    statusEl.className = 'status show ' + kind;
+    statusEl.textContent = msg;
+  }
+
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  document.getElementById('upload-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!WORKER_URL) { setStatus('err', 'Serviço de envio não configurado ainda.'); return; }
+    if (!chosenFile) { setStatus('err', 'Escolha um arquivo .xlsx primeiro.'); return; }
+    if (!senhaInput.value) { setStatus('err', 'Digite a senha de acesso.'); return; }
+
+    if (lembrarChk.checked) localStorage.setItem('fico_upload_senha', senhaInput.value);
+    else localStorage.removeItem('fico_upload_senha');
+
+    const repoKey = document.querySelector('input[name=repoKey]:checked').value;
+
+    submitBtn.disabled = true;
+    setStatus('busy', '🔄 Enviando ' + chosenFile.name + '…');
+
+    try {
+      const contentBase64 = await fileToBase64(chosenFile);
+      const resp = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ senha: senhaInput.value, repoKey, filename: chosenFile.name, contentBase64 })
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        setStatus('ok', '✅ Painel "' + data.label + '" atualizado com sucesso · ' + data.when);
+      } else {
+        setStatus('err', '⚠️ ' + (data.error || 'Falha ao enviar.'));
+      }
+    } catch (err) {
+      setStatus('err', '⚠️ Erro de conexão: ' + err.message);
+    } finally {
+      submitBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

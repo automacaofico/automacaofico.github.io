@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painéis FICO — Central de Acesso</title>
+<style>
+  :root{
+    --bg:        #f6f3ec;
+    --paper:     #fffdf9;
+    --ink:       #201d16;
+    --ink-mid:   #514c3e;
+    --ink-soft:  #86806e;
+    --line:      #ded6c2;
+    --accent:    #2f5fd6;
+    --accent-ink:#12245e;
+    --accent-bg: #e8edfc;
+    --good:      #1f7a4d;
+    --good-bg:   #e4f3e9;
+    --warn:      #9a5b12;
+    --warn-bg:   #fbf0dd;
+    --mono-bg:   #efe9da;
+    --shadow: 0 1px 2px rgba(32,29,22,.06), 0 10px 28px -14px rgba(32,29,22,.22);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:        #1a1812; --paper:#221f18; --ink:#f1ede1; --ink-mid:#cac2ac; --ink-soft:#8f886f;
+      --line:#3d372a; --accent:#7c9cff; --accent-ink:#dbe4ff; --accent-bg:#26305a;
+      --good:#6fd39c; --good-bg:#163524; --warn:#e8b573; --warn-bg:#3a2c11; --mono-bg:#2a2619;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px -14px rgba(0,0,0,.55);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:        #1a1812; --paper:#221f18; --ink:#f1ede1; --ink-mid:#cac2ac; --ink-soft:#8f886f;
+    --line:#3d372a; --accent:#7c9cff; --accent-ink:#dbe4ff; --accent-bg:#26305a;
+    --good:#6fd39c; --good-bg:#163524; --warn:#e8b573; --warn-bg:#3a2c11; --mono-bg:#2a2619;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px -14px rgba(0,0,0,.55);
+  }
+  :root[data-theme="light"]{
+    --bg:        #f6f3ec; --paper:#fffdf9; --ink:#201d16; --ink-mid:#514c3e; --ink-soft:#86806e;
+    --line:#ded6c2; --accent:#2f5fd6; --accent-ink:#12245e; --accent-bg:#e8edfc;
+    --good:#1f7a4d; --good-bg:#e4f3e9; --warn:#9a5b12; --warn-bg:#fbf0dd; --mono-bg:#efe9da;
+    --shadow: 0 1px 2px rgba(32,29,22,.06), 0 10px 28px -14px rgba(32,29,22,.22);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family: -apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.5;
+  }
+  .mono{ font-family: ui-monospace,'SFMono-Regular',Menlo,Consolas,monospace; font-size:.92em; }
+
+  .wrap{ max-width: 880px; margin:0 auto; padding: 64px 24px 96px; }
+
+  .kicker{
+    text-transform:uppercase; letter-spacing:.14em; font-size:12px; font-weight:700;
+    color: var(--accent); margin:0 0 12px;
+  }
+  h1{
+    font-size: clamp(28px,4.2vw,38px); line-height:1.14; margin:0 0 12px;
+    text-wrap:balance; letter-spacing:-.01em; font-family: Georgia,'Iowan Old Style',serif;
+  }
+  .lede{ font-size:16px; color:var(--ink-mid); max-width:56ch; margin:0 0 44px; }
+
+  .grid{ display:grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap:18px; }
+
+  .card{
+    background:var(--paper); border:1px solid var(--line); border-radius:14px;
+    padding:22px; box-shadow:var(--shadow); text-decoration:none; color:inherit;
+    display:flex; flex-direction:column; gap:10px;
+    transition: transform .15s ease, border-color .15s ease;
+  }
+  .card:hover{ transform: translateY(-2px); border-color: var(--accent); }
+  .card-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+  .card-icon{
+    width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center;
+    font-size:18px; background: var(--accent-bg); color: var(--accent-ink); flex-shrink:0;
+  }
+  .status{
+    display:inline-flex; align-items:center; gap:5px;
+    font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em;
+    padding:3px 8px; border-radius:20px; background:var(--good-bg); color:var(--good);
+    white-space:nowrap;
+  }
+  .status::before{ content:''; width:6px; height:6px; border-radius:50%; background:currentColor; }
+  .status.pending{ background: var(--warn-bg); color: var(--warn); }
+
+  .card h2{ font-size:17px; margin:0; color:var(--ink); }
+  .card p{ font-size:13.5px; color:var(--ink-mid); margin:0; flex:1; }
+  .card .url{ font-size:12px; color:var(--ink-soft); margin-top:2px; }
+
+  .section-label{
+    font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.1em;
+    color: var(--ink-soft); margin: 52px 0 16px; display:flex; align-items:center; gap:12px;
+  }
+  .section-label::after{ content:''; flex:1; height:1px; background:var(--line); }
+
+  .tool-row{ display:grid; grid-template-columns: repeat(auto-fit, minmax(260px,1fr)); gap:16px; }
+  .tool-card{
+    background: var(--accent-bg); border:1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    border-radius:14px; padding:20px; text-decoration:none; color:inherit;
+    display:flex; align-items:center; gap:14px;
+  }
+  .tool-card .card-icon{ background: var(--paper); }
+  .tool-card h2{ font-size:15.5px; margin:0 0 3px; color: var(--accent-ink); }
+  .tool-card p{ font-size:13px; color: var(--ink-mid); margin:0; }
+
+  footer{ margin-top:64px; font-size:12.5px; color:var(--ink-soft); text-align:center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="kicker">FICO · Infraestrutura</p>
+  <h1>Central de Acesso</h1>
+  <p class="lede">Todos os painéis públicos da obra em um só lugar. Cada um se atualiza sozinho a partir da planilha correspondente no GitHub.</p>
+
+  <div class="grid" id="sites-grid">
+    <a class="card" href="https://automacaofico.github.io/super/" target="_blank" rel="noopener">
+      <div class="card-top">
+        <div class="card-icon">🛤️</div>
+        <span class="status" data-check="super">verificando</span>
+      </div>
+      <h2>Unifilar FICO</h2>
+      <p>Acompanhamento da grade ferroviária — pacotes 01 a 08, curva física/financeira, materiais e recursos.</p>
+      <span class="url mono">automacaofico.github.io/super</span>
+    </a>
+
+    <a class="card" href="https://automacaofico.github.io/pendenciasr1/" target="_blank" rel="noopener">
+      <div class="card-top">
+        <div class="card-icon">📋</div>
+        <span class="status" data-check="pendenciasr1">verificando</span>
+      </div>
+      <h2>Pendências FICO Infra</h2>
+      <p>Painel por pacote, heat map de pendências e trechos de drenagem obstruída.</p>
+      <span class="url mono">automacaofico.github.io/pendenciasr1</span>
+    </a>
+
+    <a class="card" href="https://automacaofico.github.io/base_fico_unificada/" target="_blank" rel="noopener">
+      <div class="card-top">
+        <div class="card-icon">🗂️</div>
+        <span class="status" data-check="base_fico_unificada">verificando</span>
+      </div>
+      <h2>Base Unificada FICO</h2>
+      <p>Painel consolidado dos 3 primeiros pacotes com retigráfico, RNCs e DataBooks.</p>
+      <span class="url mono">automacaofico.github.io/base_fico_unificada</span>
+    </a>
+  </div>
+
+  <p class="section-label">Ferramentas</p>
+  <div class="tool-row">
+    <a class="tool-card" href="./atualizar.html">
+      <div class="card-icon">📤</div>
+      <div>
+        <h2>Atualizar planilha</h2>
+        <p>Enviar uma planilha nova sem precisar entrar no GitHub</p>
+      </div>
+    </a>
+    <a class="tool-card" href="https://automacaofico.github.io/super/guia.html">
+      <div class="card-icon">📖</div>
+      <div>
+        <h2>Guia passo a passo</h2>
+        <p>Como atualizar cada painel, explicado devagar</p>
+      </div>
+    </a>
+  </div>
+
+  <footer>Central de acesso · automacaofico</footer>
+</div>
+
+<script>
+  var sites = {
+    super: 'https://automacaofico.github.io/super/',
+    pendenciasr1: 'https://automacaofico.github.io/pendenciasr1/',
+    base_fico_unificada: 'https://automacaofico.github.io/base_fico_unificada/'
+  };
+  Object.keys(sites).forEach(function(key){
+    fetch(sites[key], {mode:'no-cors', cache:'no-store'}).then(function(){
+      var el = document.querySelector('[data-check="'+key+'"]');
+      if (el){ el.textContent = 'no ar'; el.classList.remove('pending'); }
+    }).catch(function(){
+      var el = document.querySelector('[data-check="'+key+'"]');
+      if (el){ el.textContent = 'indisponível'; el.classList.add('pending'); }
+    });
+  });
+</script>
+</body>
+</html>
