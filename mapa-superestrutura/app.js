@@ -3,6 +3,7 @@
 
   const PATHS = {
     axis: 'assets/data/fico-axis-full.json',
+    replay: 'assets/data/replay-history.json',
     workbook: 'https://raw.githubusercontent.com/automacaofico/super/main/Modelo%20Acompanhamento%20Super%20-%20FINAL.xlsx'
   };
 
@@ -41,7 +42,9 @@
     mapReady: false,
     selectedId: 'grade',
     packageId: '',
-    sourceMode: 'online'
+    basemap: 'street',
+    sourceMode: 'online',
+    replay: { active: false, playing: false, progress: 0, speed: 1, history: null, frame: null, startedAt: 0, startedProgress: 0, lastMapUpdate: 0 }
   };
 
   const el = id => document.getElementById(id);
@@ -56,6 +59,7 @@
   const station = metres => `KM ${(Math.max(0, metres || 0) / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`;
   const percent = value => `${Math.max(0, value || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
   const sumLengths = intervals => intervals.reduce((total, item) => total + Math.max(0, item.end - item.start), 0);
+  const lerp = (start, end, amount) => start + (end - start) * amount;
 
   function parseDate(value) {
     if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
@@ -281,6 +285,7 @@
     renderDetails();
     renderTable();
     updateMapData();
+    updateReplayMap(true);
   }
 
   function pointAtStation(target) {
@@ -317,8 +322,12 @@
   }
 
   async function initMap() {
-    const axisData = await fetch(PATHS.axis).then(response => response.json());
+    const [axisData, replayData] = await Promise.all([
+      fetch(PATHS.axis).then(response => response.json()),
+      fetch(PATHS.replay).then(response => response.json())
+    ]);
     state.axis = Array.isArray(axisData) ? axisData : axisData.points;
+    state.replay.history = replayData;
     const bounds = new maplibregl.LngLatBounds();
     state.axis.forEach(point => bounds.extend(point.coordinate));
     state.map = new maplibregl.Map({
@@ -327,10 +336,12 @@
         version: 8,
         sources: {
           street: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap' },
+          dark: { type: 'raster', tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'], tileSize: 256, attribution: '© OpenStreetMap © CARTO' },
           satellite: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, attribution: 'Esri' }
         },
         layers: [
           { id: 'street', type: 'raster', source: 'street' },
+          { id: 'dark', type: 'raster', source: 'dark', layout: { visibility: document.documentElement.dataset.theme === 'dark' ? 'visible' : 'none' } },
           { id: 'satellite', type: 'raster', source: 'satellite', layout: { visibility: 'none' } }
         ]
       },
@@ -343,7 +354,9 @@
     state.map.on('load', () => {
       addOperationalLayers();
       state.mapReady = true;
+      setBasemap(state.basemap);
       updateMapData();
+      renderReplay();
       el('mapStatus').classList.add('hidden');
     });
     state.map.on('mousemove', event => updateCursorReadout(event.lngLat));
@@ -363,6 +376,12 @@
     state.map.addSource('actual', { type: 'geojson', data: collection() });
     state.map.addLayer({ id: 'actual-casing', type: 'line', source: 'actual', paint: { 'line-color': '#ffffff', 'line-width': 11, 'line-opacity': .95 } });
     state.map.addLayer({ id: 'actual-line', type: 'line', source: 'actual', paint: { 'line-color': ['get', 'color'], 'line-width': 7, 'line-opacity': 1 } });
+    state.map.addSource('replay-lines', { type: 'geojson', data: collection() });
+    state.map.addLayer({ id: 'replay-casing', type: 'line', source: 'replay-lines', layout: { visibility: 'none' }, paint: { 'line-color': '#061e34', 'line-width': ['case', ['get', 'selected'], 10, 6], 'line-offset': ['get', 'offset'], 'line-opacity': .9 } });
+    state.map.addLayer({ id: 'replay-lines', type: 'line', source: 'replay-lines', layout: { visibility: 'none' }, paint: { 'line-color': ['get', 'color'], 'line-width': ['case', ['get', 'selected'], 6, 3], 'line-offset': ['get', 'offset'], 'line-opacity': ['case', ['get', 'selected'], 1, .78] } });
+    state.map.addSource('replay-fronts', { type: 'geojson', data: collection() });
+    state.map.addLayer({ id: 'replay-halo', type: 'circle', source: 'replay-fronts', layout: { visibility: 'none' }, paint: { 'circle-radius': ['case', ['get', 'selected'], 13, 8], 'circle-color': ['get', 'color'], 'circle-opacity': .18 } });
+    state.map.addLayer({ id: 'replay-fronts', type: 'circle', source: 'replay-fronts', layout: { visibility: 'none' }, paint: { 'circle-radius': ['case', ['get', 'selected'], 7, 4], 'circle-color': ['get', 'color'], 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } });
     state.map.addSource('cushion', { type: 'geojson', data: collection() });
     state.map.addLayer({ id: 'cushion-line', type: 'line', source: 'cushion', paint: { 'line-color': ['match', ['get', 'status'], 'Concluído', '#55a646', '#ee7623'], 'line-width': 4, 'line-offset': 7, 'line-opacity': .9 } });
     state.map.addSource('fronts', { type: 'geojson', data: collection() });
@@ -402,8 +421,134 @@
     state.map.getSource('actual').setData(collection(actual));
     state.map.getSource('cushion').setData(collection(cushion));
     state.map.getSource('fronts').setData(collection(fronts));
-    state.map.setLayoutProperty('planned-line', 'visibility', el('showPlanned').checked ? 'visible' : 'none');
-    state.map.setLayoutProperty('fronts', 'visibility', el('showFronts').checked ? 'visible' : 'none');
+    const normalVisibility = state.replay.active ? 'none' : 'visible';
+    state.map.setLayoutProperty('planned-line', 'visibility', !state.replay.active && el('showPlanned').checked ? 'visible' : 'none');
+    state.map.setLayoutProperty('fronts', 'visibility', !state.replay.active && el('showFronts').checked ? 'visible' : 'none');
+    ['actual-casing', 'actual-line', 'cushion-line'].forEach(layer => state.map.setLayoutProperty(layer, 'visibility', normalVisibility));
+  }
+
+  function replayValues() {
+    const snapshots = state.replay.history?.snapshots || [];
+    if (snapshots.length < 2) return null;
+    const start = snapshots[0];
+    const end = snapshots[snapshots.length - 1];
+    const progress = state.replay.progress;
+    const values = {};
+    DEFINITIONS.forEach(activity => {
+      values[activity.id] = lerp(start.values[activity.id] ?? activity.start, end.values[activity.id] ?? activity.start, progress);
+    });
+    return { start, end, values };
+  }
+
+  function renderReplay() {
+    const replay = replayValues();
+    if (!replay) return;
+    const currentDate = new Date(lerp(new Date(`${replay.start.date}T12:00:00`).getTime(), new Date(`${replay.end.date}T12:00:00`).getTime(), state.replay.progress));
+    const production = DEFINITIONS.reduce((total, activity) => total + Math.max(0, replay.values[activity.id] - activity.start), 0);
+    const gains = DEFINITIONS.map(activity => ({ activity, gain: ((replay.end.values[activity.id] ?? 0) - (replay.start.values[activity.id] ?? 0)) * state.replay.progress })).sort((a, b) => b.gain - a.gain);
+    const phase = state.replay.progress < .015 || state.replay.progress > .985 ? 'BASE REAL' : 'INTERPOLAÇÃO VISUAL';
+    el('replayPhase').textContent = phase;
+    el('replayDate').textContent = currentDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }).replace('.', '').toUpperCase();
+    el('replayProduction').textContent = km(production);
+    el('replayHighlight').textContent = state.replay.progress < .01 ? 'Ponto inicial' : `${gains[0].activity.name} · +${km(gains[0].gain)}`;
+    el('replayRange').value = String(Math.round(state.replay.progress * 1000));
+  }
+
+  function updateReplayMap(force = false) {
+    if (!state.mapReady || !state.replay.active) return;
+    const now = performance.now();
+    if (!force && now - state.replay.lastMapUpdate < 70) return;
+    state.replay.lastMapUpdate = now;
+    const replay = replayValues();
+    if (!replay) return;
+    const features = [];
+    const fronts = [];
+    DEFINITIONS.forEach((activity, index) => {
+      const end = replay.values[activity.id];
+      if (end <= activity.start) return;
+      const selected = activity.id === state.selectedId;
+      const offset = (index - (DEFINITIONS.length - 1) / 2) * 2.35;
+      features.push(lineFeature(activity.start, end, { id: activity.id, name: activity.name, color: activity.color, selected, offset }));
+      fronts.push({ type: 'Feature', properties: { id: activity.id, name: activity.name, station: end, color: activity.color, selected }, geometry: { type: 'Point', coordinates: pointAtStation(end) } });
+    });
+    state.map.getSource('replay-lines').setData(collection(features));
+    state.map.getSource('replay-fronts').setData(collection(fronts));
+  }
+
+  function setReplayProgress(progress, force = false) {
+    state.replay.progress = Math.max(0, Math.min(1, progress));
+    renderReplay();
+    updateReplayMap(force);
+  }
+
+  function setReplayLayers(active) {
+    if (!state.mapReady) return;
+    ['replay-casing', 'replay-lines', 'replay-halo', 'replay-fronts'].forEach(layer => state.map.setLayoutProperty(layer, 'visibility', active ? 'visible' : 'none'));
+    state.map.setPaintProperty('package-lines', 'line-opacity', active ? .25 : .82);
+    updateMapData();
+  }
+
+  function openReplay() {
+    state.replay.active = true;
+    document.body.classList.add('replay-active');
+    el('replayDeck').classList.add('open');
+    el('replayDeck').setAttribute('aria-hidden', 'false');
+    el('replayButton').classList.add('active');
+    el('replayButton').setAttribute('aria-expanded', 'true');
+    setReplayLayers(true);
+    setReplayProgress(state.replay.progress, true);
+    el('replayDeck').scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+    const bounds = new maplibregl.LngLatBounds();
+    sliceCoordinates(0, 90000).forEach(coordinate => bounds.extend(coordinate));
+    state.map?.fitBounds(bounds, { padding: window.innerWidth < 700 ? 34 : 64, duration: 850 });
+  }
+
+  function stopReplay() {
+    state.replay.playing = false;
+    cancelAnimationFrame(state.replay.frame);
+    el('replayPlay').classList.remove('playing');
+    el('replayPlay').setAttribute('aria-label', 'Reproduzir replay');
+  }
+
+  function closeReplay() {
+    stopReplay();
+    state.replay.active = false;
+    document.body.classList.remove('replay-active');
+    el('replayDeck').classList.remove('open');
+    el('replayDeck').setAttribute('aria-hidden', 'true');
+    el('replayButton').classList.remove('active');
+    el('replayButton').setAttribute('aria-expanded', 'false');
+    setReplayLayers(false);
+    fitCurrent();
+  }
+
+  function replayTick(timestamp) {
+    if (!state.replay.playing) return;
+    const duration = 9000 / state.replay.speed;
+    const next = state.replay.startedProgress + (timestamp - state.replay.startedAt) / duration;
+    setReplayProgress(next);
+    if (next >= 1) { stopReplay(); return; }
+    state.replay.frame = requestAnimationFrame(replayTick);
+  }
+
+  function toggleReplayPlayback() {
+    if (state.replay.playing) { stopReplay(); return; }
+    if (state.replay.progress >= .999) setReplayProgress(0, true);
+    state.replay.playing = true;
+    state.replay.startedAt = performance.now();
+    state.replay.startedProgress = state.replay.progress;
+    el('replayPlay').classList.add('playing');
+    el('replayPlay').setAttribute('aria-label', 'Pausar replay');
+    state.replay.frame = requestAnimationFrame(replayTick);
+  }
+
+  function cycleReplaySpeed() {
+    state.replay.speed = state.replay.speed === 1 ? 2 : state.replay.speed === 2 ? .5 : 1;
+    el('replaySpeed').textContent = `Velocidade ${String(state.replay.speed).replace('.', ',')}×`;
+    if (state.replay.playing) {
+      state.replay.startedProgress = state.replay.progress;
+      state.replay.startedAt = performance.now();
+    }
   }
 
   function updateCursorReadout(lngLat) {
@@ -436,13 +581,30 @@
 
   function setBasemap(name) {
     if (!state.mapReady) return;
-    state.map.setLayoutProperty('street', 'visibility', name === 'street' ? 'visible' : 'none');
+    state.basemap = name;
+    const darkTheme = document.documentElement.dataset.theme === 'dark';
+    state.map.setLayoutProperty('street', 'visibility', name === 'street' && !darkTheme ? 'visible' : 'none');
+    state.map.setLayoutProperty('dark', 'visibility', name === 'street' && darkTheme ? 'visible' : 'none');
     state.map.setLayoutProperty('satellite', 'visibility', name === 'satellite' ? 'visible' : 'none');
     document.querySelectorAll('[data-basemap]').forEach(button => {
       const active = button.dataset.basemap === name;
       button.classList.toggle('active', active);
       button.setAttribute('aria-pressed', String(active));
     });
+  }
+
+  function setTheme(theme, persist = true) {
+    document.documentElement.dataset.theme = theme;
+    document.querySelector('meta[name="theme-color"]').setAttribute('content', theme === 'dark' ? '#061725' : '#0b2947');
+    const toggle = el('themeToggle');
+    toggle.setAttribute('aria-label', theme === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro');
+    toggle.title = theme === 'dark' ? 'Ativar tema claro' : 'Ativar tema escuro';
+    if (persist) localStorage.setItem('fico-theme', theme);
+    if (state.mapReady) setBasemap(state.basemap);
+  }
+
+  function toggleTheme() {
+    setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
   }
 
   let toastTimer;
@@ -455,14 +617,21 @@
   }
 
   function bindControls() {
+    setTheme(document.documentElement.dataset.theme || 'light', false);
     PACKAGES.forEach(item => el('packageSelect').insertAdjacentHTML('beforeend', `<option value="${item.id}">${item.name} · ${station(item.start)}–${station(item.end)}</option>`));
     el('packageSelect').addEventListener('change', event => { state.packageId = event.target.value; updateMapData(); fitCurrent(); });
     document.querySelectorAll('[data-basemap]').forEach(button => button.addEventListener('click', () => setBasemap(button.dataset.basemap)));
+    el('themeToggle').addEventListener('click', toggleTheme);
     el('showPlanned').addEventListener('change', updateMapData);
     el('showFronts').addEventListener('change', updateMapData);
     el('fitButton').addEventListener('click', fitCurrent);
     el('refreshButton').addEventListener('click', () => loadWorkbook());
     el('zoomFrontButton').addEventListener('click', zoomFront);
+    el('replayButton').addEventListener('click', () => state.replay.active ? closeReplay() : openReplay());
+    el('replayClose').addEventListener('click', closeReplay);
+    el('replayPlay').addEventListener('click', toggleReplayPlayback);
+    el('replaySpeed').addEventListener('click', cycleReplaySpeed);
+    el('replayRange').addEventListener('input', event => { stopReplay(); setReplayProgress(Number(event.target.value) / 1000, true); });
     el('excelInput').addEventListener('change', async event => {
       const file = event.target.files[0];
       if (!file) return;

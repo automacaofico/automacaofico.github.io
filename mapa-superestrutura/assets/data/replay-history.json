@@ -1,0 +1,42 @@
+{
+  "source": "Histórico Git do controle Superestrutura",
+  "method": "Valores entre levantamentos são interpolados visualmente.",
+  "snapshots": [
+    {
+      "date": "2026-07-13",
+      "commit": "fd68a0bb7a4271dd54a67780dd7ed308a535c3c6",
+      "values": {
+        "release": 80240,
+        "prelast": 78400,
+        "grade": 56145,
+        "brita1": 38760,
+        "socaria1": 38760,
+        "socaria2": 36730,
+        "brita2": 19480,
+        "socaria3": 19480,
+        "socaria4": 19000,
+        "brita3": 19000,
+        "weld": 32035,
+        "relief": 6780
+      }
+    },
+    {
+      "date": "2026-07-16",
+      "commit": "22c522a8fcf5f77af1d86ff7511f2311f1087aef",
+      "values": {
+        "release": 80240,
+        "prelast": 80360,
+        "grade": 61854,
+        "brita1": 49120,
+        "socaria1": 49120,
+        "socaria2": 49120,
+        "brita2": 26100,
+        "socaria3": 26100,
+        "socaria4": 26100,
+        "brita3": 26100,
+        "weld": 47371,
+        "relief": 6780
+      }
+    }
+  ]
+}
