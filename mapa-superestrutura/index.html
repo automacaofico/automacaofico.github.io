@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b2947">
+  <title>FICO | Mapa Superestrutura</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/vendor/maplibre/maplibre-gl.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-block">
+        <img src="assets/brand/fico-logo-color.png" alt="FICO" class="brand-logo">
+        <span class="brand-rule" aria-hidden="true"></span>
+        <div>
+          <p>Ferrovia de Integração Centro-Oeste</p>
+          <h1>Mapa Superestrutura</h1>
+        </div>
+      </div>
+      <div class="top-actions">
+        <a class="home-link" href="../">Central FICO</a>
+        <span id="sourceBadge" class="source-badge"><i></i> Carregando</span>
+        <label class="upload-button" for="excelInput">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 15v4h14v-4"/></svg>
+          Carregar Excel
+        </label>
+        <input id="excelInput" type="file" accept=".xlsx,.xls,.xlsb" hidden>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="dashboardTitle">
+        <div>
+          <p class="eyebrow">CONTROLE LINEAR · PACOTES 01—08</p>
+          <h2 id="dashboardTitle">Avanço físico, direto no traçado.</h2>
+          <p id="sourceText" class="source-text">Buscando controle oficial...</p>
+        </div>
+        <div class="hero-mark" aria-hidden="true">
+          <span>292</span><small>KM MAPEADOS</small>
+        </div>
+      </section>
+
+      <section class="metrics" aria-label="Indicadores principais">
+        <article><span>Data-base</span><strong id="metricDate">—</strong><small>último levantamento</small></article>
+        <article><span>Frentes iniciadas</span><strong id="metricStarted">—</strong><small>atividades registradas</small></article>
+        <article><span>Plataforma liberada</span><strong id="metricRelease">—</strong><small id="releaseCaption">sobre previsto</small></article>
+        <article><span>Frente líder</span><strong id="metricLeader">—</strong><small id="leaderCaption">atividade mais avançada</small></article>
+        <article><span>Colchão concluído</span><strong id="metricCushion">—</strong><small id="cushionCaption">trechos cadastrados</small></article>
+      </section>
+
+      <section class="control-deck" aria-label="Controles do mapa">
+        <label><span>Pacote</span><select id="packageSelect"><option value="">Obra completa</option></select></label>
+        <div class="segmented" aria-label="Mapa-base">
+          <button type="button" class="active" data-basemap="street" aria-pressed="true">Ruas</button>
+          <button type="button" data-basemap="satellite" aria-pressed="false">Satélite</button>
+        </div>
+        <label class="check-control"><input id="showPlanned" type="checkbox" checked><span>Mostrar previsto</span></label>
+        <label class="check-control"><input id="showFronts" type="checkbox" checked><span>Mostrar frentes</span></label>
+        <button id="fitButton" type="button" class="quiet-button">Enquadrar obra</button>
+        <button id="refreshButton" type="button" class="quiet-button">Atualizar dados</button>
+      </section>
+
+      <section class="workspace">
+        <aside class="activity-panel" aria-labelledby="activityTitle">
+          <div class="panel-heading">
+            <div><p>CAMADAS OPERACIONAIS</p><h3 id="activityTitle">Atividades</h3></div>
+            <span id="activityCount">0</span>
+          </div>
+          <div id="activityList" class="activity-list"></div>
+        </aside>
+
+        <section class="map-panel" aria-label="Mapa do avanço ferroviário">
+          <div id="map"></div>
+          <div id="mapStatus" class="map-status">Preparando eixo ferroviário</div>
+          <div class="map-legend" aria-label="Legenda">
+            <span><i class="line actual"></i>Realizado</span>
+            <span><i class="line planned"></i>Previsto</span>
+            <span><i class="dot"></i>Frente atual</span>
+          </div>
+          <div class="map-readout"><span id="cursorPackage">Obra completa</span><strong id="cursorKm">Passe sobre traçado</strong></div>
+        </section>
+
+        <aside class="detail-panel" aria-labelledby="detailName">
+          <p class="panel-kicker">ATIVIDADE SELECIONADA</p>
+          <h3 id="detailName">—</h3>
+          <span id="detailStatus" class="status-chip">—</span>
+          <div class="detail-progress"><span id="detailProgressBar"></span></div>
+          <div class="detail-grid">
+            <div><span>Realizado</span><strong id="detailReal">—</strong></div>
+            <div><span>Previsto</span><strong id="detailPlanned">—</strong></div>
+            <div><span>Avanço</span><strong id="detailPercent">—</strong></div>
+            <div><span>Diferença</span><strong id="detailDelta">—</strong></div>
+          </div>
+          <div class="package-context">
+            <span>Pacote atual</span>
+            <strong id="detailPackage">—</strong>
+            <small id="detailSection">—</small>
+          </div>
+          <button id="zoomFrontButton" type="button" class="primary-button">Localizar frente</button>
+          <p id="detailNote" class="detail-note"></p>
+        </aside>
+      </section>
+
+      <section class="matrix-panel" aria-labelledby="matrixTitle">
+        <div class="matrix-heading">
+          <div><p>LEITURA COMPARATIVA</p><h3 id="matrixTitle">Matriz de atividades</h3></div>
+          <span>Clique numa linha para mapear</span>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Atividade</th><th>Início</th><th>Realizado</th><th>Previsto</th><th>Avanço</th><th>Diferença</th><th>Pacote atual</th></tr></thead>
+            <tbody id="activityTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="assets/vendor/maplibre/maplibre-gl.js"></script>
+  <script src="assets/vendor/sheetjs/xlsx.full.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
