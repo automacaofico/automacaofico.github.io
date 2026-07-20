@@ -54,7 +54,7 @@ function dashboardService(env, id) {
 
 async function checkRate(request, env) {
   const ip = request.headers.get('CF-Connecting-IP') || 'local';
-  const id = env.COORDINATOR.idFromName(`rate:${ip}`);
+  const id = env.COORDINATOR.idFromName(`rate-v3:${ip}`);
   const stub = env.COORDINATOR.get(id);
   const result = await stub.fetch('https://internal/internal/rate', {
     method: 'POST',
@@ -65,10 +65,18 @@ async function checkRate(request, env) {
 }
 
 async function authenticate(request, env) {
-  await checkRate(request, env);
   const body = await request.json();
-  const session = await createSession(body.password, body.user, env);
+  const session = await createProtectedSession(request, env, body.password, body.user);
   return { ok: true, ...session };
+}
+
+async function createProtectedSession(request, env, password, user) {
+  try {
+    return await createSession(password, user, env);
+  } catch (error) {
+    if (error?.code === 'INVALID_PASSWORD') await checkRate(request, env);
+    throw error;
+  }
 }
 
 async function forwardUpload(request, env, session) {
@@ -97,8 +105,7 @@ function decodeBase64(value) {
 
 async function legacy(request, env) {
   const body = await request.json();
-  await checkRate(request, env);
-  const session = await createSession(body.senha, 'operador', env);
+  const session = await createProtectedSession(request, env, body.senha, 'operador');
   const dashboard = dashboardById(body.repoKey);
   if (!dashboard) throw new AppError('Painel desconhecido.', 404, 'DASHBOARD_NOT_FOUND');
   if (body.action === 'check') {
@@ -123,7 +130,7 @@ export default {
       requireAllowedOrigin(request, env);
       if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(request, env) });
       if (url.pathname === '/' && request.method === 'POST') return response(request, env, await legacy(request, env));
-      if (url.pathname === '/api/v1/health' && request.method === 'GET') return response(request, env, { ok: true, service: 'fico-versioning-api', time: new Date().toISOString() });
+      if (url.pathname === '/api/v1/health' && request.method === 'GET') return response(request, env, { ok: true, service: 'fico-versioning-api', version: '2.0.1', time: new Date().toISOString() });
       if (url.pathname === '/api/v1/dashboards' && request.method === 'GET') {
         return response(request, env, { ok: true, dashboards: Object.values(DASHBOARDS).map(({ id, label }) => ({ id, label })) }, 200, { 'Cache-Control': 'public, max-age=300' });
       }
