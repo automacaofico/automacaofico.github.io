@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#3578bc">
+  <title>FICO | Mapa de Pendências</title>
+  <link rel="stylesheet" href="assets/vendor/maplibre/maplibre-gl.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-block">
+        <img src="assets/brand/fico-logo-color.png" alt="FICO" class="brand-logo">
+        <span class="brand-rule" aria-hidden="true"></span>
+        <div>
+          <p>Ferrovia de Integração Centro-Oeste</p>
+          <h1>Mapa de pendências</h1>
+        </div>
+      </div>
+      <div class="source-block">
+        <a class="home-link" href="../">Central FICO</a>
+        <span id="sourceBadge" class="source-badge"><i></i> Base inicial</span>
+        <label class="upload-button" for="excelInput">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5 5 5M5 15v4h14v-4"/></svg>
+          Carregar Excel
+        </label>
+        <input id="excelInput" type="file" accept=".xlsx,.xls,.xlsb" hidden>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero-row" aria-labelledby="dashboardTitle">
+        <div>
+          <p class="eyebrow">CONTROLE TERRITORIAL · FICO</p>
+          <h2 id="dashboardTitle">Pendências sobre traçado ferroviário</h2>
+          <p id="sourceText" class="source-text">Carregando recorte inicial...</p>
+        </div>
+        <div class="hero-actions" aria-label="Controles do mapa">
+          <div class="segmented-control">
+            <button type="button" class="active" data-basemap="street" aria-pressed="true">Ruas</button>
+            <button type="button" data-basemap="satellite" aria-pressed="false">Satélite</button>
+          </div>
+          <button id="fitButton" type="button" class="icon-button" title="Enquadrar ferrovia" aria-label="Enquadrar ferrovia">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5m13 5h5v-5"/></svg>
+          </button>
+        </div>
+      </section>
+
+      <section class="metric-strip" aria-label="Indicadores do recorte">
+        <article><span>Total filtrado</span><strong id="metricTotal">—</strong><small>registros visíveis</small></article>
+        <article><span>Localizadas</span><strong id="metricLocated">—</strong><small id="coverageText">sobre traçado</small></article>
+        <article><span>Pendentes</span><strong id="metricOpen">—</strong><small>não baixadas</small></article>
+        <article><span>Em atraso</span><strong id="metricOverdue">—</strong><small>prazo vencido</small></article>
+      </section>
+
+      <section class="filter-bar" aria-label="Filtros">
+        <label class="search-field">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+          <span class="sr-only">Buscar</span>
+          <input id="searchInput" type="search" placeholder="Buscar ID, ativo, descrição...">
+        </label>
+        <label><span>Empresa</span><select id="companyFilter"><option value="">Todas</option></select></label>
+        <label><span>Trecho</span><select id="sectionFilter"><option value="">Todos</option></select></label>
+        <label><span>Status</span><select id="statusFilter"><option value="">Todos</option></select></label>
+        <label><span>Especialidade</span><select id="specialtyFilter"><option value="">Todas</option></select></label>
+        <button id="clearFilters" type="button" class="clear-button">Limpar</button>
+      </section>
+
+      <section class="workspace">
+        <div class="map-card">
+          <div id="map" role="region" aria-label="Mapa interativo das pendências"></div>
+          <div class="map-legend" aria-label="Legenda">
+            <span><i class="dot open"></i>Aberta</span>
+            <span><i class="dot closed"></i>Baixada</span>
+            <span><i class="rail rail-1"></i>Pacote 1</span>
+            <span><i class="rail rail-2"></i>Pacote 2</span>
+            <span><i class="rail rail-3"></i>Pacote 3</span>
+          </div>
+          <div id="mapNotice" class="map-notice hidden" role="status"></div>
+          <div id="loadingMap" class="loading-map"><span></span><p>Preparando mapa ferroviário</p></div>
+        </div>
+
+        <aside class="results-panel" aria-labelledby="resultsTitle">
+          <header>
+            <div><p class="eyebrow">RECORTE ATUAL</p><h3 id="resultsTitle">Pendências</h3></div>
+            <strong id="resultCount">0</strong>
+          </header>
+          <div id="statusBreakdown" class="status-breakdown"></div>
+          <div id="resultsList" class="results-list"></div>
+        </aside>
+      </section>
+    </main>
+  </div>
+
+  <div id="drawerOverlay" class="drawer-overlay hidden"></div>
+  <aside id="detailDrawer" class="detail-drawer" aria-hidden="true" aria-labelledby="detailTitle">
+    <header>
+      <div><p class="eyebrow">DETALHE DA PENDÊNCIA</p><h2 id="detailTitle">Pendência</h2></div>
+      <button id="closeDrawer" type="button" aria-label="Fechar detalhes">×</button>
+    </header>
+    <div id="detailBody" class="detail-body"></div>
+  </aside>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="assets/vendor/maplibre/maplibre-gl.js"></script>
+  <script src="assets/vendor/sheetjs/xlsx.full.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
