@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#08263d">
+  <title>FICO | Evolução da Obra</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+  <script>
+    document.documentElement.dataset.theme = localStorage.getItem('fico-theme') || (matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light');
+  </script>
+</head>
+<body>
+  <aside class="rail">
+    <a class="rail-brand" href="../"><img src="../mapa-superestrutura/assets/brand/fico-logo-color.png" alt="FICO"></a>
+    <nav aria-label="Navegação do Centro de Evolução">
+      <a href="#visao" class="active"><span>01</span>Visão atual</a>
+      <a href="#mudancas"><span>02</span>Evolução</a>
+      <a href="#tendencias"><span>03</span>Tendências</a>
+      <a href="#historico"><span>04</span>Histórico</a>
+    </nav>
+    <div class="rail-foot">
+      <a href="../atualizar.html">Atualizar base</a>
+      <small>FICO · 2026</small>
+    </div>
+  </aside>
+
+  <main>
+    <header class="topbar" id="visao">
+      <div>
+        <p class="eyebrow">CONTROLE EXECUTIVO · HISTÓRICO REAL</p>
+        <h1>Evolução da Obra</h1>
+        <p class="subtitle">O que mudou desde a última atualização?</p>
+      </div>
+      <div class="top-actions">
+        <span class="sync" id="syncState"><i></i> aguardando acesso</span>
+        <button id="themeToggle" class="icon-button" type="button" aria-label="Alternar tema">◐</button>
+        <a class="button ghost" href="../">Central FICO</a>
+      </div>
+    </header>
+
+    <section class="login-panel" id="loginPanel">
+      <div>
+        <span class="step-number">ACESSO PROTEGIDO</span>
+        <h2>Conectar ao histórico</h2>
+        <p>A senha permanece somente nesta sessão.</p>
+      </div>
+      <form id="loginForm">
+        <label>Identificação<input id="userName" autocomplete="name" placeholder="Nome do operador"></label>
+        <label>Senha<input id="password" type="password" autocomplete="current-password" required></label>
+        <button class="button primary" type="submit">Entrar no centro</button>
+      </form>
+      <p class="form-error" id="loginError" role="alert"></p>
+    </section>
+
+    <div id="appContent" hidden>
+      <section class="compare-bar" aria-label="Seleção de versões">
+        <label>Dashboard<select id="dashboardSelect"></select></label>
+        <label>Versão anterior<select id="fromVersion"></select></label>
+        <button id="swapVersions" class="swap" type="button" title="Inverter comparação">⇄</button>
+        <label>Versão atual<select id="toVersion"></select></label>
+        <button id="compareButton" class="button primary" type="button">Comparar versões</button>
+      </section>
+
+      <section class="version-strip">
+        <div><span>VERSÃO ATUAL</span><strong id="currentVersionLabel">—</strong><small id="currentVersionDate">—</small></div>
+        <div><span>COMPARADA COM</span><strong id="previousVersionLabel">—</strong><small id="previousVersionDate">—</small></div>
+        <div class="fresh"><span>ESTADO</span><strong>Dados rastreáveis</strong><small>Hash SHA-256 por versão</small></div>
+      </section>
+
+      <section class="metrics" id="metricCards" aria-label="Indicadores da comparação"></section>
+
+      <section class="insight-grid" id="mudancas">
+        <article class="panel narrative-panel">
+          <header><div><p class="eyebrow">LEITURA AUTOMÁTICA</p><h2>O que mudou?</h2></div><span class="rule-chip">REGRAS DETERMINÍSTICAS</span></header>
+          <div id="executiveSummary" class="executive-summary"></div>
+          <div class="signal-columns">
+            <div><span class="signal up">↗</span><strong>Maiores avanços</strong><ol id="topIncreases"></ol></div>
+            <div><span class="signal down">↘</span><strong>Maiores reduções</strong><ol id="topReductions"></ol></div>
+            <div><span class="signal warn">!</span><strong>Mudanças relevantes</strong><ol id="statusChanges"></ol></div>
+          </div>
+        </article>
+
+        <article class="panel movement-panel">
+          <header><div><p class="eyebrow">INTENSIDADE</p><h2>Índice de movimentação</h2></div></header>
+          <div class="movement-score"><strong id="movementScore">0</strong><span>%</span></div>
+          <div class="movement-track"><i id="movementBar"></i></div>
+          <p id="movementText">Nenhuma comparação carregada.</p>
+        </article>
+      </section>
+
+      <section class="two-columns" id="tendencias">
+        <article class="panel chart-panel">
+          <header>
+            <div><p class="eyebrow">EVOLUÇÃO POR VERSÃO</p><h2>Ritmo das atualizações</h2></div>
+            <select id="chartMetric" aria-label="Indicador do gráfico">
+              <option value="totalChanges">Alterações</option>
+              <option value="changed">Registros alterados</option>
+              <option value="added">Novos registros</option>
+              <option value="statusChanges">Mudanças de status</option>
+            </select>
+          </header>
+          <div id="trendChart" class="trend-chart" role="img" aria-label="Gráfico de evolução"></div>
+        </article>
+
+        <article class="panel location-panel">
+          <header><div><p class="eyebrow">LOCALIZAÇÃO</p><h2>Onde ocorreram mudanças</h2></div></header>
+          <div id="locationChanges" class="location-list"></div>
+        </article>
+      </section>
+
+      <section class="panel history-panel" id="historico">
+        <header><div><p class="eyebrow">RASTREABILIDADE</p><h2>Linha do tempo</h2></div><span id="versionCount" class="count-chip">0 versões</span></header>
+        <div id="timeline" class="timeline"></div>
+      </section>
+
+      <section class="panel detail-panel">
+        <header>
+          <div><p class="eyebrow">AUDITORIA OPERACIONAL</p><h2>Tabela detalhada</h2></div>
+          <div class="export-actions">
+            <button id="exportJson" type="button">JSON</button>
+            <button id="exportCsv" type="button">CSV</button>
+            <button id="printReport" type="button">PDF</button>
+          </div>
+        </header>
+        <div class="filters">
+          <input id="searchInput" type="search" placeholder="Buscar atividade, chave ou campo">
+          <select id="sheetFilter"><option value="">Todas as abas</option></select>
+          <select id="regionalFilter"><option value="">Todas as regionais</option></select>
+          <select id="packageFilter"><option value="">Todos os pacotes</option></select>
+          <select id="activityFilter"><option value="">Todas as atividades</option></select>
+          <select id="equipmentFilter"><option value="">Todos os equipamentos</option></select>
+          <select id="disciplineFilter"><option value="">Todas as disciplinas</option></select>
+          <select id="periodFilter"><option value="">Todos os períodos</option></select>
+          <select id="changeFilter"><option value="">Todas as alterações</option></select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Aba</th><th>Registro</th><th>Regional</th><th>Pacote</th><th>Disciplina</th><th>Atividade</th><th>Campo</th><th>Anterior</th><th>Atual</th><th>Variação</th><th>Classificação</th></tr></thead>
+            <tbody id="changesTable"></tbody>
+          </table>
+        </div>
+        <footer class="pagination"><span id="tableCount">0 resultados</span><div><button id="prevPage" type="button">←</button><span id="pageLabel">1 / 1</span><button id="nextPage" type="button">→</button></div></footer>
+      </section>
+    </div>
+
+    <section class="state-panel" id="statePanel" hidden>
+      <span id="stateIcon">—</span><h2 id="stateTitle">Carregando</h2><p id="stateText">Aguarde.</p>
+    </section>
+  </main>
+
+  <dialog id="restoreDialog">
+    <form method="dialog">
+      <p class="eyebrow">RESTAURAÇÃO CONTROLADA</p>
+      <h2>Restaurar esta versão?</h2>
+      <p>A versão atual será preservada no histórico. Uma nova versão será criada.</p>
+      <div><button value="cancel" class="button ghost">Cancelar</button><button id="confirmRestore" value="default" class="button danger">Restaurar versão</button></div>
+    </form>
+  </dialog>
+
+  <script src="./app.js"></script>
+</body>
+</html>
