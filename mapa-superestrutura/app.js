@@ -382,17 +382,52 @@
     state.map.addSource('replay-fronts', { type: 'geojson', data: collection() });
     state.map.addLayer({ id: 'replay-halo', type: 'circle', source: 'replay-fronts', layout: { visibility: 'none' }, paint: { 'circle-radius': ['case', ['get', 'selected'], 13, 8], 'circle-color': ['get', 'color'], 'circle-opacity': .18 } });
     state.map.addLayer({ id: 'replay-fronts', type: 'circle', source: 'replay-fronts', layout: { visibility: 'none' }, paint: { 'circle-radius': ['case', ['get', 'selected'], 7, 4], 'circle-color': ['get', 'color'], 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } });
+    state.map.addLayer({ id: 'replay-fronts-hit', type: 'circle', source: 'replay-fronts', layout: { visibility: 'none' }, paint: { 'circle-radius': ['case', ['get', 'selected'], 18, 14], 'circle-color': '#ffffff', 'circle-opacity': .01 } });
     state.map.addSource('cushion', { type: 'geojson', data: collection() });
     state.map.addLayer({ id: 'cushion-line', type: 'line', source: 'cushion', paint: { 'line-color': ['match', ['get', 'status'], 'Concluído', '#55a646', '#ee7623'], 'line-width': 4, 'line-offset': 7, 'line-opacity': .9 } });
     state.map.addSource('fronts', { type: 'geojson', data: collection() });
     state.map.addLayer({ id: 'fronts', type: 'circle', source: 'fronts', paint: { 'circle-radius': ['case', ['get', 'selected'], 8, 5], 'circle-color': ['get', 'color'], 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2, 'circle-opacity': ['case', ['get', 'selected'], 1, .76] } });
+    state.map.addLayer({ id: 'fronts-hit', type: 'circle', source: 'fronts', paint: { 'circle-radius': ['case', ['get', 'selected'], 18, 14], 'circle-color': '#ffffff', 'circle-opacity': .01 } });
     state.map.addSource('boundaries', { type: 'geojson', data: collection(PACKAGES.slice(1).map(item => ({ type: 'Feature', properties: item, geometry: { type: 'Point', coordinates: pointAtStation(item.start) } }))) });
     state.map.addLayer({ id: 'boundaries', type: 'circle', source: 'boundaries', paint: { 'circle-radius': 3, 'circle-color': '#092844', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1 } });
-    state.map.on('mouseenter', 'fronts', () => { state.map.getCanvas().style.cursor = 'pointer'; });
-    state.map.on('mouseleave', 'fronts', () => { state.map.getCanvas().style.cursor = ''; });
-    state.map.on('click', 'fronts', event => {
-      const feature = event.features[0];
-      new maplibregl.Popup({ offset: 12, closeButton: false }).setLngLat(feature.geometry.coordinates).setHTML(`<div class="front-popup"><strong>${feature.properties.name}</strong><span>${station(feature.properties.station)}</span></div>`).addTo(state.map);
+    bindFrontInteractions('fronts-hit');
+    bindFrontInteractions('replay-fronts-hit');
+  }
+
+  function frontTooltipHtml(properties) {
+    const progressValue = Number(properties.progress) || 0;
+    const stationValue = Number(properties.station) || 0;
+    return `<div class="work-tooltip" style="--tooltip-color:${properties.color}">
+      <div class="work-tooltip-head"><span><i></i>${properties.context || 'FRENTE ATUAL'}</span><b>${properties.package || packageAt(stationValue).name}</b></div>
+      <strong>${properties.name}</strong>
+      <div class="work-tooltip-grid">
+        <div><span>Localização</span><b>${station(stationValue)}</b></div>
+        <div><span>Avanço</span><b>${percent(progressValue)}</b></div>
+      </div>
+      <small>${properties.note || 'Passe sobre outras frentes para comparar.'}</small>
+    </div>`;
+  }
+
+  function bindFrontInteractions(layerId) {
+    const hoverPopup = new maplibregl.Popup({ offset: 16, closeButton: false, closeOnClick: false, className: 'work-popup' });
+    state.map.on('mouseenter', layerId, event => {
+      state.map.getCanvas().style.cursor = 'pointer';
+      const feature = event.features?.[0];
+      if (feature) hoverPopup.setLngLat(feature.geometry.coordinates).setHTML(frontTooltipHtml(feature.properties)).addTo(state.map);
+    });
+    state.map.on('mousemove', layerId, event => {
+      const feature = event.features?.[0];
+      if (feature) hoverPopup.setLngLat(feature.geometry.coordinates).setHTML(frontTooltipHtml(feature.properties));
+    });
+    state.map.on('mouseleave', layerId, () => {
+      state.map.getCanvas().style.cursor = '';
+      hoverPopup.remove();
+    });
+    state.map.on('click', layerId, event => {
+      const feature = event.features?.[0];
+      if (!feature) return;
+      selectActivity(feature.properties.id);
+      new maplibregl.Popup({ offset: 16, closeButton: true, className: 'work-popup pinned' }).setLngLat(feature.geometry.coordinates).setHTML(frontTooltipHtml(feature.properties)).addTo(state.map);
     });
   }
 
@@ -415,7 +450,7 @@
       .filter(item => item.end > item.start)
       .map(item => lineFeature(item.start, item.end, { status: item.status }));
     const fronts = state.activities.filter(item => item.actualLength > 0).filter(item => !packageFilter || (item.actualEnd >= packageFilter.start && item.actualEnd <= packageFilter.end)).map(item => ({
-      type: 'Feature', properties: { id: item.id, name: item.name, station: item.actualEnd, color: item.color, selected: item.id === state.selectedId }, geometry: { type: 'Point', coordinates: pointAtStation(item.actualEnd) }
+      type: 'Feature', properties: { id: item.id, name: item.name, station: item.actualEnd, color: item.color, selected: item.id === state.selectedId, progress: item.progress, package: packageAt(item.actualEnd).name, context: 'FRENTE ATUAL', note: `Registro oficial em ${state.date ? state.date.toLocaleDateString('pt-BR') : 'data-base atual'}.` }, geometry: { type: 'Point', coordinates: pointAtStation(item.actualEnd) }
     }));
     state.map.getSource('planned').setData(collection(planned));
     state.map.getSource('actual').setData(collection(actual));
@@ -423,7 +458,7 @@
     state.map.getSource('fronts').setData(collection(fronts));
     const normalVisibility = state.replay.active ? 'none' : 'visible';
     state.map.setLayoutProperty('planned-line', 'visibility', !state.replay.active && el('showPlanned').checked ? 'visible' : 'none');
-    state.map.setLayoutProperty('fronts', 'visibility', !state.replay.active && el('showFronts').checked ? 'visible' : 'none');
+    ['fronts', 'fronts-hit'].forEach(layer => state.map.setLayoutProperty(layer, 'visibility', !state.replay.active && el('showFronts').checked ? 'visible' : 'none'));
     ['actual-casing', 'actual-line', 'cushion-line'].forEach(layer => state.map.setLayoutProperty(layer, 'visibility', normalVisibility));
   }
 
@@ -461,6 +496,8 @@
     state.replay.lastMapUpdate = now;
     const replay = replayValues();
     if (!replay) return;
+    const currentDate = new Date(lerp(new Date(`${replay.start.date}T12:00:00`).getTime(), new Date(`${replay.end.date}T12:00:00`).getTime(), state.replay.progress));
+    const replayContext = state.replay.progress < .015 || state.replay.progress > .985 ? 'BASE REAL' : 'REPLAY INTERPOLADO';
     const features = [];
     const fronts = [];
     DEFINITIONS.forEach((activity, index) => {
@@ -469,7 +506,7 @@
       const selected = activity.id === state.selectedId;
       const offset = (index - (DEFINITIONS.length - 1) / 2) * 2.35;
       features.push(lineFeature(activity.start, end, { id: activity.id, name: activity.name, color: activity.color, selected, offset }));
-      fronts.push({ type: 'Feature', properties: { id: activity.id, name: activity.name, station: end, color: activity.color, selected }, geometry: { type: 'Point', coordinates: pointAtStation(end) } });
+      fronts.push({ type: 'Feature', properties: { id: activity.id, name: activity.name, station: end, color: activity.color, selected, progress: Math.max(0, end - activity.start) / Math.max(1, activity.plannedEnd - activity.start) * 100, package: packageAt(end).name, context: replayContext, note: `Posição em ${currentDate.toLocaleDateString('pt-BR')}.` }, geometry: { type: 'Point', coordinates: pointAtStation(end) } });
     });
     state.map.getSource('replay-lines').setData(collection(features));
     state.map.getSource('replay-fronts').setData(collection(fronts));
@@ -483,7 +520,7 @@
 
   function setReplayLayers(active) {
     if (!state.mapReady) return;
-    ['replay-casing', 'replay-lines', 'replay-halo', 'replay-fronts'].forEach(layer => state.map.setLayoutProperty(layer, 'visibility', active ? 'visible' : 'none'));
+    ['replay-casing', 'replay-lines', 'replay-halo', 'replay-fronts', 'replay-fronts-hit'].forEach(layer => state.map.setLayoutProperty(layer, 'visibility', active ? 'visible' : 'none'));
     state.map.setPaintProperty('package-lines', 'line-opacity', active ? .25 : .82);
     updateMapData();
   }
