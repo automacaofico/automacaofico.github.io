@@ -167,7 +167,12 @@ export class DriveStore {
 
   async downloadJson(fileId) {
     const buffer = await this.download(fileId);
-    return JSON.parse(new TextDecoder().decode(buffer));
+    try {
+      return JSON.parse(new TextDecoder().decode(buffer));
+    } catch (error) {
+      console.error('Drive JSON parse error', fileId, error);
+      throw new AppError('Não foi possível ler o histórico salvo no Google Drive (arquivo corrompido ou incompleto).', 502, 'DRIVE_JSON_CORRUPTED', { fileId });
+    }
   }
 
   async move(fileId, addParent, removeParent, appProperties = null) {
