@@ -135,7 +135,14 @@ export class VersionService {
     }
 
     const previousVersion = context.index.versions.find((version) => version.id === context.index.currentVersion);
-    const previousNormalized = previousVersion ? await this.drive.downloadJson(previousVersion.normalizedFileId) : null;
+    let previousNormalized = null;
+    if (previousVersion) {
+      try {
+        previousNormalized = await this.drive.downloadJson(previousVersion.normalizedFileId);
+      } catch (error) {
+        console.error('Histórico anterior corrompido, seguindo sem comparação', previousVersion.id, error);
+      }
+    }
     const id = crypto.randomUUID();
     const uploadedAt = fortalezaIso();
     const metadata = {

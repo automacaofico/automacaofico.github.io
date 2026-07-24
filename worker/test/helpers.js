@@ -21,8 +21,9 @@ export function workbookBuffer({ activityKm = 1000, materialReceived = 10 } = {}
 }
 
 export class FakeDrive {
-  constructor({ failMove = false } = {}) {
+  constructor({ failMove = false, corruptIds = new Set() } = {}) {
     this.failMove = failMove;
+    this.corruptIds = corruptIds;
     this.files = new Map();
     this.byName = new Map();
     this.counter = 0;
@@ -59,6 +60,7 @@ export class FakeDrive {
   }
 
   async downloadJson(id) {
+    if (this.corruptIds.has(id)) throw new Error('JSON corrompido simulado');
     return JSON.parse(new TextDecoder().decode(this.files.get(id).content));
   }
 
