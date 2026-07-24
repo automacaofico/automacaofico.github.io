@@ -76,7 +76,7 @@ export class DriveStore {
     this.env = env;
   }
 
-  async request(path, init = {}) {
+  async request(path, init = {}, { raw = false } = {}) {
     const token = await googleToken(this.env);
     const response = await fetch(path.startsWith('http') ? path : `${DRIVE_API}${path}`, {
       ...init,
@@ -88,6 +88,7 @@ export class DriveStore {
       throw new AppError('Falha no armazenamento do Google Drive.', 502, 'DRIVE_ERROR');
     }
     if (response.status === 204) return null;
+    if (raw) return response.arrayBuffer();
     const type = response.headers.get('content-type') || '';
     return type.includes('application/json') ? response.json() : response.arrayBuffer();
   }
@@ -162,7 +163,7 @@ export class DriveStore {
   }
 
   async download(fileId) {
-    return this.request(`/files/${fileId}?alt=media&supportsAllDrives=true`);
+    return this.request(`/files/${fileId}?alt=media&supportsAllDrives=true`, {}, { raw: true });
   }
 
   async downloadJson(fileId) {
