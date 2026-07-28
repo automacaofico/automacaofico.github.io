@@ -23,6 +23,14 @@ function safeName(value) {
   return String(value || 'arquivo.xlsx').replace(/[^a-zA-Z0-9À-ÿ._ -]/g, '_').slice(0, 140);
 }
 
+function safeCommitUser(value) {
+  return String(value || 'operador').replace(/[\r\n]+/g, ' ').trim().slice(0, 120) || 'operador';
+}
+
+export function updateMessage(label, uploadedAt, user) {
+  return `Atualiza ${label} · ${uploadedAt}\n\nResponsável: ${safeCommitUser(user)}`;
+}
+
 function publicVersion(version) {
   return {
     id: version.id,
@@ -172,7 +180,7 @@ export class VersionService {
       staged.push(stagedXlsx, stagedData, stagedDiff, stagedMeta);
       steps.push('nova_versao_armazenada', 'comparacao_concluida');
 
-      published = await this.github.update(this.dashboard.github, buffer, currentGitHub.sha, `Atualiza ${this.dashboard.label} · ${uploadedAt}`);
+      published = await this.github.update(this.dashboard.github, buffer, currentGitHub.sha, updateMessage(this.dashboard.label, uploadedAt, user));
       const finalProperties = { dashboard: this.dashboard.id, version: id, status: 'published', transaction: transactionId };
       const finalXlsx = await this.drive.move(stagedXlsx.id, context.folders.HISTORICO, context.folders._TRANSACOES, finalProperties);
       const finalData = await this.drive.move(stagedData.id, context.folders.JSON, context.folders._TRANSACOES, { ...finalProperties, kind: 'normalized' });

@@ -1,12 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DASHBOARDS } from '../src/schemas.js';
-import { VersionService } from '../src/version-service.js';
+import { VersionService, updateMessage } from '../src/version-service.js';
 import { FakeDrive, FakeGitHub, workbookBuffer } from './helpers.js';
 
 function service({ current, drive }) {
   return new VersionService({ drive, github: new FakeGitHub(current), dashboard: DASHBOARDS.superestrutura, maxBytes: 10_000_000 });
 }
+
+test('registra o responsável no commit publicado', () => {
+  const message = updateMessage('Mapa Superestrutura', '2026-07-28T10:00:00-03:00', 'Thyago Viégas\nFICO');
+  assert.match(message, /Responsável: Thyago Viégas FICO$/);
+});
 
 test('bloqueia arquivo duplicado pelo SHA-256', async () => {
   const current = workbookBuffer();

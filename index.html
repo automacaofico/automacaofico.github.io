@@ -298,7 +298,7 @@
 </footer>
 
 <script>
-  // Data da última atualização de cada planilha, lida do histórico de commits
+  // Data e responsável pela última atualização de cada planilha, lidos do histórico de commits
   // do repositório (reflete o momento real em que o arquivo foi substituído,
   // seja pelo site de upload ou direto no repositório). Cacheado por 10 min
   // no navegador pra não estourar o limite de requisições da API pública.
@@ -315,16 +315,27 @@
   document.querySelectorAll('[data-repo]').forEach(function (card) {
     var repo = card.dataset.repo, path = card.dataset.path;
     var el = card.querySelector('[data-updated]');
-    var cacheKey = 'fico_last_update_' + repo;
+    var cacheKey = 'fico_last_update_v2_' + repo;
     var cached = null;
     try { cached = JSON.parse(localStorage.getItem(cacheKey) || 'null'); } catch (e) {}
 
-    function render(iso) {
-      el.textContent = '📅 Planilha atualizada em ' + fmtWhen(iso);
+    function render(iso, responsible) {
+      var text = '📅 Planilha atualizada em ' + fmtWhen(iso);
+      if (responsible) text += ' · 👤 ' + responsible;
+      el.textContent = text;
+    }
+
+    function commitResponsible(commit) {
+      var message = commit && commit.commit && commit.commit.message || '';
+      var recorded = message.match(/(?:^|\s)Responsável:\s*(.+?)(?:\r?\n|$)/i);
+      if (recorded && recorded[1]) return recorded[1].trim();
+      return commit && commit.author && commit.author.login
+        || commit && commit.commit && commit.commit.author && commit.commit.author.name
+        || '';
     }
 
     if (cached && (Date.now() - cached.fetchedAt) < 10 * 60 * 1000) {
-      render(cached.date);
+      render(cached.date, cached.responsible);
       return;
     }
 
@@ -333,12 +344,14 @@
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(function (commits) {
         if (!commits || !commits[0]) throw new Error('sem commits');
-        var iso = commits[0].commit.committer.date;
-        localStorage.setItem(cacheKey, JSON.stringify({ date: iso, fetchedAt: Date.now() }));
-        render(iso);
+        var commit = commits[0];
+        var iso = commit.commit.committer.date;
+        var responsible = commitResponsible(commit);
+        localStorage.setItem(cacheKey, JSON.stringify({ date: iso, responsible: responsible, fetchedAt: Date.now() }));
+        render(iso, responsible);
       })
       .catch(function () {
-        if (cached) render(cached.date);
+        if (cached) render(cached.date, cached.responsible);
         else el.textContent = '📅 Não foi possível checar a última atualização';
       });
   });
