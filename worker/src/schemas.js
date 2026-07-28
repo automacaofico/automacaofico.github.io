@@ -40,8 +40,8 @@ export const DASHBOARDS = {
     sheets: {
       Pendências: TABLE(
         1,
-        [['ID ATLAS', 'ID original']],
-        [['ID ATLAS', 'ID original'], 'Empresa', 'Pacote', 'Descrição', 'KM inicial', 'KM final', 'Status']
+        ['ID original'],
+        ['ID original', 'Empresa', 'Pacote', 'Descrição', 'KM inicial', 'KM final', 'Status']
       )
     }
   },

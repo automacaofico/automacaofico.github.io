@@ -73,8 +73,7 @@
   };
 
   const normalizeRecord = (row, index) => ({
-    id: getField(row, "ID ATLAS", "ID", "Código") ?? index + 1,
-    originalId: getField(row, "ID original", "ID Origem"),
+    id: getField(row, "ID original", "ID Origem"),
     company: String(getField(row, "Empresa", "Contratada") ?? "Não informada").trim(),
     package: String(getField(row, "Pacote") ?? "").trim(),
     section: String(getField(row, "Trecho", "Segmento") ?? "").trim(),

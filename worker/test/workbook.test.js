@@ -25,7 +25,7 @@ test('rejeita dashboard incompatível', async () => {
   await assert.rejects(() => validateAndNormalize({ file: { name: 'super.xlsx' }, buffer: workbookBuffer(), dashboard: DASHBOARDS.mapa_pendencias, maxBytes: 10_000_000 }), { code: 'WRONG_DASHBOARD' });
 });
 
-test('usa ID original quando ID ATLAS está vazio no mapa de pendências', async () => {
+test('usa exclusivamente ID original no mapa de pendências', async () => {
   const result = await validateAndNormalize({
     file: { name: 'Pendencias_FICO_Mapa.xlsx' },
     buffer: mapWorkbookBuffer({ blankAtlasIds: true }),
