@@ -1,4 +1,11 @@
-const TABLE = (headerRow, keys, requiredColumns = keys, columnOverrides = {}) => ({ type: 'table', headerRow, keys, requiredColumns, columnOverrides });
+const TABLE = (headerRow, keys, requiredColumns = keys, columnOverrides = {}, options = {}) => ({
+  type: 'table',
+  headerRow,
+  keys,
+  requiredColumns,
+  columnOverrides,
+  ...options
+});
 const MATRIX = (labelColumn = 0, headerRows = []) => ({ type: 'matrix', labelColumn, headerRows });
 
 export const DASHBOARDS = {
@@ -36,12 +43,53 @@ export const DASHBOARDS = {
     label: 'Mapa de Pendências',
     aliases: ['mapa-pendencias'],
     github: { owner: 'automacaofico', repo: 'mapa-pendencias', path: 'Pendencias_FICO_Mapa.xlsx' },
-    requiredSheets: ['Pendências'],
+    requiredSheets: [],
+    requiredSheetGroups: [['Pendências', 'Banco de Dados']],
     sheets: {
       Pendências: TABLE(
         1,
-        ['ID original'],
-        ['ID original', 'Empresa', 'Pacote', 'Descrição', 'KM inicial', 'KM final', 'Status']
+        [['ID original', 'Id_Pendencia']],
+        [
+          ['ID original', 'Id_Pendencia'],
+          'Empresa',
+          'Pacote',
+          ['Descrição', 'Descrição Pendencia'],
+          ['KM inicial', 'KM Inicial'],
+          ['KM final', 'KM Final'],
+          ['Status', 'Status_Pendencia']
+        ],
+        {},
+        {
+          sourceNames: ['Pendências', 'Banco de Dados'],
+          headerRowBySource: { 'BANCO DE DADOS': 2 },
+          keyPattern: /^\d+$/,
+          canonicalColumns: {
+            'ID original': ['ID original', 'Id_Pendencia'],
+            Empresa: ['Empresa', 'Contratada'],
+            Pacote: ['Pacote'],
+            Trecho: ['Segmento', 'Trecho'],
+            Ativo: ['Ativo'],
+            Lado: ['Lado'],
+            Especialidade: ['Especialidade', 'Atividade2', 'Tipo de Pendencia'],
+            Classificação: ['Classificação', 'Classificação da Pendencia'],
+            Descrição: ['Descrição', 'Descrição Pendencia'],
+            'KM inicial': ['KM inicial', 'KM Inicial'],
+            'KM final': ['KM final', 'KM Final'],
+            Status: ['Status', 'Status_Pendencia'],
+            'Responsável FICO': ['Responsável FICO', 'Responsável Vale'],
+            'Responsável contratada': ['Responsável contratada', 'Responsável Contratada'],
+            Abertura: ['Abertura', 'Data_Abertura'],
+            Prazo: ['Prazo', 'Data_Prazo'],
+            'Previsão de baixa': ['Previsão de baixa', 'Data_Prevista Encerramento'],
+            Baixa: ['Baixa', 'Data_Encerramento'],
+            Priorização: ['Priorização'],
+            Equipe: ['Equipe'],
+            'Início da atividade': ['Data_Início'],
+            'Término da atividade': ['Data_Término'],
+            Protocolo: ['Protocolo'],
+            Certificação: ['Certificação ?']
+          }
+        }
       )
     }
   },

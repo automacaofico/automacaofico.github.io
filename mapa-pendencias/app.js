@@ -73,30 +73,36 @@
   };
 
   const normalizeRecord = (row, index) => ({
-    id: getField(row, "ID original", "ID Origem"),
+    id: getField(row, "ID original", "ID Origem", "Id_Pendencia"),
     company: String(getField(row, "Empresa", "Contratada") ?? "Não informada").trim(),
     package: String(getField(row, "Pacote") ?? "").trim(),
-    section: String(getField(row, "Trecho", "Segmento") ?? "").trim(),
+    section: String(getField(row, "Segmento", "Trecho") ?? "").trim(),
     asset: String(getField(row, "Ativo") ?? "Não informado").replace(/\s*\n\s*/g, " ").trim(),
     side: String(getField(row, "Lado") ?? "").trim(),
-    specialty: String(getField(row, "Especialidade", "Disciplina") ?? "Não informada").trim(),
-    classification: String(getField(row, "Classificação", "Classificacao", "Tipo") ?? "").trim(),
-    description: String(getField(row, "Descrição", "Descricao", "Pendência", "Pendencia") ?? "Sem descrição").trim(),
+    specialty: String(getField(row, "Especialidade", "Atividade2", "Tipo de Pendencia", "Disciplina") ?? "Não informada").trim(),
+    classification: String(getField(row, "Classificação", "Classificação da Pendencia", "Classificacao", "Tipo") ?? "").trim(),
+    description: String(getField(row, "Descrição", "Descrição Pendencia", "Descricao", "Pendência", "Pendencia") ?? "Sem descrição").trim(),
     kmStart: getField(row, "KM inicial", "Km Inicial", "KM início", "KM inicio"),
     kmEnd: getField(row, "KM final", "Km Final", "KM fim"),
-    status: String(getField(row, "Status", "Situação", "Situacao") ?? "Não informado").trim(),
-    ficoOwner: String(getField(row, "Responsável FICO", "Responsavel FICO", "Fiscal") ?? "").trim(),
-    contractorOwner: String(getField(row, "Responsável contratada", "Responsavel contratada") ?? "").trim(),
-    openedAt: toIsoDate(getField(row, "Abertura", "Data de abertura")),
-    deadline: toIsoDate(getField(row, "Prazo", "Data prazo")),
-    expectedClose: toIsoDate(getField(row, "Previsão de baixa", "Previsao de baixa")),
-    closedAt: toIsoDate(getField(row, "Baixa", "Data de baixa")),
+    status: String(getField(row, "Status", "Status_Pendencia", "Situação", "Situacao") ?? "Não informado").trim(),
+    ficoOwner: String(getField(row, "Responsável FICO", "Responsável Vale", "Responsavel FICO", "Fiscal") ?? "").trim(),
+    contractorOwner: String(getField(row, "Responsável contratada", "Responsável Contratada", "Responsavel contratada") ?? "").trim(),
+    openedAt: toIsoDate(getField(row, "Abertura", "Data_Abertura", "Data de abertura")),
+    deadline: toIsoDate(getField(row, "Prazo", "Data_Prazo", "Data prazo")),
+    expectedClose: toIsoDate(getField(row, "Previsão de baixa", "Data_Prevista Encerramento", "Previsao de baixa")),
+    closedAt: toIsoDate(getField(row, "Baixa", "Data_Encerramento", "Data de baixa")),
     updatedAt: toIsoDate(getField(row, "Última atualização", "Ultima atualizacao")),
+    priority: String(getField(row, "Priorização", "Priorizacao") ?? "").trim(),
+    team: String(getField(row, "Equipe") ?? "").trim(),
+    activityStart: toIsoDate(getField(row, "Início da atividade", "Data_Início", "Data Inicio")),
+    activityEnd: toIsoDate(getField(row, "Término da atividade", "Data_Término", "Data Termino")),
+    protocol: String(getField(row, "Protocolo") ?? "").trim(),
+    certification: String(getField(row, "Certificação", "Certificação ?", "Certificacao") ?? "").trim(),
   });
 
   const isClosed = (status) => {
     const value = normalizeText(status);
-    return value.includes("baixad") || value.includes("concluid") || value.includes("fechad");
+    return value.includes("baixad") || value.includes("concluid") || value.includes("fechad") || value.includes("encerrad");
   };
 
   const statusColor = (status) => {
@@ -511,6 +517,7 @@
   };
 
   const detailItem = (label, value) => `<div><small>${escapeHtml(label)}</small><strong>${escapeHtml(value || "Não informado")}</strong></div>`;
+  const optionalDetailItem = (label, value) => value ? detailItem(label, value) : "";
 
   const openDetails = (record) => {
     $("#detailTitle").textContent = `#${record.id} · ${record.asset}`;
@@ -530,6 +537,12 @@
         ${detailItem("Prazo", formatDate(record.deadline))}
         ${detailItem("Previsão de baixa", formatDate(record.expectedClose))}
         ${detailItem("Baixa", formatDate(record.closedAt))}
+        ${optionalDetailItem("Priorização", record.priority)}
+        ${optionalDetailItem("Equipe", record.team)}
+        ${optionalDetailItem("Início da atividade", record.activityStart ? formatDate(record.activityStart) : "")}
+        ${optionalDetailItem("Término da atividade", record.activityEnd ? formatDate(record.activityEnd) : "")}
+        ${optionalDetailItem("Protocolo", record.protocol)}
+        ${optionalDetailItem("Certificação", record.certification)}
       </div>`;
     $("#drawerOverlay").classList.remove("hidden");
     $("#detailDrawer").classList.add("open");
@@ -553,16 +566,22 @@
   };
 
   const findDataSheet = (workbook) => {
-    const named = workbook.SheetNames.find((name) => normalizeText(name).includes("pendencia"));
+    const preferredNames = ["banco de dados", "pendencias"];
+    const named = preferredNames
+      .map((preferred) => workbook.SheetNames.find((name) => normalizeText(name) === preferred))
+      .find(Boolean);
     if (named) return workbook.Sheets[named];
-    return workbook.Sheets[workbook.SheetNames[0]];
+    throw new Error("Aba Banco de Dados ou Pendências não encontrada.");
   };
 
   const rowsFromSheet = (sheet) => {
     const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
     const headerIndex = matrix.slice(0, 15).findIndex((row) => {
       const keys = row.map(normalizeText);
-      return keys.includes("empresa") && keys.includes("status") && keys.some((key) => key === "km inicial" || key === "km inicio");
+      const hasId = keys.some((key) => key === "id original" || key === "id_pendencia");
+      const hasStatus = keys.some((key) => key === "status" || key === "status_pendencia");
+      const hasKm = keys.some((key) => key === "km inicial" || key === "km inicio");
+      return hasId && keys.includes("empresa") && hasStatus && hasKm;
     });
     if (headerIndex < 0) throw new Error("Cabeçalho esperado não encontrado.");
     const headers = matrix[headerIndex].map((value, index) => String(value ?? `Coluna ${index + 1}`).trim());
@@ -573,7 +592,7 @@
 
   const recordsFromWorkbook = (workbook) => rowsFromSheet(findDataSheet(workbook))
     .map(normalizeRecord)
-    .filter((record) => record.id !== null && record.id !== "");
+    .filter((record) => /^\d+$/.test(String(record.id ?? "").trim()));
 
   const recordsFromArrayBuffer = (arrayBuffer) => {
     if (!globalThis.XLSX) throw new Error("Leitor Excel indisponível.");

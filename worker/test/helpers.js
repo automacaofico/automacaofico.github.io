@@ -31,6 +31,40 @@ export function mapWorkbookBuffer({ blankAtlasIds = false } = {}) {
   return bytes instanceof ArrayBuffer ? bytes : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
+export function eapMapWorkbookBuffer() {
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+    ['EAP FICO'],
+    [
+      'Id_Pendencia',
+      'Pacote',
+      'Segmento',
+      'Ativo',
+      'Empresa',
+      'Tipo de Pendencia',
+      'Descrição Pendencia',
+      'Classificação da Pendencia',
+      'KM Inicial',
+      'KM Final',
+      'Status_Pendencia',
+      'Responsável Contratada',
+      'Responsável Vale',
+      'Data_Abertura',
+      'Data_Prazo',
+      'Data_Prevista Encerramento',
+      'Data_Encerramento',
+      'Equipe',
+      'Atividade2',
+      'Priorização'
+    ],
+    [2200, 5, '3.1', 'Marco topográfico', 'Civil Master', 'Campo', 'Destruído', 'Tipo A', '105+000', '105+010', 'Aberta', 'Contratada', 'Fiscal FICO', new Date('2026-07-27'), new Date('2026-08-03'), null, null, 'EQUIPE 1', 'Reparos', 'P1'],
+    [2201, 5, '3.1', 'Marco topográfico', 'Civil Master', 'Campo', 'Preservado', 'Tipo B', '106+000', '106+010', 'Encerrado', 'Contratada', 'Fiscal FICO', new Date('2026-07-27'), new Date('2026-08-03'), new Date('2026-07-29'), new Date('2026-07-28'), 'EQUIPE 2', 'Reparos', 'P2'],
+    ['Total', null, null, null, null, null, null, null, null, null, null]
+  ]), 'Banco de Dados');
+  const bytes = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
+  return bytes instanceof ArrayBuffer ? bytes : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
 export class FakeDrive {
   constructor({ failMove = false, corruptIds = new Set() } = {}) {
     this.failMove = failMove;

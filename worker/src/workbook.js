@@ -41,11 +41,21 @@ function tableRecords(sheetName, rows, strategy) {
   for (let index = headerIndex + 1; index < rows.length; index += 1) {
     const row = rows[index] || [];
     if (!row.some((value) => value !== null && value !== undefined && value !== '')) continue;
-    const raw = Object.fromEntries(headers.map((header, column) => [header, row[column] ?? null]));
+    const sourceRaw = Object.fromEntries(headers.map((header, column) => [header, row[column] ?? null]));
     const keyValues = keyFields.map((fields) => fields
-      .map((field) => raw[field])
+      .map((field) => sourceRaw[field])
       .find((value) => value !== null && value !== undefined && value !== '') ?? null);
     if (keyValues.every((value) => value === null || value === undefined || value === '')) continue;
+    if (strategy.keyPattern && !strategy.keyPattern.test(String(keyValues[0]).trim())) continue;
+    const raw = strategy.canonicalColumns
+      ? Object.fromEntries(Object.entries(strategy.canonicalColumns).map(([canonical, aliases]) => {
+        const fields = resolved(aliases);
+        const value = fields
+          .map((field) => sourceRaw[field])
+          .find((candidate) => candidate !== null && candidate !== undefined && candidate !== '') ?? null;
+        return [canonical, value];
+      }))
+      : sourceRaw;
     records.push(makeRecord(sheetName, stableKey(keyValues, strategy.keys.map((column) => candidates(column)[0])), raw, index + 1));
   }
   return records;
@@ -118,21 +128,31 @@ export async function validateAndNormalize({ file, buffer, dashboard, maxBytes }
   const workbook = await readWorkbook(buffer);
   const foldedSheets = new Map(workbook.SheetNames.map((name) => [foldText(name), name]));
   const missingSheets = dashboard.requiredSheets.filter((name) => !foldedSheets.has(foldText(name)));
-  if (missingSheets.length) {
-    throw new AppError(`Arquivo incompatível com ${dashboard.label}. Abas ausentes: ${missingSheets.join(', ')}.`, 422, 'WRONG_DASHBOARD', { missingSheets });
+  const missingSheetGroups = (dashboard.requiredSheetGroups || [])
+    .filter((group) => !group.some((name) => foldedSheets.has(foldText(name))));
+  if (missingSheets.length || missingSheetGroups.length) {
+    const alternatives = missingSheetGroups.map((group) => group.join(' ou '));
+    const labels = [...missingSheets, ...alternatives];
+    throw new AppError(`Arquivo incompatível com ${dashboard.label}. Abas ausentes: ${labels.join(', ')}.`, 422, 'WRONG_DASHBOARD', { missingSheets: labels });
   }
 
   const sheets = {};
   const duplicates = [];
   for (const [expectedName, strategy] of Object.entries(dashboard.sheets)) {
-    const actualName = foldedSheets.get(foldText(expectedName));
+    const actualName = (strategy.sourceNames || [expectedName])
+      .map((name) => foldedSheets.get(foldText(name)))
+      .find(Boolean);
     if (!actualName) continue;
+    const effectiveStrategy = {
+      ...strategy,
+      headerRow: strategy.headerRowBySource?.[foldText(actualName)] || strategy.headerRow
+    };
     const rows = workbook.Sheets[actualName]
       ? (await import('xlsx')).utils.sheet_to_json(workbook.Sheets[actualName], { header: 1, raw: true, defval: null, blankrows: true })
       : [];
-    const records = strategy.type === 'table'
-      ? tableRecords(expectedName, rows, strategy)
-      : matrixRecords(expectedName, rows, strategy);
+    const records = effectiveStrategy.type === 'table'
+      ? tableRecords(expectedName, rows, effectiveStrategy)
+      : matrixRecords(expectedName, rows, effectiveStrategy);
     sheets[expectedName] = records;
     duplicateKeys(records).forEach((duplicate) => duplicates.push({ sheet: expectedName, ...duplicate }));
   }
