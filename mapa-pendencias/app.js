@@ -340,12 +340,12 @@
           <strong>${escapeHtml(feature.properties.status)}</strong>
           <small>${escapeHtml(feature.properties.kmRange)}</small>
           <button type="button" data-open-record="${escapeHtml(feature.properties.id)}">Ver detalhes</button>
-        </article>`)
-        .addTo(map);
+        </article>`);
       popup.on("open", () => {
         const button = popup.getElement()?.querySelector("[data-open-record]");
         if (button && record) button.onclick = () => openDetails(record);
       });
+      popup.addTo(map);
     });
 
     map.on("click", "railway-line", (event) => {
