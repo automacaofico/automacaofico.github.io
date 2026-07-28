@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DASHBOARDS } from '../src/schemas.js';
 import { validateAndNormalize } from '../src/workbook.js';
-import { workbookBuffer } from './helpers.js';
+import { mapWorkbookBuffer, workbookBuffer } from './helpers.js';
 
 test('valida e normaliza planilha correta', async () => {
   const buffer = workbookBuffer();
@@ -23,4 +23,15 @@ test('rejeita extensão inválida', async () => {
 
 test('rejeita dashboard incompatível', async () => {
   await assert.rejects(() => validateAndNormalize({ file: { name: 'super.xlsx' }, buffer: workbookBuffer(), dashboard: DASHBOARDS.mapa_pendencias, maxBytes: 10_000_000 }), { code: 'WRONG_DASHBOARD' });
+});
+
+test('usa ID original quando ID ATLAS está vazio no mapa de pendências', async () => {
+  const result = await validateAndNormalize({
+    file: { name: 'Pendencias_FICO_Mapa.xlsx' },
+    buffer: mapWorkbookBuffer({ blankAtlasIds: true }),
+    dashboard: DASHBOARDS.mapa_pendencias,
+    maxBytes: 10_000_000
+  });
+  assert.equal(result.summary.records, 2);
+  assert.deepEqual(result.sheets.Pendências.map((record) => record.key), ['101', '102']);
 });

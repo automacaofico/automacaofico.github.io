@@ -38,7 +38,11 @@ export const DASHBOARDS = {
     github: { owner: 'automacaofico', repo: 'mapa-pendencias', path: 'Pendencias_FICO_Mapa.xlsx' },
     requiredSheets: ['Pendências'],
     sheets: {
-      Pendências: TABLE(1, ['ID ATLAS'], ['ID ATLAS', 'Empresa', 'Pacote', 'Descrição', 'KM inicial', 'KM final', 'Status'])
+      Pendências: TABLE(
+        1,
+        [['ID ATLAS', 'ID original']],
+        [['ID ATLAS', 'ID original'], 'Empresa', 'Pacote', 'Descrição', 'KM inicial', 'KM final', 'Status']
+      )
     }
   },
   infraestrutura_r1: {

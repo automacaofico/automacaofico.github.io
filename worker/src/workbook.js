@@ -27,19 +27,26 @@ function tableRecords(sheetName, rows, strategy) {
   const headerIndex = strategy.headerRow - 1;
   const headers = uniqueHeaders(rows[headerIndex] || [], strategy.columnOverrides);
   const foldedHeaders = new Map(headers.map((header) => [foldText(header), header]));
-  const missing = strategy.requiredColumns.filter((column) => !foldedHeaders.has(foldText(column)));
+  const candidates = (column) => Array.isArray(column) ? column : [column];
+  const resolved = (column) => candidates(column)
+    .map((candidate) => foldedHeaders.get(foldText(candidate)))
+    .filter(Boolean);
+  const missing = strategy.requiredColumns.filter((column) => !resolved(column).length);
   if (missing.length) {
-    throw new AppError(`Colunas obrigatórias ausentes em “${sheetName}”: ${missing.join(', ')}.`, 422, 'MISSING_COLUMNS', { sheet: sheetName, missing });
+    const labels = missing.map((column) => candidates(column).join(' ou '));
+    throw new AppError(`Colunas obrigatórias ausentes em “${sheetName}”: ${labels.join(', ')}.`, 422, 'MISSING_COLUMNS', { sheet: sheetName, missing: labels });
   }
-  const keyFields = strategy.keys.map((column) => foldedHeaders.get(foldText(column)));
+  const keyFields = strategy.keys.map((column) => resolved(column));
   const records = [];
   for (let index = headerIndex + 1; index < rows.length; index += 1) {
     const row = rows[index] || [];
     if (!row.some((value) => value !== null && value !== undefined && value !== '')) continue;
     const raw = Object.fromEntries(headers.map((header, column) => [header, row[column] ?? null]));
-    const keyValues = keyFields.map((field) => raw[field]);
+    const keyValues = keyFields.map((fields) => fields
+      .map((field) => raw[field])
+      .find((value) => value !== null && value !== undefined && value !== '') ?? null);
     if (keyValues.every((value) => value === null || value === undefined || value === '')) continue;
-    records.push(makeRecord(sheetName, stableKey(keyValues, keyFields), raw, index + 1));
+    records.push(makeRecord(sheetName, stableKey(keyValues, strategy.keys.map((column) => candidates(column)[0])), raw, index + 1));
   }
   return records;
 }

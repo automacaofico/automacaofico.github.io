@@ -20,6 +20,17 @@ export function workbookBuffer({ activityKm = 1000, materialReceived = 10 } = {}
   return bytes instanceof ArrayBuffer ? bytes : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
+export function mapWorkbookBuffer({ blankAtlasIds = false } = {}) {
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+    ['ID ATLAS', 'ID original', 'Empresa', 'Pacote', 'Descrição', 'KM inicial', 'KM final', 'Status'],
+    [blankAtlasIds ? null : 101, 101, 'APIA', 3, 'Pendência de teste', '100+085', '100+292', 'Aberta'],
+    [blankAtlasIds ? null : 102, 102, 'APIA', 3, 'Outra pendência', '101+000', '101+100', 'Encerrado']
+  ]), 'Pendências');
+  const bytes = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
+  return bytes instanceof ArrayBuffer ? bytes : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
 export class FakeDrive {
   constructor({ failMove = false, corruptIds = new Set() } = {}) {
     this.failMove = failMove;
