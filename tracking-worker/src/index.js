@@ -375,6 +375,31 @@ async function setOperatorStatusAdmin(request, env) {
   return reply(request, { ok: true, active: true, requiresDeviceEnrollment: true }, 200, { 'cache-control': 'no-store' });
 }
 
+async function forceEndOperatorSessionAdmin(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
+  if (!adminAuthorized(env, body.adminPassword)) return reply(request, { ok: false, error: 'Senha administrativa inválida.' }, 401);
+  const registration = normalizeRegistration(body.registration);
+  if (!registration) return reply(request, { ok: false, error: 'Operador inválido.' }, 400);
+  const current = await activeSessionForOperator(env, registration);
+  if (!current) return reply(request, { ok: false, error: 'Este operador não possui turno ativo.' }, 404);
+  const endedAt = new Date().toISOString();
+  const results = await env.DB.batch([
+    env.DB.prepare(`UPDATE operator_sessions
+      SET ended_at=?,ended_reason='encerrado remotamente pela coordenação'
+      WHERE id=? AND ended_at IS NULL`).bind(endedAt, current.id),
+    env.DB.prepare(`INSERT INTO operational_events
+      (id,event_type,session_id,equipment_id,operator_registration,occurred_at,payload_json)
+      VALUES (?,?,?,?,?,?,?)`).bind(crypto.randomUUID(), 'shift_force_end', current.id,
+        current.equipment_id, registration, endedAt, JSON.stringify({ source: 'admin' }))
+  ]);
+  if (!results[0].meta.changes) return reply(request, { ok: false, error: 'O turno já havia sido encerrado.' }, 409);
+  await finalizeSessionSummary(env, current.id);
+  return reply(request, { ok: true, session: { sessionId: current.id, equipmentId: current.equipment_id,
+    operatorRegistration: registration, operatorName: current.operator_name, endedAt,
+    endedReason: 'encerrado remotamente pela coordenação' } }, 200, { 'cache-control': 'no-store' });
+}
+
 async function createPersonalDeviceAdmin(request, env) {
   let body;
   try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
@@ -740,6 +765,7 @@ async function route(request, env) {
   if (request.method === 'POST' && url.pathname === '/api/v2/admin/operators/create') return createOperatorAdmin(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v2/admin/operators/update') return updateOperatorAdmin(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v2/admin/operators/status') return setOperatorStatusAdmin(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v2/admin/operators/end-session') return forceEndOperatorSessionAdmin(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v2/admin/devices/create') return createPersonalDeviceAdmin(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v2/admin/devices/list') return listPersonalDevicesAdmin(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v2/admin/devices/revoke') return revokePersonalDeviceAdmin(request, env);

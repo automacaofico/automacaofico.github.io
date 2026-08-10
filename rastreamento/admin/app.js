@@ -144,6 +144,30 @@ async function changeOperatorStatus(operator) {
   }
 }
 
+async function forceEndOperatorSession(operator) {
+  if (
+    !confirm(
+      `Encerrar remotamente o turno de ${operator.name} no ${operator.activeEquipment}? O aplicativo deixará de enviar posições para este equipamento até uma nova identificação.`,
+    )
+  )
+    return;
+  message(els.operatorMessage, "");
+  try {
+    await api("/api/v2/admin/operators/end-session", {
+      adminPassword,
+      registration: operator.registration,
+    });
+    await loadOperators();
+    message(
+      els.operatorMessage,
+      `Turno de ${operator.name} no ${operator.activeEquipment} encerrado remotamente.`,
+      true,
+    );
+  } catch (error) {
+    message(els.operatorMessage, error.message);
+  }
+}
+
 function renderOperators() {
   const query = els.operatorSearch.value.trim().toLocaleLowerCase("pt-BR");
   const operators = currentOperators.filter((item) =>
@@ -193,6 +217,15 @@ function renderOperators() {
     edit.type = "button";
     edit.textContent = "EDITAR / PIN";
     edit.onclick = () => openOperatorEditor(operator);
+    if (operator.activeEquipment) {
+      const endSession = document.createElement("button");
+      endSession.type = "button";
+      endSession.className = "end-session";
+      endSession.textContent = "ENCERRAR TURNO";
+      endSession.title = `Derrubar vínculo atual com ${operator.activeEquipment}`;
+      endSession.onclick = () => forceEndOperatorSession(operator);
+      actions.append(endSession);
+    }
     const toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = operator.active ? "danger" : "activate";

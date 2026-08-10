@@ -267,6 +267,9 @@ button:disabled {
 .operator-actions .danger {
   background: var(--red);
 }
+.operator-actions .end-session {
+  background: var(--orange);
+}
 .operator-actions .activate {
   background: var(--green);
 }
