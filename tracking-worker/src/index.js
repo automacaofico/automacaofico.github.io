@@ -24,6 +24,14 @@ async function sha256(value) {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+function createDeviceToken() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 async function authenticate(request, env) {
   const match = request.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i);
   if (!match) return null;
@@ -93,6 +101,29 @@ async function ingest(request, env) {
   return reply(request, { ok: true, accepted: positions.length, receivedAt }, 202);
 }
 
+async function activate(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
+  const equipmentId = publicEquipmentId(body.equipmentId);
+  const installationId = String(body.installationId || '');
+  const activationCode = String(body.activationCode || '').trim().toUpperCase();
+  if (!equipmentId || !/^[a-zA-Z0-9-]{16,80}$/.test(installationId) || !/^[A-Z0-9-]{8,24}$/.test(activationCode)) {
+    return reply(request, { ok: false, error: 'Dados de ativação inválidos.' }, 400);
+  }
+  const codeHash = await sha256(activationCode);
+  const consumed = await env.DB.prepare(`UPDATE activation_codes
+    SET used_at=CURRENT_TIMESTAMP, installation_id=?
+    WHERE code_hash=? AND equipment_id=? AND used_at IS NULL AND expires_at>CURRENT_TIMESTAMP
+    RETURNING equipment_id`).bind(installationId, codeHash, equipmentId).first();
+  if (!consumed) return reply(request, { ok: false, error: 'Código inválido, expirado ou já utilizado.' }, 401);
+  const token = createDeviceToken();
+  const tokenHash = await sha256(token);
+  await env.DB.prepare(`INSERT INTO devices (id,equipment_id,token_hash,active)
+    VALUES (?,?,?,1)
+    ON CONFLICT(id) DO UPDATE SET equipment_id=excluded.equipment_id,token_hash=excluded.token_hash,active=1`).bind(installationId, equipmentId, tokenHash).run();
+  return reply(request, { ok: true, equipmentId, deviceToken: token }, 200, { 'cache-control': 'no-store' });
+}
+
 async function latest(request, env) {
   const rows = await env.DB.prepare(`SELECT e.id AS equipment_id,e.name,e.type,
     p.captured_at,p.received_at,p.latitude,p.longitude,p.accuracy_m,p.speed_mps,
@@ -120,6 +151,7 @@ async function route(request, env) {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(request) });
   const url = new URL(request.url);
   if (request.method === 'GET' && url.pathname === '/health') return reply(request, { ok: true, service: 'fico-tracking-api', time: new Date().toISOString() });
+  if (request.method === 'POST' && url.pathname === '/api/v1/activate') return activate(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/positions') return ingest(request, env);
   if (request.method === 'GET' && url.pathname === '/api/v1/equipment/latest') return latest(request, env);
   const match = url.pathname.match(/^\/api\/v1\/equipment\/([^/]+)\/history$/);

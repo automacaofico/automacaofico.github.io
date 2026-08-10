@@ -5,6 +5,7 @@ API Cloudflare Worker + D1 para receber posições autenticadas e publicar a loc
 ## Rotas
 
 - `POST /api/v1/positions` — envio autenticado pelo aplicativo Android.
+- `POST /api/v1/activate` — troca um código descartável pela credencial do aparelho.
 - `GET /api/v1/equipment/latest` — posição pública atual da frota.
 - `GET /api/v1/equipment/:id/history` — histórico público de até sete dias.
 - `GET /health` — diagnóstico do serviço.

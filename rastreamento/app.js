@@ -2,7 +2,7 @@
 
 const API_BASE = 'https://fico-tracking-api.automacaofico.workers.dev';
 const AXIS_URL = '../mapa-superestrutura/assets/data/fico-axis-full.json';
-const state = { axis: [], map: null, marker: null, latest: null, sound: false, priorStatus: 'sem_sinal', historyLoaded: false };
+const state = { axis: [], map: null, marker: null, popup: null, popupPinned: false, latest: null, sound: false, priorStatus: 'sem_sinal', historyLoaded: false };
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -94,11 +94,33 @@ function setStatus(status) {
 function placeMarker(item, fly = true) {
   if (!state.map?.loaded()) return;
   if (!state.marker) {
-    const element = document.createElement('div'); element.className = 'equipment-marker'; element.setAttribute('aria-label', 'Posição atual do NTC001');
+    const element = document.createElement('div'); element.className = 'equipment-marker'; element.setAttribute('aria-label', 'Posição atual do NTC001. Passe o mouse ou toque para ver o KM.'); element.tabIndex = 0;
     state.marker = new maplibregl.Marker({ element }).setLngLat([item.longitude, item.latitude]).addTo(state.map);
+    state.popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 24, className: 'equipment-popup' });
+    element.addEventListener('mouseenter', () => showEquipmentPopup(state.latest));
+    element.addEventListener('focus', () => showEquipmentPopup(state.latest));
+    element.addEventListener('mouseleave', () => { if (!state.popupPinned) state.popup.remove(); });
+    element.addEventListener('blur', () => { if (!state.popupPinned) state.popup.remove(); });
+    element.addEventListener('click', () => { state.popupPinned = !state.popupPinned; state.popupPinned ? showEquipmentPopup(state.latest) : state.popup.remove(); });
   } else state.marker.setLngLat([item.longitude, item.latitude]);
+  if (state.popup?.isOpen()) showEquipmentPopup(item);
   els.recenter.hidden = false;
   if (fly) state.map.easeTo({ center: [item.longitude, item.latitude], zoom: Math.max(state.map.getZoom(), 13), duration: 900 });
+}
+
+function showEquipmentPopup(item) {
+  if (!item || !state.popup || !state.map) return;
+  const projection = projectToAxis(item.longitude, item.latitude);
+  const onTrack = projection && projection.distanceM <= 500;
+  const content = document.createElement('div'); content.className = 'equipment-popup-card';
+  const header = document.createElement('div'); header.className = 'popup-head';
+  const identity = document.createElement('span'); identity.textContent = item.equipmentId;
+  const status = document.createElement('b'); status.className = effectiveStatus(item); status.textContent = effectiveStatus(item).replace('_', ' ').toUpperCase();
+  header.append(identity, status);
+  const km = document.createElement('strong'); km.textContent = onTrack ? `KM ${formatKm(projection.stationM)}` : 'FORA DA VIA';
+  const detail = document.createElement('small'); detail.textContent = projection ? `${Math.round(projection.distanceM).toLocaleString('pt-BR')} m do eixo · sinal ${ageLabel(item.receivedAt)}` : `Sinal ${ageLabel(item.receivedAt)}`;
+  content.append(header, km, detail);
+  state.popup.setLngLat([item.longitude, item.latitude]).setDOMContent(content).addTo(state.map);
 }
 
 function render(item) {
@@ -106,8 +128,9 @@ function render(item) {
   const status = effectiveStatus(item); setStatus(status);
   if (!item?.receivedAt) return;
   const projection = projectToAxis(item.longitude, item.latitude);
-  els.km.textContent = projection ? formatKm(projection.stationM) : 'FORA DO EIXO';
-  els.trackDistance.textContent = projection ? `${Math.round(projection.distanceM)} m do eixo da linha tronco` : 'Não foi possível projetar no traçado';
+  const onTrack = projection && projection.distanceM <= 500;
+  els.km.textContent = onTrack ? formatKm(projection.stationM) : 'FORA DA VIA';
+  els.trackDistance.textContent = projection ? `${Math.round(projection.distanceM).toLocaleString('pt-BR')} m do eixo da linha tronco` : 'Não foi possível projetar no traçado';
   els.speed.innerHTML = `${item.speedMps == null ? '—' : (item.speedMps * 3.6).toFixed(1)} <small>km/h</small>`;
   els.accuracy.innerHTML = `${item.accuracyM == null ? '—' : Math.round(item.accuracyM)} <small>m</small>`;
   els.bearing.textContent = direction(item.bearingDeg);
