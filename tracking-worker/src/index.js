@@ -1,4 +1,4 @@
-import { normalizeOwnTracksLocation, normalizePosition, ownTracksEquipmentId, publicEquipmentId, validatePosition } from './validation.js';
+import { normalizeOperatorName, normalizeOperatorPin, normalizeOwnTracksLocation, normalizePosition, normalizeRegistration, ownTracksEquipmentId, publicEquipmentId, validatePosition } from './validation.js';
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
 
@@ -30,6 +30,26 @@ function createDeviceToken() {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function randomToken(bytesLength = 18) {
+  const bytes = new Uint8Array(bytesLength);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function operatorPinHash(salt, pin) {
+  return sha256(`${salt}:${pin}`);
+}
+
+async function authenticatedOperator(env, registrationValue, pinValue) {
+  const registration = normalizeRegistration(registrationValue);
+  const pin = normalizeOperatorPin(pinValue);
+  if (!registration || !pin) return null;
+  const operator = await env.DB.prepare('SELECT registration,name,pin_salt,pin_hash FROM operators WHERE registration=? AND active=1').bind(registration).first();
+  if (!operator) return null;
+  const hash = await operatorPinHash(operator.pin_salt, pin);
+  return hash === operator.pin_hash ? operator : null;
 }
 
 async function authenticate(request, env) {
@@ -78,8 +98,87 @@ function serialize(row) {
     altitudeM: row.altitude_m,
     batteryPct: row.battery_pct,
     sequenceNo: row.sequence_no,
-    status: statusFor(row.received_at)
+    status: statusFor(row.received_at),
+    operatorName: row.operator_name || null,
+    operatorRegistration: row.operator_registration || null,
+    shiftStartedAt: row.shift_started_at || null
   };
+}
+
+function publicSession(row) {
+  if (!row) return null;
+  return {
+    sessionId: row.id,
+    equipmentId: row.equipment_id,
+    operatorName: row.operator_name,
+    operatorRegistration: row.operator_registration,
+    startedAt: row.started_at
+  };
+}
+
+async function registerOperator(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
+  if (!env.OPERATOR_ADMIN_PASSWORD || String(body.adminPassword || '') !== env.OPERATOR_ADMIN_PASSWORD) {
+    return reply(request, { ok: false, error: 'Senha administrativa inválida.' }, 401);
+  }
+  const registration = normalizeRegistration(body.registration);
+  const name = normalizeOperatorName(body.name);
+  const pin = normalizeOperatorPin(body.pin);
+  if (!registration || !name || !pin) return reply(request, { ok: false, error: 'Informe nome, matrícula válida e PIN numérico de 4 a 8 dígitos.' }, 400);
+  const salt = randomToken(16);
+  const hash = await operatorPinHash(salt, pin);
+  await env.DB.prepare(`INSERT INTO operators (registration,name,pin_salt,pin_hash,active,updated_at)
+    VALUES (?,?,?,?,1,CURRENT_TIMESTAMP)
+    ON CONFLICT(registration) DO UPDATE SET name=excluded.name,pin_salt=excluded.pin_salt,pin_hash=excluded.pin_hash,active=1,updated_at=CURRENT_TIMESTAMP`)
+    .bind(registration, name, salt, hash).run();
+  return reply(request, { ok: true, operator: { registration, name } }, 201, { 'cache-control': 'no-store' });
+}
+
+async function activeOperatorSession(env, equipmentId) {
+  return env.DB.prepare(`SELECT s.id,s.equipment_id,s.operator_registration,s.started_at,o.name AS operator_name
+    FROM operator_sessions s JOIN operators o ON o.registration=s.operator_registration
+    WHERE s.equipment_id=? AND s.ended_at IS NULL LIMIT 1`).bind(equipmentId).first();
+}
+
+async function getOperatorSession(request, env) {
+  const equipmentId = publicEquipmentId(new URL(request.url).searchParams.get('equipmentId'));
+  if (!equipmentId) return reply(request, { ok: false, error: 'Equipamento inválido.' }, 400);
+  return reply(request, { ok: true, session: publicSession(await activeOperatorSession(env, equipmentId)) }, 200, { 'cache-control': 'no-store' });
+}
+
+async function startOperatorSession(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
+  const equipmentId = publicEquipmentId(body.equipmentId);
+  const operator = await authenticatedOperator(env, body.registration, body.pin);
+  if (!equipmentId || !operator) return reply(request, { ok: false, error: 'Equipamento, matrícula ou PIN inválido.' }, 401);
+  const current = await activeOperatorSession(env, equipmentId);
+  if (current?.operator_registration === operator.registration) return reply(request, { ok: true, session: publicSession(current), alreadyActive: true }, 200, { 'cache-control': 'no-store' });
+  if (current && body.force !== true) {
+    return reply(request, { ok: false, error: 'Equipamento já possui um operador ativo.', conflict: publicSession(current) }, 409, { 'cache-control': 'no-store' });
+  }
+  const now = new Date().toISOString();
+  const sessionId = crypto.randomUUID();
+  const statements = [];
+  if (current) statements.push(env.DB.prepare("UPDATE operator_sessions SET ended_at=?,ended_reason='substituído' WHERE id=? AND ended_at IS NULL").bind(now, current.id));
+  statements.push(env.DB.prepare(`INSERT INTO operator_sessions (id,equipment_id,operator_registration,started_at)
+    VALUES (?,?,?,?)`).bind(sessionId, equipmentId, operator.registration, now));
+  await env.DB.batch(statements);
+  return reply(request, { ok: true, session: { sessionId, equipmentId, operatorName: operator.name, operatorRegistration: operator.registration, startedAt: now } }, 201, { 'cache-control': 'no-store' });
+}
+
+async function endOperatorSession(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
+  const equipmentId = publicEquipmentId(body.equipmentId);
+  const operator = await authenticatedOperator(env, body.registration, body.pin);
+  if (!equipmentId || !operator) return reply(request, { ok: false, error: 'Equipamento, matrícula ou PIN inválido.' }, 401);
+  const result = await env.DB.prepare(`UPDATE operator_sessions SET ended_at=?,ended_reason='encerrado pelo operador'
+    WHERE equipment_id=? AND operator_registration=? AND ended_at IS NULL`)
+    .bind(new Date().toISOString(), equipmentId, operator.registration).run();
+  if (!result.meta.changes) return reply(request, { ok: false, error: 'Não há turno ativo deste operador no equipamento.' }, 404);
+  return reply(request, { ok: true }, 200, { 'cache-control': 'no-store' });
 }
 
 async function ingest(request, env) {
@@ -172,8 +271,11 @@ async function activate(request, env) {
 async function latest(request, env) {
   const rows = await env.DB.prepare(`SELECT e.id AS equipment_id,e.name,e.type,
     p.captured_at,p.received_at,p.latitude,p.longitude,p.accuracy_m,p.speed_mps,
-    p.bearing_deg,p.altitude_m,p.battery_pct,p.sequence_no
+    p.bearing_deg,p.altitude_m,p.battery_pct,p.sequence_no,
+    o.name AS operator_name,s.operator_registration,s.started_at AS shift_started_at
     FROM equipment e LEFT JOIN latest_positions p ON p.equipment_id=e.id
+    LEFT JOIN operator_sessions s ON s.equipment_id=e.id AND s.ended_at IS NULL
+    LEFT JOIN operators o ON o.registration=s.operator_registration
     WHERE e.active=1 ORDER BY e.id`).all();
   return reply(request, { ok: true, serverTime: new Date().toISOString(), equipment: rows.results.map(serialize) }, 200, { 'cache-control': 'no-store' });
 }
@@ -197,6 +299,10 @@ async function route(request, env) {
   const url = new URL(request.url);
   if (request.method === 'GET' && url.pathname === '/health') return reply(request, { ok: true, service: 'fico-tracking-api', time: new Date().toISOString() });
   if (request.method === 'POST' && url.pathname === '/api/v1/activate') return activate(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v1/operators') return registerOperator(request, env);
+  if (request.method === 'GET' && url.pathname === '/api/v1/operator/session') return getOperatorSession(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v1/operator/session/start') return startOperatorSession(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v1/operator/session/end') return endOperatorSession(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/positions') return ingest(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/owntracks') return ingestOwnTracks(request, env);
   if (request.method === 'GET' && url.pathname === '/api/v1/equipment/latest') return latest(request, env);

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Assumir equipamento | FICO</title>
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#082b4c">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <a href="../../" aria-label="Voltar à Central FICO"><img src="../../mapa-pendencias/assets/brand/fico-logo-color.png" alt="FICO"></a>
+    <span>IDENTIFICAÇÃO OPERACIONAL</span>
+  </header>
+  <main>
+    <section class="intro">
+      <p class="eyebrow">INÍCIO E ENCERRAMENTO DE TURNO</p>
+      <h1>Quem está<br><span>no comando?</span></h1>
+      <p>Identifique-se antes de iniciar a operação. O painel mostrará o operador responsável enquanto o turno estiver aberto.</p>
+    </section>
+
+    <section class="card" aria-labelledby="checkin-title">
+      <div class="equipment-title"><span>EQUIPAMENTO</span><strong id="equipment-title">Selecione</strong></div>
+      <div id="current-session" class="current-session empty" role="status" aria-live="polite">Consultando turno atual…</div>
+
+      <form id="session-form">
+        <h2 id="checkin-title">Identificação do operador</h2>
+        <label>Equipamento
+          <select id="equipment" required></select>
+        </label>
+        <label>Matrícula
+          <input id="registration" name="registration" autocomplete="username" maxlength="24" placeholder="Ex.: FICO123" required>
+        </label>
+        <label>PIN pessoal
+          <input id="pin" name="pin" type="password" inputmode="numeric" autocomplete="current-password" minlength="4" maxlength="8" placeholder="4 a 8 números" required>
+        </label>
+        <div id="form-message" class="message" role="alert" hidden></div>
+        <div class="actions">
+          <button id="start-shift" class="primary" type="submit">ASSUMIR EQUIPAMENTO</button>
+          <button id="end-shift" class="secondary" type="button">ENCERRAR MEU TURNO</button>
+        </div>
+        <button id="force-shift" class="danger" type="button" hidden>CONFIRMAR TROCA DE OPERADOR</button>
+      </form>
+
+      <details class="register-panel">
+        <summary>Cadastrar ou redefinir operador</summary>
+        <form id="register-form">
+          <p>Uso da coordenação. O PIN será pessoal e não aparecerá no painel.</p>
+          <label>Nome completo<input id="new-name" autocomplete="name" maxlength="80" required></label>
+          <label>Matrícula<input id="new-registration" maxlength="24" required></label>
+          <label>Novo PIN<input id="new-pin" type="password" inputmode="numeric" minlength="4" maxlength="8" required></label>
+          <label>Senha da coordenação<input id="admin-password" type="password" autocomplete="current-password" required></label>
+          <button class="register" type="submit">SALVAR OPERADOR</button>
+          <div id="register-message" class="message" role="alert" hidden></div>
+        </form>
+      </details>
+    </section>
+  </main>
+  <footer><span>Central FICO · 2026</span><a href="../">Abrir mapa da frota</a></footer>
+  <script src="app.js"></script>
+</body>
+</html>

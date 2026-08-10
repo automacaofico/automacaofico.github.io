@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeOwnTracksLocation, normalizePosition, ownTracksEquipmentId, publicEquipmentId, validatePosition } from '../src/validation.js';
+import { normalizeOperatorName, normalizeOperatorPin, normalizeOwnTracksLocation, normalizePosition, normalizeRegistration, ownTracksEquipmentId, publicEquipmentId, validatePosition } from '../src/validation.js';
 
 const valid = () => ({ equipmentId: 'NTC001', capturedAt: new Date().toISOString(), latitude: -14.01, longitude: -49.19, accuracyM: 6, batteryPct: 84 });
 
@@ -29,4 +29,12 @@ test('converts OwnTracks telemetry to the dashboard format', () => {
   assert.equal(normalized.bearingDeg, 91);
   assert.equal(normalized.batteryPct, 62);
   assert.equal(validatePosition(normalized), null);
+});
+test('normalizes operator identity fields', () => {
+  assert.equal(normalizeRegistration('  fico-123 '), 'FICO-123');
+  assert.equal(normalizeRegistration('x'), null);
+  assert.equal(normalizeOperatorName('  João   da Silva '), 'João da Silva');
+  assert.equal(normalizeOperatorName('A'), null);
+  assert.equal(normalizeOperatorPin('4826'), '4826');
+  assert.equal(normalizeOperatorPin('12ab'), null);
 });

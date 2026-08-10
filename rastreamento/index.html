@@ -27,6 +27,7 @@
     </a>
     <div class="top-actions">
       <span class="pilot-tag">FROTA · 14 EQUIPAMENTOS</span>
+      <a class="operator-checkin-mini" href="assumir/">Identificar operador</a>
       <a class="app-download-mini" href="https://github.com/automacaofico/automacaofico.github.io/releases/latest/download/FICO-Tracker-Android.apk">Baixar app</a>
       <button id="sound-toggle" class="sound-toggle" type="button" aria-pressed="false">
         <span aria-hidden="true">◖</span> Ativar som
@@ -87,6 +88,11 @@
           <span id="status-chip" class="status-chip waiting">SEM SINAL</span>
         </div>
 
+        <div class="operator-shift">
+          <div><span>OPERADOR NO TURNO</span><strong id="operator-name">Nenhum operador identificado</strong><small id="operator-detail">Aguardando início de turno</small></div>
+          <a id="operator-action" href="assumir/?equipamento=LOCO001">ASSUMIR OU TROCAR</a>
+        </div>
+
         <div class="km-panel">
           <p>POSIÇÃO NA VIA</p>
           <strong id="km-value">—+———</strong>
@@ -119,7 +125,7 @@
     <section class="app-band" aria-labelledby="apps-title">
       <div class="app-band-copy"><p class="eyebrow">Aplicativo de campo</p><h2 id="apps-title">Um app.<br>Toda a frota.</h2><p>Instale uma única vez e vincule o celular ao equipamento usando o código descartável fornecido pela coordenação.</p></div>
       <a class="platform-card android" href="https://github.com/automacaofico/automacaofico.github.io/releases/latest/download/FICO-Tracker-Android.apk">
-        <span class="platform-icon" aria-hidden="true">A</span><span><small>DOWNLOAD DIRETO</small><strong>Android · APK</strong><em>Versão 1.1.0</em></span><b aria-hidden="true">↓</b>
+        <span class="platform-icon" aria-hidden="true">A</span><span><small>DOWNLOAD DIRETO</small><strong>Android · APK</strong><em>Versão 1.2.0</em></span><b aria-hidden="true">↓</b>
       </a>
       <a class="platform-card ios" href="https://apps.apple.com/br/app/owntracks/id692424691" target="_blank" rel="noopener" aria-label="Instalar OwnTracks para rastreamento no iPhone">
         <span class="platform-icon" aria-hidden="true">i</span><span><small>APP STORE</small><strong>iOS · OwnTracks</strong><em>Configuração vinculada pela coordenação</em></span><b aria-hidden="true">→</b>
@@ -132,7 +138,7 @@
     </section>
   </main>
 
-  <footer><span>Automação FICO · 2026</span><a href="../">Central FICO</a></footer>
+  <footer><span>Automação FICO · 2026</span><span><a href="qrcodes/">Imprimir QR Codes</a> · <a href="../">Central FICO</a></span></footer>
   <script src="../mapa-pendencias/assets/vendor/maplibre/maplibre-gl.js"></script>
   <script src="app.js"></script>
 </body>

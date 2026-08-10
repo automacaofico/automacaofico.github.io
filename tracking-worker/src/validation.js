@@ -60,3 +60,18 @@ export function ownTracksEquipmentId(value) {
   if (/^LOCO0[1-7]$/.test(id)) return `LOCO0${id.slice(4)}`;
   return null;
 }
+
+export function normalizeRegistration(value) {
+  const registration = String(value || '').trim().toUpperCase();
+  return /^[A-Z0-9.-]{3,24}$/.test(registration) ? registration : null;
+}
+
+export function normalizeOperatorName(value) {
+  const name = String(value || '').trim().replace(/\s+/g, ' ');
+  return name.length >= 3 && name.length <= 80 ? name : null;
+}
+
+export function normalizeOperatorPin(value) {
+  const pin = String(value || '').trim();
+  return /^\d{4,8}$/.test(pin) ? pin : null;
+}

@@ -27,7 +27,7 @@ const els = {
   last: $('last-update'), coords: $('coordinates'), history: $('history-summary'), historyEquipment: $('history-equipment'),
   recenter: $('recenter'), sound: $('sound-toggle'), fleetList: $('fleet-list'), onlineCount: $('online-count'),
   fleetCount: $('fleet-count'), equipmentName: $('equipment-name'), equipmentType: $('equipment-type'), equipmentMark: $('equipment-mark'),
-  fitFleet: $('fit-fleet')
+  fitFleet: $('fit-fleet'), operatorName: $('operator-name'), operatorDetail: $('operator-detail'), operatorAction: $('operator-action')
 };
 
 function mapStyle() {
@@ -229,6 +229,14 @@ function renderSelected(item) {
   els.equipmentMark.textContent = TYPE_MARKS[item.type] || 'E';
   els.equipmentMark.className = `equipment-mark ${item.type}`;
   els.historyEquipment.textContent = item.equipmentId;
+  els.operatorAction.href = `assumir/?equipamento=${encodeURIComponent(item.equipmentId)}`;
+  if (item.operatorName) {
+    els.operatorName.textContent = item.operatorName;
+    els.operatorDetail.textContent = `Matrícula ${item.operatorRegistration} · turno desde ${new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(item.shiftStartedAt))}`;
+  } else {
+    els.operatorName.textContent = 'Nenhum operador identificado';
+    els.operatorDetail.textContent = 'Aguardando início de turno';
+  }
   setSelectedStatus(effectiveStatus(item));
   if (!item.receivedAt) { clearTelemetry(); return; }
   const projection = projectToAxis(item.longitude, item.latitude);
@@ -292,7 +300,9 @@ function showEquipmentPopup(item) {
   const km = document.createElement('strong'); km.textContent = onTrack ? `KM ${formatKm(projection.stationM)}` : 'FORA DA VIA';
   const signalLabel = itemStatus === 'offline' ? `offline · última atualização ${ageLabel(item.receivedAt)}` : `sinal ${ageLabel(item.receivedAt)}`;
   const detail = document.createElement('small'); detail.textContent = projection ? `${Math.round(projection.distanceM).toLocaleString('pt-BR')} m do eixo · ${signalLabel}` : signalLabel;
-  content.append(header, km, detail);
+  const operator = document.createElement('div'); operator.className = 'popup-operator';
+  operator.textContent = item.operatorName ? `Operador: ${item.operatorName} · ${item.operatorRegistration}` : 'Operador não identificado';
+  content.append(header, km, detail, operator);
   if (!state.popup) state.popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 24, className: 'equipment-popup' });
   state.popup.setLngLat([item.longitude, item.latitude]).setDOMContent(content).addTo(state.map);
 }

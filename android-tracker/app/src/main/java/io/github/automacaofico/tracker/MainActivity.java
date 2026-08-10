@@ -9,6 +9,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.net.Uri;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -34,7 +35,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String[] EQUIPMENT = {"NTC001","LOCO001","LOCO002","LOCO003","LOCO004","LOCO005","LOCO006","LOCO007","EGPS001","EGPS002","EGPS003","EGPR001","EGPR002","EGPR003"};
     private final Handler handler = new Handler(Looper.getMainLooper());
     private TextView equipmentTitle, title, detail, lastGps, lastSend, queueCount;
-    private Button start, stop, activate;
+    private Button start, stop, activate, operatorButton;
     private LinearLayout activationPanel, trackingPanel, diagnosticPanel;
     private Spinner equipmentSpinner;
     private EditText activationCode;
@@ -43,9 +44,10 @@ public class MainActivity extends AppCompatActivity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state); setContentView(R.layout.activity_main);
         equipmentTitle=findViewById(R.id.equipmentTitle); title=findViewById(R.id.stateTitle); detail=findViewById(R.id.stateDetail); lastGps=findViewById(R.id.lastGps); lastSend=findViewById(R.id.lastSend); queueCount=findViewById(R.id.queueCount);
-        start=findViewById(R.id.startButton); stop=findViewById(R.id.stopButton); activate=findViewById(R.id.activateButton); activationPanel=findViewById(R.id.activationPanel); trackingPanel=findViewById(R.id.trackingPanel); diagnosticPanel=findViewById(R.id.diagnosticPanel); equipmentSpinner=findViewById(R.id.equipmentSpinner); activationCode=findViewById(R.id.activationCode);
+        start=findViewById(R.id.startButton); stop=findViewById(R.id.stopButton); activate=findViewById(R.id.activateButton); operatorButton=findViewById(R.id.operatorButton); activationPanel=findViewById(R.id.activationPanel); trackingPanel=findViewById(R.id.trackingPanel); diagnosticPanel=findViewById(R.id.diagnosticPanel); equipmentSpinner=findViewById(R.id.equipmentSpinner); activationCode=findViewById(R.id.activationCode);
         equipmentSpinner.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, EQUIPMENT));
         activate.setOnClickListener(v -> activateDevice());
+        operatorButton.setOnClickListener(v -> openOperatorCheckin());
         start.setOnClickListener(v -> requestAndStart());
         stop.setOnClickListener(v -> { stopService(new Intent(this, TrackingService.class)); prefs().edit().putBoolean("running",false).apply(); render(); });
     }
@@ -90,6 +92,12 @@ public class MainActivity extends AppCompatActivity {
         ContextCompat.startForegroundService(this, new Intent(this, TrackingService.class));
         prefs().edit().putBoolean("running",true).apply(); render();
         startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+        openOperatorCheckin();
+    }
+    private void openOperatorCheckin() {
+        String equipment=prefs().getString("equipmentId","");
+        if(equipment.isEmpty()) return;
+        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://automacaofico.github.io/rastreamento/assumir/?equipamento="+equipment)));
     }
     private void render() {
         SharedPreferences p=prefs(); String equipment=p.getString("equipmentId",""); boolean activated=!equipment.isEmpty(); boolean running=p.getBoolean("running",false);
