@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Rastreamento Ferroviário ao Vivo | Automação FICO</title>
+  <meta name="description" content="Mapa público de localização ao vivo dos equipamentos ferroviários da FICO, com posição quilométrica projetada sobre a linha tronco.">
+  <meta name="robots" content="index,follow,max-image-preview:large">
+  <link rel="canonical" href="https://automacaofico.github.io/rastreamento/">
+  <meta property="og:title" content="Rastreamento Ferroviário ao Vivo — FICO">
+  <meta property="og:description" content="Localização pública dos equipamentos ferroviários sobre a linha tronco da FICO.">
+  <meta property="og:url" content="https://automacaofico.github.io/rastreamento/">
+  <meta property="og:type" content="website">
+  <meta name="theme-color" content="#092b4d">
+  <link rel="stylesheet" href="../mapa-pendencias/assets/vendor/maplibre/maplibre-gl.css">
+  <link rel="stylesheet" href="styles.css">
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"WebApplication","name":"Rastreamento Ferroviário FICO","url":"https://automacaofico.github.io/rastreamento/","applicationCategory":"BusinessApplication","operatingSystem":"Web"}
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Ir para o conteúdo</a>
+  <header class="topbar">
+    <a class="brand" href="../" aria-label="Voltar à Central FICO">
+      <img src="../mapa-pendencias/assets/brand/fico-logo-color.png" alt="FICO">
+      <span><b>Central FICO</b><small>Rastreamento ferroviário</small></span>
+    </a>
+    <div class="top-actions">
+      <span class="pilot-tag">PILOTO · NTC001</span>
+      <button id="sound-toggle" class="sound-toggle" type="button" aria-pressed="false">
+        <span aria-hidden="true">◖</span> Ativar som
+      </button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">CENTRO DE CONTROLE · LINHA TRONCO</p>
+        <h1>Equipamentos<br><span>em movimento.</span></h1>
+      </div>
+      <div class="hero-copy">
+        <p>Posição GPS convertida em quilometragem ferroviária, atualizada em ciclos de cinco segundos.</p>
+        <div id="system-state" class="system-state waiting" role="status" aria-live="polite">
+          <i></i><span>Aguardando o primeiro sinal do NTC001</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="command-grid" aria-label="Painel de rastreamento">
+      <article class="map-shell">
+        <div id="map" aria-label="Mapa do traçado da FICO e posição do equipamento"></div>
+        <div class="map-caption">
+          <span>FICO · 0+000 — 292+000</span>
+          <span id="map-mode">LINHA TRONCO</span>
+        </div>
+        <button id="recenter" class="recenter" type="button" hidden>Centralizar NTC001</button>
+      </article>
+
+      <aside class="telemetry" aria-label="Telemetria do NTC001">
+        <div class="equipment-head">
+          <div class="equipment-mark" aria-hidden="true">N</div>
+          <div><p>EQUIPAMENTO PILOTO</p><h2>NTC001</h2><span>New Track Construction</span></div>
+          <span id="status-chip" class="status-chip waiting">SEM SINAL</span>
+        </div>
+
+        <div class="km-panel">
+          <p>POSIÇÃO NA VIA</p>
+          <strong id="km-value">—+———</strong>
+          <span id="track-distance">Aguardando coordenada GPS</span>
+        </div>
+
+        <dl class="metrics">
+          <div><dt>Velocidade</dt><dd id="speed-value">— <small>km/h</small></dd></div>
+          <div><dt>Precisão GPS</dt><dd id="accuracy-value">— <small>m</small></dd></div>
+          <div><dt>Sentido</dt><dd id="bearing-value">—</dd></div>
+          <div><dt>Bateria</dt><dd id="battery-value">— <small>%</small></dd></div>
+        </dl>
+
+        <div class="last-signal">
+          <span>ÚLTIMO SINAL RECEBIDO</span>
+          <time id="last-update">Nenhum sinal recebido</time>
+          <small id="coordinates">Latitude — · Longitude —</small>
+        </div>
+
+        <div class="rail-ruler" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      </aside>
+    </section>
+
+    <section class="history-band">
+      <div><p class="eyebrow">Rastro recente</p><h2>Últimas 24 horas</h2></div>
+      <p id="history-summary">O percurso aparecerá após o primeiro envio do aplicativo.</p>
+      <div class="legend"><span><i class="line"></i> percurso</span><span><i class="dot"></i> posição atual</span></div>
+    </section>
+
+    <section class="notice">
+      <b>Nota operacional</b>
+      <p>A quilometragem é uma projeção do GPS sobre o eixo da linha tronco. A precisão exibida depende do aparelho, do céu visível e da qualidade do sinal. Esta tela apoia o acompanhamento e não substitui procedimentos de segurança ferroviária.</p>
+    </section>
+  </main>
+
+  <footer><span>Automação FICO · 2026</span><a href="../">Central FICO</a></footer>
+  <script src="../mapa-pendencias/assets/vendor/maplibre/maplibre-gl.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

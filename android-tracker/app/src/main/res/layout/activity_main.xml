@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/paper" android:fillViewport="true">
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="@color/navy" android:padding="24dp">
+      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="AUTOMAÇÃO FICO · PILOTO" android:textColor="#75C6E8" android:textSize="12sp" android:textStyle="bold" android:letterSpacing="0.12" />
+      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="NTC001" android:textColor="@color/white" android:textSize="44sp" android:textStyle="bold" />
+      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Rastreador ferroviário" android:textColor="#C4D4E1" android:textSize="15sp" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_margin="18dp" android:background="@drawable/panel">
+      <TextView android:id="@+id/stateTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Rastreamento parado" android:textColor="@color/navy" android:textSize="21sp" android:textStyle="bold" />
+      <TextView android:id="@+id/stateDetail" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Toque em iniciar e mantenha o celular ligado à Starlink do equipamento." android:textColor="@color/muted" android:textSize="14sp" android:lineSpacingExtra="3dp" />
+      <Button android:id="@+id/startButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="24dp" android:background="@drawable/button_primary" android:text="INICIAR RASTREAMENTO" android:textColor="@color/white" android:textStyle="bold" />
+      <Button android:id="@+id/stopButton" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Parar" android:textColor="@color/navy" android:visibility="gone" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:layout_marginLeft="18dp" android:layout_marginRight="18dp" android:layout_marginBottom="18dp" android:background="@drawable/panel">
+      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="DIAGNÓSTICO" android:textColor="@color/muted" android:textSize="11sp" android:textStyle="bold" android:letterSpacing="0.12" />
+      <TextView android:id="@+id/lastGps" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="GPS: aguardando" android:textColor="@color/navy" android:textSize="14sp" />
+      <TextView android:id="@+id/lastSend" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="Servidor: nenhum envio" android:textColor="@color/navy" android:textSize="14sp" />
+      <TextView android:id="@+id/queueCount" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:text="Fila offline: 0 posições" android:textColor="@color/navy" android:textSize="14sp" />
+    </LinearLayout>
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingLeft="24dp" android:paddingRight="24dp" android:paddingBottom="24dp" android:text="O Android exibirá uma notificação permanente enquanto o rastreamento estiver ativo. Desative a otimização de bateria para este aplicativo antes do uso contínuo." android:textColor="@color/muted" android:textSize="12sp" android:lineSpacingExtra="3dp" />
+  </LinearLayout>
+</ScrollView>
