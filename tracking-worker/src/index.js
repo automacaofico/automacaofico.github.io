@@ -215,6 +215,7 @@ function serialize(row) {
   return {
     equipmentId: row.equipment_id,
     name: row.name,
+    description: row.description || '',
     type: row.type,
     capturedAt: row.captured_at,
     receivedAt: row.received_at,
@@ -732,7 +733,7 @@ async function activate(request, env) {
 }
 
 async function latest(request, env) {
-  const rows = await env.DB.prepare(`SELECT e.id AS equipment_id,e.name,e.type,
+  const rows = await env.DB.prepare(`SELECT e.id AS equipment_id,e.name,e.type,e.description,
     p.captured_at,p.received_at,p.latitude,p.longitude,p.accuracy_m,p.speed_mps,
     p.bearing_deg,p.altitude_m,p.battery_pct,p.sequence_no,
     o.name AS operator_name,s.operator_registration,s.started_at AS shift_started_at
@@ -798,6 +799,47 @@ async function resetOperationalHistoryAdmin(request, env) {
   });
 }
 
+async function listEquipmentAdmin(request, env) {
+  const body = await request.json().catch(() => ({}));
+  if (!adminAuthorized(env, body.adminPassword)) {
+    return reply(request, { ok: false, error: 'Senha administrativa inválida.' }, 401);
+  }
+  const rows = await env.DB.prepare(
+    'SELECT id,name,type,description,active FROM equipment ORDER BY type,id',
+  ).all();
+  return reply(request, { ok: true, equipment: rows.results.map((row) => ({
+    id: row.id,
+    name: row.name,
+    type: row.type,
+    description: row.description || '',
+    active: Boolean(row.active),
+  })) });
+}
+
+async function updateEquipmentAdmin(request, env) {
+  const body = await request.json().catch(() => ({}));
+  if (!adminAuthorized(env, body.adminPassword)) {
+    return reply(request, { ok: false, error: 'Senha administrativa inválida.' }, 401);
+  }
+  const id = publicEquipmentId(body.equipmentId);
+  const name = String(body.name || '').trim().replace(/\s+/g, ' ');
+  const description = String(body.description || '').trim().replace(/\s+/g, ' ');
+  if (!id) return reply(request, { ok: false, error: 'Equipamento inválido.' }, 400);
+  if (name.length < 2 || name.length > 80) {
+    return reply(request, { ok: false, error: 'O nome deve ter entre 2 e 80 caracteres.' }, 400);
+  }
+  if (description.length > 500) {
+    return reply(request, { ok: false, error: 'A descrição deve ter no máximo 500 caracteres.' }, 400);
+  }
+  const result = await env.DB.prepare(
+    'UPDATE equipment SET name=?,description=? WHERE id=?',
+  ).bind(name, description || null, id).run();
+  if (!result.meta?.changes) {
+    return reply(request, { ok: false, error: 'Equipamento não encontrado.' }, 404);
+  }
+  return reply(request, { ok: true, equipment: { id, name, description } });
+}
+
 async function route(request, env) {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(request) });
   const url = new URL(request.url);
@@ -816,6 +858,8 @@ async function route(request, env) {
   if (request.method === 'POST' && url.pathname === '/api/v2/admin/devices/revoke') return revokePersonalDeviceAdmin(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v2/admin/operations/report') return operationsReport(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v2/admin/history/reset') return resetOperationalHistoryAdmin(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v2/admin/equipment/list') return listEquipmentAdmin(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v2/admin/equipment/update') return updateEquipmentAdmin(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v2/device/enroll') return enrollPersonalAndroid(request, env);
   if (request.method === 'GET' && url.pathname === '/api/v1/operator/session') return getOperatorSession(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/operator/session/start') return startOperatorSession(request, env);

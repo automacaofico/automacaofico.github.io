@@ -2,7 +2,9 @@ import { analyzeProjectedTrack } from './operacao/motion.js';
 
 'use strict';
 
-const API_BASE = 'https://fico-tracking-api.automacaofico.workers.dev';
+const API_BASE = /^(?:localhost|127\.0\.0\.1)$/.test(location.hostname)
+  ? 'http://127.0.0.1:8791'
+  : 'https://fico-tracking-api.automacaofico.workers.dev';
 const AXIS_URL = '../mapa-superestrutura/assets/data/fico-axis-full.json';
 const TYPE_LABELS = { locomotiva: 'Locomotiva', socadora: 'Socadora de via', reguladora: 'Reguladora de lastro', ntc: 'New Track Construction' };
 const TYPE_MARKS = { locomotiva: 'L', socadora: 'S', reguladora: 'R', ntc: 'N' };
@@ -28,7 +30,7 @@ const els = {
   speed: $('speed-value'), accuracy: $('accuracy-value'), bearing: $('bearing-value'), battery: $('battery-value'),
   last: $('last-update'), coords: $('coordinates'), history: $('history-summary'), historyEquipment: $('history-equipment'),
   recenter: $('recenter'), sound: $('sound-toggle'), fleetList: $('fleet-list'), onlineCount: $('online-count'),
-  fleetCount: $('fleet-count'), equipmentName: $('equipment-name'), equipmentType: $('equipment-type'), equipmentMark: $('equipment-mark'),
+  fleetCount: $('fleet-count'), equipmentName: $('equipment-name'), equipmentAlias: $('equipment-alias'), equipmentType: $('equipment-type'), equipmentDescription: $('equipment-description'), equipmentMark: $('equipment-mark'),
   fitFleet: $('fit-fleet'), operatorName: $('operator-name'), operatorDetail: $('operator-detail'), operatorAction: $('operator-action')
 };
 
@@ -201,9 +203,10 @@ function renderFleetList() {
     const mark = document.createElement('i'); mark.textContent = TYPE_MARKS[item.type] || 'E';
     const copy = document.createElement('span');
     const name = document.createElement('b'); name.textContent = item.equipmentId;
-    const detail = document.createElement('small'); detail.textContent = item.receivedAt ? ageLabel(item.receivedAt) : 'sem sinal';
+    const alias = document.createElement('small'); alias.className = 'fleet-alias'; alias.textContent = item.name || TYPE_LABELS[item.type] || item.equipmentId;
+    const detail = document.createElement('small'); detail.className = 'fleet-signal'; detail.textContent = item.receivedAt ? ageLabel(item.receivedAt) : 'sem sinal';
     const dot = document.createElement('em'); dot.title = status.replace('_', ' ');
-    copy.append(name, detail); button.append(mark, copy, dot);
+    copy.append(name, alias, detail); button.append(mark, copy, dot);
     button.addEventListener('click', () => selectEquipment(item.equipmentId, true));
     els.fleetList.append(button);
   });
@@ -227,7 +230,10 @@ function renderSelected(item) {
   if (!item) return;
   state.latest = item;
   els.equipmentName.textContent = item.equipmentId;
+  els.equipmentAlias.textContent = item.name || TYPE_LABELS[item.type] || item.equipmentId;
   els.equipmentType.textContent = TYPE_LABELS[item.type] || item.type;
+  els.equipmentDescription.textContent = item.description || '';
+  els.equipmentDescription.hidden = !item.description;
   els.equipmentMark.textContent = TYPE_MARKS[item.type] || 'E';
   els.equipmentMark.className = `equipment-mark ${item.type}`;
   els.historyEquipment.textContent = item.equipmentId;
@@ -302,9 +308,16 @@ function showEquipmentPopup(item) {
   const km = document.createElement('strong'); km.textContent = onTrack ? `KM ${formatKm(projection.stationM)}` : 'FORA DA VIA';
   const signalLabel = itemStatus === 'offline' ? `offline · última atualização ${ageLabel(item.receivedAt)}` : `sinal ${ageLabel(item.receivedAt)}`;
   const detail = document.createElement('small'); detail.textContent = projection ? `${Math.round(projection.distanceM).toLocaleString('pt-BR')} m do eixo · ${signalLabel}` : signalLabel;
+  const equipmentDetails = document.createElement('div'); equipmentDetails.className = 'popup-equipment-details';
+  const equipmentAlias = document.createElement('b'); equipmentAlias.textContent = item.name || TYPE_LABELS[item.type] || item.equipmentId;
+  equipmentDetails.append(equipmentAlias);
+  if (item.description) {
+    const equipmentDescription = document.createElement('small'); equipmentDescription.textContent = item.description;
+    equipmentDetails.append(equipmentDescription);
+  }
   const operator = document.createElement('div'); operator.className = 'popup-operator';
   operator.textContent = item.operatorName ? `Operador: ${item.operatorName} · ${item.operatorRegistration}` : 'Operador não identificado';
-  content.append(header, km, detail, operator);
+  content.append(header, km, detail, equipmentDetails, operator);
   if (!state.popup) state.popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 24, className: 'equipment-popup' });
   state.popup.setLngLat([item.longitude, item.latitude]).setDOMContent(content).addTo(state.map);
 }

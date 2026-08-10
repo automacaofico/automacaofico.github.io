@@ -52,6 +52,8 @@ const els = {
   operatorsList: $("operators-list"),
   operatorsActive: $("operators-active"),
   operatorsInactive: $("operators-inactive"),
+  equipmentList: $("equipment-list"),
+  equipmentMessage: $("equipment-message"),
   operatorDialog: $("operator-dialog"),
   operatorEditForm: $("operator-edit-form"),
   operatorEditTitle: $("operator-edit-title"),
@@ -68,6 +70,7 @@ const els = {
 let adminPassword = "";
 let currentDevices = [];
 let currentOperators = [];
+let currentEquipment = [];
 
 function message(element, text, success = false) {
   element.textContent = text;
@@ -243,6 +246,69 @@ function renderOperators() {
   });
 }
 
+function renderEquipment() {
+  const typeLabels = {
+    locomotiva: "Locomotiva",
+    socadora: "Socadora",
+    reguladora: "Reguladora",
+    ntc: "NTC",
+  };
+  els.equipmentList.replaceChildren();
+  currentEquipment.forEach((equipment) => {
+    const form = document.createElement("form");
+    form.className = `equipment-row ${equipment.type}`;
+    const identity = document.createElement("div");
+    identity.className = "equipment-identity";
+    const code = document.createElement("strong");
+    code.textContent = equipment.id;
+    const type = document.createElement("small");
+    type.textContent = typeLabels[equipment.type] || equipment.type;
+    identity.append(code, type);
+    const nameLabel = document.createElement("label");
+    nameLabel.textContent = "Nome curto";
+    const name = document.createElement("input");
+    name.value = equipment.name;
+    name.maxLength = 80;
+    name.required = true;
+    nameLabel.append(name);
+    const descriptionLabel = document.createElement("label");
+    descriptionLabel.textContent = "Descrição / especificações";
+    const description = document.createElement("textarea");
+    description.value = equipment.description || "";
+    description.maxLength = 500;
+    description.rows = 2;
+    description.placeholder = "Ex.: fabricante, modelo, número patrimonial ou característica visual";
+    descriptionLabel.append(description);
+    const save = document.createElement("button");
+    save.type = "submit";
+    save.textContent = "SALVAR";
+    form.append(identity, nameLabel, descriptionLabel, save);
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      message(els.equipmentMessage, "");
+      save.disabled = true;
+      try {
+        const data = await api("/api/v2/admin/equipment/update", {
+          adminPassword,
+          equipmentId: equipment.id,
+          name: name.value,
+          description: description.value,
+        });
+        equipment.name = data.equipment.name;
+        equipment.description = data.equipment.description;
+        name.value = equipment.name;
+        description.value = equipment.description;
+        message(els.equipmentMessage, `${equipment.id} atualizado com sucesso.`, true);
+      } catch (error) {
+        message(els.equipmentMessage, error.message);
+      } finally {
+        save.disabled = false;
+      }
+    });
+    els.equipmentList.append(form);
+  });
+}
+
 function renderDeviceResult(device) {
   els.deviceResult.replaceChildren();
   const title = document.createElement("strong");
@@ -387,6 +453,11 @@ async function loadOperators() {
   );
   renderOperators();
 }
+async function loadEquipment() {
+  const data = await api("/api/v2/admin/equipment/list", { adminPassword });
+  currentEquipment = data.equipment;
+  renderEquipment();
+}
 async function loadCodes() {
   els.refresh.disabled = true;
   try {
@@ -407,7 +478,7 @@ els.loginForm.addEventListener("submit", async (event) => {
   const button = els.loginForm.querySelector("button");
   button.disabled = true;
   try {
-    await Promise.all([loadCodes(), loadOperators(), loadDevices()]);
+    await Promise.all([loadCodes(), loadOperators(), loadDevices(), loadEquipment()]);
     els.loginCard.hidden = true;
     els.panel.hidden = false;
     els.password.value = "";
@@ -522,7 +593,7 @@ els.copy.addEventListener("click", async () => {
   setTimeout(() => (els.copy.textContent = "COPIAR"), 1200);
 });
 els.refresh.addEventListener("click", () =>
-  Promise.all([loadCodes(), loadOperators(), loadDevices()]).catch((error) =>
+  Promise.all([loadCodes(), loadOperators(), loadDevices(), loadEquipment()]).catch((error) =>
     message(els.generateMessage, error.message),
   ),
 );
