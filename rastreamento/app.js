@@ -268,7 +268,15 @@ function updateMarker(item) {
   }
   marker.setLngLat([item.longitude, item.latitude]);
   const element = marker.getElement();
-  element.className = `equipment-marker ${item.type} ${effectiveStatus(item)}${item.equipmentId === state.selectedId ? ' selected' : ''}`;
+  const markerStatus = effectiveStatus(item);
+  element.className = `equipment-marker ${item.type} ${markerStatus}${item.equipmentId === state.selectedId ? ' selected' : ''}`;
+  if (markerStatus === 'offline') {
+    element.dataset.statusLabel = `Última posição · ${ageLabel(item.receivedAt)}`;
+    element.setAttribute('aria-label', `Última posição conhecida de ${item.equipmentId}, recebida ${ageLabel(item.receivedAt)}.`);
+  } else {
+    delete element.dataset.statusLabel;
+    element.setAttribute('aria-label', `Posição de ${item.equipmentId}. Passe o mouse ou toque para ver o KM.`);
+  }
 }
 
 function showEquipmentPopup(item) {
@@ -278,10 +286,12 @@ function showEquipmentPopup(item) {
   const content = document.createElement('div'); content.className = 'equipment-popup-card';
   const header = document.createElement('div'); header.className = 'popup-head';
   const identity = document.createElement('span'); identity.textContent = item.equipmentId;
-  const status = document.createElement('b'); status.className = effectiveStatus(item); status.textContent = effectiveStatus(item).replace('_', ' ').toUpperCase();
+  const itemStatus = effectiveStatus(item);
+  const status = document.createElement('b'); status.className = itemStatus; status.textContent = itemStatus === 'offline' ? 'ÚLTIMA POSIÇÃO' : itemStatus.replace('_', ' ').toUpperCase();
   header.append(identity, status);
   const km = document.createElement('strong'); km.textContent = onTrack ? `KM ${formatKm(projection.stationM)}` : 'FORA DA VIA';
-  const detail = document.createElement('small'); detail.textContent = projection ? `${Math.round(projection.distanceM).toLocaleString('pt-BR')} m do eixo · sinal ${ageLabel(item.receivedAt)}` : `Sinal ${ageLabel(item.receivedAt)}`;
+  const signalLabel = itemStatus === 'offline' ? `offline · última atualização ${ageLabel(item.receivedAt)}` : `sinal ${ageLabel(item.receivedAt)}`;
+  const detail = document.createElement('small'); detail.textContent = projection ? `${Math.round(projection.distanceM).toLocaleString('pt-BR')} m do eixo · ${signalLabel}` : signalLabel;
   content.append(header, km, detail);
   if (!state.popup) state.popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 24, className: 'equipment-popup' });
   state.popup.setLngLat([item.longitude, item.latitude]).setDOMContent(content).addTo(state.map);
