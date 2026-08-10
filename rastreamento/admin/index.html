@@ -11,7 +11,7 @@
 <body>
   <header><a href="../"><img src="../../mapa-pendencias/assets/brand/fico-logo-color.png" alt="FICO"></a><span>ADMINISTRAÇÃO DO RASTREAMENTO</span></header>
   <main>
-    <section class="intro"><p>CREDENCIAIS DOS APARELHOS</p><h1>Códigos de<br><span>ativação.</span></h1><small>Gere códigos descartáveis para vincular o aplicativo Android ao equipamento correto. Cada código funciona uma única vez.</small></section>
+    <section class="intro"><p>ACESSO DOS OPERADORES</p><h1>Dispositivos<br><span>pessoais.</span></h1><small>Cadastre o iPhone do operador e consulte as identificações do OwnTracks. No Android, o próprio operador identifica o aparelho com matrícula e PIN.</small></section>
 
     <section id="login-card" class="card login-card">
       <h2>Acesso da coordenação</h2>
@@ -23,8 +23,22 @@
     </section>
 
     <section id="admin-panel" class="admin-panel" hidden>
+      <div class="device-manager card">
+        <div class="inventory-head"><div><p>IOS E ANDROID</p><h2>Dispositivos pessoais</h2></div><a class="report-link" href="../operacao/">ABRIR HISTÓRICO OPERACIONAL</a></div>
+        <p class="helper">Para iPhone, crie a identificação abaixo e baixe o arquivo <strong>.otrc</strong>. No OwnTracks, habilite uma vez a importação de configuração externa e abra o arquivo no aparelho.</p>
+        <form id="device-form" class="device-form">
+          <label>Operador<select id="device-operator" required></select></label>
+          <label>Plataforma<select id="device-platform"><option value="ios">iOS / OwnTracks</option></select></label>
+          <label>Nome do aparelho<input id="device-label" maxlength="60" placeholder="Ex.: iPhone do João"></label>
+          <button type="submit">CRIAR IDENTIFICAÇÃO</button>
+        </form>
+        <div id="device-message" class="message" role="alert" hidden></div>
+        <div id="device-result" class="device-result" hidden></div>
+        <div id="devices-list" class="devices-list"></div>
+      </div>
+
       <div class="generator card">
-        <div><p>NOVO CÓDIGO</p><h2>Gerar ativação</h2></div>
+        <div><p>LEGADO</p><h2>Código por equipamento</h2></div>
         <form id="generate-form">
           <label>Equipamento<select id="equipment"></select></label>
           <label>Validade<select id="valid-days"><option value="7">7 dias</option><option value="30" selected>30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option></select></label>
@@ -38,7 +52,7 @@
       </div>
 
       <div class="inventory card">
-        <div class="inventory-head"><div><p>CONTROLE</p><h2>Códigos cadastrados</h2></div><button id="refresh" type="button">ATUALIZAR</button></div>
+        <div class="inventory-head"><div><p>CONTROLE LEGADO</p><h2>Códigos cadastrados</h2></div><button id="refresh" type="button">ATUALIZAR</button></div>
         <div class="summary"><span><b id="active-count">0</b> ativos</span><span><b id="used-count">0</b> utilizados</span><span><b id="expired-count">0</b> expirados</span></div>
         <div id="codes-list" class="codes-list"></div>
       </div>

@@ -1,4 +1,4 @@
-const API_BASE = 'https://fico-tracking-api.automacaofico.workers.dev';
+const API_BASE = /^(?:localhost|127\.0\.0\.1)$/.test(location.hostname) ? 'http://127.0.0.1:8791' : 'https://fico-tracking-api.automacaofico.workers.dev';
 const EQUIPMENT = ['LOCO001','LOCO002','LOCO003','LOCO004','LOCO005','LOCO006','LOCO007','EGPS001','EGPS002','EGPS003','EGPR001','EGPR002','EGPR003','NTC001'];
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -45,7 +45,8 @@ async function startShift(force = false) {
   try {
     const data = await api('/api/v1/operator/session/start', { method: 'POST', body: JSON.stringify({ ...credentials(), force }) });
     localStorage.setItem('ficoOperatorRegistration', data.session.operatorRegistration);
-    message(els.formMessage, `${data.session.operatorName} agora está associado ao ${data.session.equipmentId}.`, true);
+    const previous = data.changedEquipment ? ` O turno no ${data.previousEquipmentId} foi encerrado automaticamente.` : '';
+    message(els.formMessage, `${data.session.operatorName} agora está associado ao ${data.session.equipmentId}.${previous}`, true);
     els.pin.value = ''; els.force.hidden = true; pendingForce = false; await loadSession();
   } catch (error) {
     if (error.status === 409 && error.body?.conflict) {
@@ -67,7 +68,8 @@ async function endShift() {
 EQUIPMENT.forEach((id) => els.equipment.add(new Option(id, id)));
 const requested = new URLSearchParams(location.search).get('equipamento')?.toUpperCase();
 if (EQUIPMENT.includes(requested)) els.equipment.value = requested;
-els.registration.value = localStorage.getItem('ficoOperatorRegistration') || '';
+const requestedRegistration = new URLSearchParams(location.search).get('matricula')?.trim().toUpperCase();
+els.registration.value = requestedRegistration || localStorage.getItem('ficoOperatorRegistration') || '';
 els.equipment.addEventListener('change', loadSession);
 els.sessionForm.addEventListener('submit', (event) => { event.preventDefault(); startShift(false); });
 els.end.addEventListener('click', endShift);

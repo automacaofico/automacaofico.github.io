@@ -8,8 +8,8 @@ android {
         applicationId = "io.github.automacaofico.tracker"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.2.0"
+        versionCode = 4
+        versionName = "2.0.0"
         buildConfigField("String", "API_URL", "\"https://fico-tracking-api.automacaofico.workers.dev\"")
     }
 

@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Histórico operacional | FICO</title>
+    <link
+      rel="stylesheet"
+      href="../../mapa-pendencias/assets/vendor/maplibre/maplibre-gl.css"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <a href="../"
+        ><img
+          src="../../mapa-pendencias/assets/brand/fico-logo-color.png"
+          alt="FICO"
+        /><span>Rastreamento</span></a
+      >
+      <nav>
+        <a href="../">Mapa ao vivo</a><a href="../admin/">Dispositivos</a>
+      </nav>
+    </header>
+    <main>
+      <section class="hero">
+        <div>
+          <p>CONTROLE DE OPERAÇÃO</p>
+          <h1>Histórico e<br /><span>desempenho.</span></h1>
+        </div>
+        <small
+          >Movimentação vinculada ao operador e ao equipamento. Dados de até 7
+          dias usam os sinais originais; de 8 a 90 dias usam uma amostra por
+          minuto.</small
+        >
+      </section>
+      <section id="access" class="access card">
+        <form id="access-form">
+          <label
+            >Senha da coordenação<input
+              id="password"
+              type="password"
+              required /></label
+          ><button>ABRIR PAINEL</button>
+        </form>
+        <div id="access-message" class="message" hidden></div>
+      </section>
+      <section id="dashboard" hidden>
+        <form id="filters" class="filters card">
+          <label
+            >Equipamento<select id="equipment">
+              <option value="">Todos</option>
+            </select></label
+          ><label
+            >Operador<select id="operator">
+              <option value="">Todos</option>
+            </select></label
+          ><label>De<input id="from" type="datetime-local" required /></label
+          ><label>Até<input id="to" type="datetime-local" required /></label
+          ><button>ATUALIZAR</button>
+        </form>
+        <div id="message" class="message" hidden></div>
+        <section class="kpis">
+          <article>
+            <span>DISTÂNCIA NA VIA</span><strong id="distance">—</strong
+            ><small>projeção sobre o eixo FICO</small>
+          </article>
+          <article>
+            <span>TEMPO EM MOVIMENTO</span><strong id="moving">—</strong
+            ><small>velocidade ≥ 1,8 km/h</small>
+          </article>
+          <article>
+            <span>TEMPO PARADO</span><strong id="stopped">—</strong
+            ><small>intervalos observados de até 60 s</small>
+          </article>
+          <article>
+            <span>VELOCIDADE MÉDIA</span><strong id="average">—</strong
+            ><small>somente sinais em movimento</small>
+          </article>
+          <article>
+            <span>VELOCIDADE MÁXIMA</span><strong id="maximum">—</strong
+            ><small>maior sinal GPS válido</small>
+          </article>
+          <article>
+            <span>COBERTURA GPS</span><strong id="coverage">—</strong
+            ><small>tempo observado ÷ tempo dos turnos</small>
+          </article>
+        </section>
+        <section class="visuals">
+          <article class="card map-card">
+            <div class="head">
+              <div>
+                <p>TRAJETO NO PERÍODO</p>
+                <h2>Movimentação sobre a ferrovia</h2>
+              </div>
+              <span id="source"></span>
+            </div>
+            <div id="map"></div>
+          </article>
+          <article class="card chart-card">
+            <div class="head">
+              <div>
+                <p>PERFIL DE VELOCIDADE</p>
+                <h2>Velocidade por horário</h2>
+              </div>
+            </div>
+            <svg
+              id="speed-chart"
+              viewBox="0 0 900 260"
+              role="img"
+              aria-label="Gráfico de velocidade"
+            ></svg>
+          </article>
+        </section>
+        <section class="card sessions">
+          <div class="head">
+            <div>
+              <p>TURNOS</p>
+              <h2>Responsabilidade registrada</h2>
+            </div>
+            <b id="shift-count">0 turnos</b>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Início</th>
+                  <th>Fim</th>
+                  <th>Operador</th>
+                  <th>Equipamento</th>
+                  <th>Motivo</th>
+                  <th>Duração</th>
+                </tr>
+              </thead>
+              <tbody id="sessions-body"></tbody>
+            </table>
+          </div>
+        </section>
+        <details class="definitions">
+          <summary>Como os indicadores são calculados</summary>
+          <p>
+            <b>Distância na via:</b> soma das diferenças de quilometragem
+            projetada no eixo ferroviário, somente para pontos a até 500 m da
+            linha e sem saltos impossíveis. <b>Movimento:</b> velocidade GPS
+            igual ou superior a 0,5 m/s. <b>Cobertura:</b> intervalos entre
+            sinais de até 60 s divididos pelo tempo total dos turnos. Os
+            indicadores são diagnósticos operacionais; não substituem registros
+            de segurança.
+          </p>
+        </details>
+      </section>
+    </main>
+    <script src="../../mapa-pendencias/assets/vendor/maplibre/maplibre-gl.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

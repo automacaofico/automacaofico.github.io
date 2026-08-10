@@ -116,6 +116,125 @@ async function authenticateOwnTracks(request, env) {
   return device?.equipment_id === equipmentId ? device : null;
 }
 
+function devicePlatform(value) {
+  const platform = String(value || '').toLowerCase();
+  return platform === 'ios' || platform === 'android' ? platform : null;
+}
+
+function deviceSuffix(length = 6) {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(length));
+  return [...bytes].map((byte) => alphabet[byte % alphabet.length]).join('');
+}
+
+function ownTracksConfiguration(device, token) {
+  return {
+    _type: 'configuration', mode: 3, auth: true,
+    url: 'https://fico-tracking-api.automacaofico.workers.dev/api/v2/owntracks',
+    username: device.username, password: token, deviceId: device.id,
+    clientId: device.id, tid: device.operator_registration.slice(-2).padStart(2, '0'),
+    monitoring: 2, locatorInterval: 5, locatorDisplacement: 5,
+    positions: 100, days: -1, extendedData: true
+  };
+}
+
+async function authenticatePersonalBearer(request, env) {
+  const match = request.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i);
+  if (!match) return null;
+  const hash = await sha256(match[1]);
+  return env.DB.prepare(`SELECT id,operator_registration,platform,username FROM personal_devices
+    WHERE token_hash=? AND active=1`).bind(hash).first();
+}
+
+async function authenticatePersonalOwnTracks(request, env) {
+  const match = request.headers.get('authorization')?.match(/^Basic\s+(.+)$/i);
+  if (!match) return null;
+  let decoded;
+  try { decoded = atob(match[1]); } catch { return null; }
+  const separator = decoded.indexOf(':');
+  if (separator < 1) return null;
+  const username = decoded.slice(0, separator);
+  const password = decoded.slice(separator + 1);
+  const hash = await sha256(password);
+  return env.DB.prepare(`SELECT id,operator_registration,platform,username FROM personal_devices
+    WHERE username=? AND token_hash=? AND active=1`).bind(username, hash).first();
+}
+
+async function activeSessionForOperator(env, registration) {
+  return env.DB.prepare(`SELECT s.id,s.equipment_id,s.operator_registration,s.started_at,o.name AS operator_name
+    FROM operator_sessions s JOIN operators o ON o.registration=s.operator_registration
+    WHERE s.operator_registration=? AND s.ended_at IS NULL LIMIT 1`).bind(registration).first();
+}
+
+function haversineMeters(a, b) {
+  const radius = 6_371_000;
+  const toRadians = (value) => value * Math.PI / 180;
+  const deltaLatitude = toRadians(b.latitude - a.latitude);
+  const deltaLongitude = toRadians(b.longitude - a.longitude);
+  const latitudeA = toRadians(a.latitude);
+  const latitudeB = toRadians(b.latitude);
+  const value = Math.sin(deltaLatitude / 2) ** 2
+    + Math.cos(latitudeA) * Math.cos(latitudeB) * Math.sin(deltaLongitude / 2) ** 2;
+  return 2 * radius * Math.asin(Math.sqrt(value));
+}
+
+function summarizePositionRows(rows, startedAt, endedAt) {
+  let movingS = 0;
+  let stoppedS = 0;
+  let distanceM = 0;
+  let maxSpeedMps = null;
+  let movingSpeedSum = 0;
+  let movingSpeedCount = 0;
+  for (let index = 0; index < rows.length; index += 1) {
+    const point = rows[index];
+    const speed = Number(point.speed_mps);
+    if (Number.isFinite(speed)) {
+      maxSpeedMps = maxSpeedMps === null ? speed : Math.max(maxSpeedMps, speed);
+      if (speed >= 0.5) { movingSpeedSum += speed; movingSpeedCount += 1; }
+    }
+    if (!index) continue;
+    const previous = rows[index - 1];
+    const elapsedS = Math.max(0, (Date.parse(point.captured_at) - Date.parse(previous.captured_at)) / 1000);
+    if (elapsedS <= 60) {
+      if (Number(previous.speed_mps) >= 0.5) movingS += elapsedS;
+      else stoppedS += elapsedS;
+    }
+    const segmentM = haversineMeters(
+      { latitude: Number(previous.latitude), longitude: Number(previous.longitude) },
+      { latitude: Number(point.latitude), longitude: Number(point.longitude) }
+    );
+    const plausibleM = Math.max(150, elapsedS * 45);
+    if (elapsedS > 0 && segmentM <= plausibleM) distanceM += segmentM;
+  }
+  return {
+    durationS: Math.max(0, Math.round((Date.parse(endedAt) - Date.parse(startedAt)) / 1000)),
+    pointsCount: rows.length,
+    movingS: Math.round(movingS), stoppedS: Math.round(stoppedS), gpsDistanceM: distanceM,
+    avgMovingSpeedMps: movingSpeedCount ? movingSpeedSum / movingSpeedCount : null,
+    maxSpeedMps
+  };
+}
+
+async function finalizeSessionSummary(env, sessionId) {
+  const session = await env.DB.prepare(`SELECT id,equipment_id,operator_registration,started_at,ended_at
+    FROM operator_sessions WHERE id=? AND ended_at IS NOT NULL`).bind(sessionId).first();
+  if (!session) return;
+  const result = await env.DB.prepare(`SELECT captured_at,latitude,longitude,speed_mps
+    FROM positions WHERE equipment_id=? AND operator_registration=? AND captured_at>=? AND captured_at<=?
+    ORDER BY captured_at`).bind(session.equipment_id, session.operator_registration, session.started_at, session.ended_at).all();
+  const summary = summarizePositionRows(result.results, session.started_at, session.ended_at);
+  await env.DB.prepare(`INSERT INTO operation_session_summaries
+    (session_id,equipment_id,operator_registration,started_at,ended_at,duration_s,points_count,moving_s,stopped_s,gps_distance_m,avg_moving_speed_mps,max_speed_mps,calculated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(session_id) DO UPDATE SET ended_at=excluded.ended_at,duration_s=excluded.duration_s,
+      points_count=excluded.points_count,moving_s=excluded.moving_s,stopped_s=excluded.stopped_s,
+      gps_distance_m=excluded.gps_distance_m,avg_moving_speed_mps=excluded.avg_moving_speed_mps,
+      max_speed_mps=excluded.max_speed_mps,calculated_at=excluded.calculated_at`)
+    .bind(session.id, session.equipment_id, session.operator_registration, session.started_at, session.ended_at,
+      summary.durationS, summary.pointsCount, summary.movingS, summary.stoppedS, summary.gpsDistanceM,
+      summary.avgMovingSpeedMps, summary.maxSpeedMps, new Date().toISOString()).run();
+}
+
 function statusFor(receivedAt) {
   if (!receivedAt) return 'sem_sinal';
   const age = Date.now() - Date.parse(receivedAt);
@@ -217,6 +336,81 @@ async function generateActivationCode(request, env) {
   return reply(request, { ok: true, activationCode: { id: codeHash, equipmentId, code, status: 'active', createdAt: new Date().toISOString(), expiresAt } }, 201, { 'cache-control': 'no-store' });
 }
 
+async function listOperatorsAdmin(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
+  if (!adminAuthorized(env, body.adminPassword)) return reply(request, { ok: false, error: 'Senha administrativa inválida.' }, 401);
+  const rows = await env.DB.prepare(`SELECT registration,name,active,created_at,updated_at FROM operators ORDER BY name`).all();
+  return reply(request, { ok: true, operators: rows.results.map((row) => ({ registration: row.registration, name: row.name, active: Boolean(row.active), createdAt: row.created_at, updatedAt: row.updated_at })) }, 200, { 'cache-control': 'no-store' });
+}
+
+async function createPersonalDeviceAdmin(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
+  if (!adminAuthorized(env, body.adminPassword)) return reply(request, { ok: false, error: 'Senha administrativa inválida.' }, 401);
+  const registration = normalizeRegistration(body.registration);
+  const platform = devicePlatform(body.platform);
+  const label = String(body.label || '').trim().slice(0, 60) || (platform === 'ios' ? 'iPhone do operador' : 'Android do operador');
+  const operator = registration && await env.DB.prepare('SELECT registration,name FROM operators WHERE registration=? AND active=1').bind(registration).first();
+  if (!operator || !platform) return reply(request, { ok: false, error: 'Operador ou plataforma inválida.' }, 400);
+  const id = `${platform === 'ios' ? 'IOS' : 'AND'}-${deviceSuffix()}`;
+  const username = `FICO-${registration}-${deviceSuffix(4)}`;
+  const token = createDeviceToken();
+  const encrypted = await encryptActivationCode(env, token);
+  await env.DB.prepare(`INSERT INTO personal_devices
+    (id,operator_registration,platform,label,username,token_hash,token_ciphertext,token_iv)
+    VALUES (?,?,?,?,?,?,?,?)`).bind(id, registration, platform, label, username, await sha256(token), encrypted.ciphertext, encrypted.iv).run();
+  const device = { id, operator_registration: registration, platform, label, username };
+  return reply(request, { ok: true, device: { deviceId: id, operatorRegistration: registration, operatorName: operator.name, platform, label, username, password: token, configuration: ownTracksConfiguration(device, token) } }, 201, { 'cache-control': 'no-store' });
+}
+
+async function listPersonalDevicesAdmin(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
+  if (!adminAuthorized(env, body.adminPassword)) return reply(request, { ok: false, error: 'Senha administrativa inválida.' }, 401);
+  const rows = await env.DB.prepare(`SELECT d.id,d.operator_registration,o.name AS operator_name,d.platform,d.label,d.username,
+    d.token_ciphertext,d.token_iv,d.active,d.created_at,d.last_seen_at
+    FROM personal_devices d JOIN operators o ON o.registration=d.operator_registration
+    ORDER BY d.created_at DESC`).all();
+  const devices = [];
+  for (const row of rows.results) {
+    const token = row.active ? await decryptActivationCode(env, row.token_ciphertext, row.token_iv) : null;
+    const device = { id: row.id, operator_registration: row.operator_registration, username: row.username };
+    devices.push({ deviceId: row.id, operatorRegistration: row.operator_registration, operatorName: row.operator_name, platform: row.platform, label: row.label, username: row.username, password: token, active: Boolean(row.active), createdAt: row.created_at, lastSeenAt: row.last_seen_at, configuration: token && row.platform === 'ios' ? ownTracksConfiguration(device, token) : null });
+  }
+  return reply(request, { ok: true, devices }, 200, { 'cache-control': 'no-store' });
+}
+
+async function revokePersonalDeviceAdmin(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
+  if (!adminAuthorized(env, body.adminPassword)) return reply(request, { ok: false, error: 'Senha administrativa inválida.' }, 401);
+  const deviceId = String(body.deviceId || '');
+  const result = await env.DB.prepare('UPDATE personal_devices SET active=0 WHERE id=? AND active=1').bind(deviceId).run();
+  if (!result.meta.changes) return reply(request, { ok: false, error: 'Dispositivo não encontrado ou já revogado.' }, 404);
+  return reply(request, { ok: true }, 200, { 'cache-control': 'no-store' });
+}
+
+async function enrollPersonalAndroid(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
+  const operator = await authenticatedOperator(env, body.registration, body.pin);
+  const installationId = String(body.installationId || '');
+  if (!operator || !/^[a-zA-Z0-9-]{16,80}$/.test(installationId)) return reply(request, { ok: false, error: 'Matrícula, PIN ou aparelho inválido.' }, 401);
+  const installationHash = await sha256(installationId);
+  const id = `AND-${installationHash.slice(0, 10).toUpperCase()}`;
+  const username = `FICO-${operator.registration}-${id.slice(-4)}`;
+  const token = createDeviceToken();
+  const encrypted = await encryptActivationCode(env, token);
+  await env.DB.prepare(`INSERT INTO personal_devices
+    (id,operator_registration,platform,label,username,token_hash,token_ciphertext,token_iv,active)
+    VALUES (?,?, 'android','Android pessoal',?,?,?,?,1)
+    ON CONFLICT(id) DO UPDATE SET operator_registration=excluded.operator_registration,username=excluded.username,
+      token_hash=excluded.token_hash,token_ciphertext=excluded.token_ciphertext,token_iv=excluded.token_iv,active=1`)
+    .bind(id, operator.registration, username, await sha256(token), encrypted.ciphertext, encrypted.iv).run();
+  return reply(request, { ok: true, deviceId: id, deviceToken: token, operatorRegistration: operator.registration, operatorName: operator.name }, 200, { 'cache-control': 'no-store' });
+}
+
 async function activeOperatorSession(env, equipmentId) {
   return env.DB.prepare(`SELECT s.id,s.equipment_id,s.operator_registration,s.started_at,o.name AS operator_name
     FROM operator_sessions s JOIN operators o ON o.registration=s.operator_registration
@@ -235,19 +429,34 @@ async function startOperatorSession(request, env) {
   const equipmentId = publicEquipmentId(body.equipmentId);
   const operator = await authenticatedOperator(env, body.registration, body.pin);
   if (!equipmentId || !operator) return reply(request, { ok: false, error: 'Equipamento, matrícula ou PIN inválido.' }, 401);
-  const current = await activeOperatorSession(env, equipmentId);
-  if (current?.operator_registration === operator.registration) return reply(request, { ok: true, session: publicSession(current), alreadyActive: true }, 200, { 'cache-control': 'no-store' });
-  if (current && body.force !== true) {
-    return reply(request, { ok: false, error: 'Equipamento já possui um operador ativo.', conflict: publicSession(current) }, 409, { 'cache-control': 'no-store' });
+  const equipmentSession = await activeOperatorSession(env, equipmentId);
+  const operatorSession = await activeSessionForOperator(env, operator.registration);
+  if (equipmentSession?.operator_registration === operator.registration) return reply(request, { ok: true, session: publicSession(equipmentSession), alreadyActive: true }, 200, { 'cache-control': 'no-store' });
+  if (equipmentSession && body.force !== true) {
+    return reply(request, { ok: false, error: 'Equipamento já possui um operador ativo.', conflict: publicSession(equipmentSession) }, 409, { 'cache-control': 'no-store' });
   }
   const now = new Date().toISOString();
   const sessionId = crypto.randomUUID();
   const statements = [];
-  if (current) statements.push(env.DB.prepare("UPDATE operator_sessions SET ended_at=?,ended_reason='substituído' WHERE id=? AND ended_at IS NULL").bind(now, current.id));
+  const closedSessionIds = [];
+  if (operatorSession) {
+    statements.push(env.DB.prepare("UPDATE operator_sessions SET ended_at=?,ended_reason='troca de equipamento' WHERE id=? AND ended_at IS NULL").bind(now, operatorSession.id));
+    closedSessionIds.push(operatorSession.id);
+  }
+  if (equipmentSession && equipmentSession.id !== operatorSession?.id) {
+    statements.push(env.DB.prepare("UPDATE operator_sessions SET ended_at=?,ended_reason='substituído' WHERE id=? AND ended_at IS NULL").bind(now, equipmentSession.id));
+    closedSessionIds.push(equipmentSession.id);
+  }
   statements.push(env.DB.prepare(`INSERT INTO operator_sessions (id,equipment_id,operator_registration,started_at)
     VALUES (?,?,?,?)`).bind(sessionId, equipmentId, operator.registration, now));
+  statements.push(env.DB.prepare(`INSERT INTO operational_events
+    (id,event_type,session_id,equipment_id,operator_registration,occurred_at,payload_json)
+    VALUES (?,?,?,?,?,?,?)`).bind(crypto.randomUUID(), operatorSession ? 'equipment_change' : 'shift_start', sessionId,
+      equipmentId, operator.registration, now, JSON.stringify({ previousEquipmentId: operatorSession?.equipment_id || null })));
   await env.DB.batch(statements);
-  return reply(request, { ok: true, session: { sessionId, equipmentId, operatorName: operator.name, operatorRegistration: operator.registration, startedAt: now } }, 201, { 'cache-control': 'no-store' });
+  await Promise.all(closedSessionIds.map((id) => finalizeSessionSummary(env, id)));
+  return reply(request, { ok: true, changedEquipment: Boolean(operatorSession), previousEquipmentId: operatorSession?.equipment_id || null,
+    session: { sessionId, equipmentId, operatorName: operator.name, operatorRegistration: operator.registration, startedAt: now } }, 201, { 'cache-control': 'no-store' });
 }
 
 async function endOperatorSession(request, env) {
@@ -256,10 +465,18 @@ async function endOperatorSession(request, env) {
   const equipmentId = publicEquipmentId(body.equipmentId);
   const operator = await authenticatedOperator(env, body.registration, body.pin);
   if (!equipmentId || !operator) return reply(request, { ok: false, error: 'Equipamento, matrícula ou PIN inválido.' }, 401);
-  const result = await env.DB.prepare(`UPDATE operator_sessions SET ended_at=?,ended_reason='encerrado pelo operador'
-    WHERE equipment_id=? AND operator_registration=? AND ended_at IS NULL`)
-    .bind(new Date().toISOString(), equipmentId, operator.registration).run();
-  if (!result.meta.changes) return reply(request, { ok: false, error: 'Não há turno ativo deste operador no equipamento.' }, 404);
+  const current = await activeSessionForOperator(env, operator.registration);
+  if (!current || current.equipment_id !== equipmentId) return reply(request, { ok: false, error: 'Não há turno ativo deste operador no equipamento.' }, 404);
+  const endedAt = new Date().toISOString();
+  const results = await env.DB.batch([
+    env.DB.prepare(`UPDATE operator_sessions SET ended_at=?,ended_reason='encerrado pelo operador'
+      WHERE id=? AND ended_at IS NULL`).bind(endedAt, current.id),
+    env.DB.prepare(`INSERT INTO operational_events
+      (id,event_type,session_id,equipment_id,operator_registration,occurred_at,payload_json)
+      VALUES (?,?,?,?,?,?,?)`).bind(crypto.randomUUID(), 'shift_end', current.id, equipmentId, operator.registration, endedAt, '{}')
+  ]);
+  if (!results[0].meta.changes) return reply(request, { ok: false, error: 'Não há turno ativo deste operador no equipamento.' }, 404);
+  await finalizeSessionSummary(env, current.id);
   return reply(request, { ok: true }, 200, { 'cache-control': 'no-store' });
 }
 
@@ -327,6 +544,110 @@ async function ingestOwnTracks(request, env) {
   return reply(request, [], 200, { 'cache-control': 'no-store' });
 }
 
+async function persistPersonalPositions(request, env, device, values, ownTracks = false) {
+  const session = await activeSessionForOperator(env, device.operator_registration);
+  if (!session) return ownTracks
+    ? reply(request, [], 200, { 'cache-control': 'no-store', 'x-fico-assignment': 'required' })
+    : reply(request, { ok: false, error: 'Identifique o equipamento antes de iniciar o rastreamento.', assignmentRequired: true }, 409);
+  if (!values.length || values.length > 100) return reply(request, { ok: false, error: 'Envie de 1 a 100 posições.' }, 400);
+  const receivedAt = new Date().toISOString();
+  const positions = [];
+  for (const value of values) {
+    const assigned = { ...value, equipmentId: session.equipment_id };
+    const error = validatePosition(assigned);
+    if (error) return reply(request, { ok: false, error }, 400);
+    positions.push(normalizePosition(assigned, receivedAt));
+  }
+  const statements = [];
+  for (const p of positions) {
+    statements.push(env.DB.prepare(`INSERT OR IGNORE INTO positions
+      (equipment_id,captured_at,received_at,latitude,longitude,accuracy_m,speed_mps,bearing_deg,altitude_m,battery_pct,sequence_no,operator_registration,device_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(p.equipmentId,p.capturedAt,p.receivedAt,p.latitude,p.longitude,p.accuracyM,p.speedMps,p.bearingDeg,p.altitudeM,p.batteryPct,p.sequenceNo,device.operator_registration,device.id));
+    statements.push(env.DB.prepare(`INSERT OR IGNORE INTO position_samples
+      (sample_minute,equipment_id,operator_registration,device_id,captured_at,received_at,latitude,longitude,accuracy_m,speed_mps,bearing_deg,altitude_m,battery_pct)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(p.capturedAt.slice(0,16),p.equipmentId,device.operator_registration,device.id,p.capturedAt,p.receivedAt,p.latitude,p.longitude,p.accuracyM,p.speedMps,p.bearingDeg,p.altitudeM,p.batteryPct));
+  }
+  const newest = [...positions].sort((a, b) => Date.parse(b.capturedAt) - Date.parse(a.capturedAt))[0];
+  statements.push(env.DB.prepare(`INSERT INTO latest_positions
+    (equipment_id,captured_at,received_at,latitude,longitude,accuracy_m,speed_mps,bearing_deg,altitude_m,battery_pct,sequence_no,operator_registration,device_id)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(equipment_id) DO UPDATE SET captured_at=excluded.captured_at,received_at=excluded.received_at,
+      latitude=excluded.latitude,longitude=excluded.longitude,accuracy_m=excluded.accuracy_m,speed_mps=excluded.speed_mps,
+      bearing_deg=excluded.bearing_deg,altitude_m=excluded.altitude_m,battery_pct=excluded.battery_pct,
+      sequence_no=excluded.sequence_no,operator_registration=excluded.operator_registration,device_id=excluded.device_id
+    WHERE excluded.captured_at >= latest_positions.captured_at`).bind(newest.equipmentId,newest.capturedAt,newest.receivedAt,newest.latitude,newest.longitude,newest.accuracyM,newest.speedMps,newest.bearingDeg,newest.altitudeM,newest.batteryPct,newest.sequenceNo,device.operator_registration,device.id));
+  statements.push(env.DB.prepare('UPDATE personal_devices SET last_seen_at=? WHERE id=?').bind(receivedAt, device.id));
+  for (let index = 0; index < statements.length; index += 50) await env.DB.batch(statements.slice(index, index + 50));
+  return ownTracks ? reply(request, [], 200, { 'cache-control': 'no-store' })
+    : reply(request, { ok: true, accepted: positions.length, receivedAt, equipmentId: session.equipment_id }, 202);
+}
+
+async function ingestPersonal(request, env) {
+  const device = await authenticatePersonalBearer(request, env);
+  if (!device) return reply(request, { ok: false, error: 'Credencial inválida.' }, 401);
+  let body;
+  try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
+  return persistPersonalPositions(request, env, device, Array.isArray(body.positions) ? body.positions : [body]);
+}
+
+async function ingestPersonalOwnTracks(request, env) {
+  const device = await authenticatePersonalOwnTracks(request, env);
+  if (!device) return reply(request, { ok: false, error: 'Credencial inválida.' }, 401, { 'www-authenticate': 'Basic realm="FICO OwnTracks"' });
+  const raw = await request.text();
+  if (!raw.trim()) return reply(request, [], 200);
+  let payload;
+  try { payload = JSON.parse(raw); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
+  if (payload?._type !== 'location') return reply(request, [], 200);
+  return persistPersonalPositions(request, env, device, [normalizeOwnTracksLocation(payload, 'LOCO001')], true);
+}
+
+async function operationsReport(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
+  if (!adminAuthorized(env, body.adminPassword)) return reply(request, { ok: false, error: 'Senha administrativa inválida.' }, 401);
+  const equipmentId = body.equipmentId ? publicEquipmentId(body.equipmentId) : null;
+  const registration = body.registration ? normalizeRegistration(body.registration) : null;
+  const to = new Date(body.to || Date.now());
+  const from = new Date(body.from || (to.getTime() - 24 * 3_600_000));
+  if (!Number.isFinite(from.getTime()) || !Number.isFinite(to.getTime()) || from >= to || to - from > 90 * 86_400_000) {
+    return reply(request, { ok: false, error: 'Período inválido. Consulte no máximo 90 dias.' }, 400);
+  }
+  if (body.equipmentId && !equipmentId) return reply(request, { ok: false, error: 'Equipamento inválido.' }, 400);
+  if (body.registration && !registration) return reply(request, { ok: false, error: 'Operador inválido.' }, 400);
+  const filters = [];
+  const bindings = [from.toISOString(), to.toISOString()];
+  if (equipmentId) { filters.push('s.equipment_id=?'); bindings.push(equipmentId); }
+  if (registration) { filters.push('s.operator_registration=?'); bindings.push(registration); }
+  const where = filters.length ? ` AND ${filters.join(' AND ')}` : '';
+  const sessions = await env.DB.prepare(`SELECT s.id,s.equipment_id,s.operator_registration,o.name AS operator_name,
+    s.started_at,s.ended_at,s.ended_reason,m.duration_s,m.points_count,m.moving_s,m.stopped_s,m.gps_distance_m,
+    m.avg_moving_speed_mps,m.max_speed_mps
+    FROM operator_sessions s JOIN operators o ON o.registration=s.operator_registration
+    LEFT JOIN operation_session_summaries m ON m.session_id=s.id
+    WHERE s.started_at<? AND COALESCE(s.ended_at,?)>=?${where} ORDER BY s.started_at`)
+    .bind(to.toISOString(), to.toISOString(), from.toISOString(), ...bindings.slice(2)).all();
+  const pointFilters = [];
+  const pointBindings = [from.toISOString(), to.toISOString()];
+  if (equipmentId) { pointFilters.push('equipment_id=?'); pointBindings.push(equipmentId); }
+  if (registration) { pointFilters.push('operator_registration=?'); pointBindings.push(registration); }
+  const pointWhere = pointFilters.length ? ` AND ${pointFilters.join(' AND ')}` : '';
+  const rawCutoff = new Date(Math.max(from.getTime(), Date.now() - 7 * 86_400_000)).toISOString();
+  const rawBindings = [rawCutoff, to.toISOString(), ...pointBindings.slice(2)];
+  const raw = await env.DB.prepare(`SELECT equipment_id,operator_registration,device_id,captured_at,received_at,
+    latitude,longitude,accuracy_m,speed_mps,bearing_deg,altitude_m,battery_pct
+    FROM positions WHERE captured_at>=? AND captured_at<?${pointWhere} ORDER BY captured_at LIMIT 25000`).bind(...rawBindings).all();
+  let sampled = { results: [] };
+  if (from.toISOString() < rawCutoff) sampled = await env.DB.prepare(`SELECT equipment_id,operator_registration,device_id,captured_at,received_at,
+    latitude,longitude,accuracy_m,speed_mps,bearing_deg,altitude_m,battery_pct
+    FROM position_samples WHERE captured_at>=? AND captured_at<?${pointWhere} ORDER BY captured_at LIMIT 25000`)
+    .bind(from.toISOString(), rawCutoff, ...pointBindings.slice(2)).all();
+  const operators = await env.DB.prepare('SELECT registration,name FROM operators WHERE active=1 ORDER BY name').all();
+  const equipment = await env.DB.prepare('SELECT id,name,type FROM equipment WHERE active=1 ORDER BY id').all();
+  return reply(request, { ok: true, generatedAt: new Date().toISOString(), from: from.toISOString(), to: to.toISOString(),
+    retention: { rawDays: 7, sampledDays: 90, sampledIntervalSeconds: 60 }, operators: operators.results,
+    equipment: equipment.results, sessions: sessions.results, positions: [...sampled.results, ...raw.results] }, 200, { 'cache-control': 'no-store' });
+}
+
 async function activate(request, env) {
   let body;
   try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
@@ -384,11 +705,19 @@ async function route(request, env) {
   if (request.method === 'POST' && url.pathname === '/api/v1/operators') return registerOperator(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/admin/activation-codes/list') return listActivationCodes(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/admin/activation-codes/generate') return generateActivationCode(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v2/admin/operators/list') return listOperatorsAdmin(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v2/admin/devices/create') return createPersonalDeviceAdmin(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v2/admin/devices/list') return listPersonalDevicesAdmin(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v2/admin/devices/revoke') return revokePersonalDeviceAdmin(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v2/admin/operations/report') return operationsReport(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v2/device/enroll') return enrollPersonalAndroid(request, env);
   if (request.method === 'GET' && url.pathname === '/api/v1/operator/session') return getOperatorSession(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/operator/session/start') return startOperatorSession(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/operator/session/end') return endOperatorSession(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/positions') return ingest(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/owntracks') return ingestOwnTracks(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v2/positions') return ingestPersonal(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v2/owntracks') return ingestPersonalOwnTracks(request, env);
   if (request.method === 'GET' && url.pathname === '/api/v1/equipment/latest') return latest(request, env);
   const match = url.pathname.match(/^\/api\/v1\/equipment\/([^/]+)\/history$/);
   if (request.method === 'GET' && match) return history(request, env, decodeURIComponent(match[1]));
@@ -398,6 +727,9 @@ async function route(request, env) {
 export default {
   fetch: route,
   async scheduled(_event, env, ctx) {
-    ctx.waitUntil(env.DB.prepare("DELETE FROM positions WHERE captured_at < datetime('now','-7 days')").run());
+    ctx.waitUntil(env.DB.batch([
+      env.DB.prepare("DELETE FROM positions WHERE captured_at < datetime('now','-7 days')"),
+      env.DB.prepare("DELETE FROM position_samples WHERE captured_at < datetime('now','-90 days')")
+    ]));
   }
 };

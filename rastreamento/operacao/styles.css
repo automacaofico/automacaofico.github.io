@@ -1,0 +1,256 @@
+@import url("https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap");
+:root {
+  --navy: #082b4c;
+  --blue: #2f7fc4;
+  --orange: #f28b22;
+  --paper: #edf2f5;
+  --ink: #092844;
+  --muted: #637586;
+  --line: #d5dee5;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "DM Sans", sans-serif;
+}
+header {
+  height: 68px;
+  padding: 0 clamp(18px, 5vw, 65px);
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+header a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 12px;
+}
+header img {
+  width: 48px;
+  height: 38px;
+  object-fit: contain;
+}
+header nav {
+  display: flex;
+  gap: 18px;
+}
+main {
+  max-width: 1380px;
+  margin: auto;
+  padding: 42px 24px 70px;
+}
+.hero {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 30px;
+}
+.hero p,
+.head p {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  font-weight: 700;
+  color: var(--blue);
+  margin: 0;
+}
+.hero h1 {
+  font: 800 clamp(52px, 6vw, 82px) / 0.83 "Barlow Condensed";
+  text-transform: uppercase;
+  letter-spacing: -0.04em;
+  margin: 8px 0;
+}
+.hero h1 span {
+  color: var(--blue);
+}
+.hero small {
+  max-width: 540px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.card {
+  background: #fff;
+  border-top: 4px solid var(--orange);
+  box-shadow: 0 12px 35px rgba(4, 31, 53, 0.09);
+}
+.access {
+  max-width: 520px;
+  padding: 20px;
+  margin-top: 30px;
+}
+.access form,
+.filters {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+}
+.filters {
+  padding: 16px;
+  margin: 28px 0 16px;
+  border-top-color: var(--blue);
+}
+label {
+  display: block;
+  flex: 1;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+input,
+select {
+  display: block;
+  width: 100%;
+  height: 44px;
+  margin-top: 5px;
+  border: 1px solid var(--line);
+  padding: 0 10px;
+  background: #fff;
+}
+button {
+  height: 44px;
+  border: 0;
+  padding: 0 18px;
+  background: var(--navy);
+  color: #fff;
+  font-weight: 700;
+  font-size: 10px;
+}
+.message {
+  padding: 12px;
+  background: #fde8e5;
+  color: #b63832;
+  margin-top: 10px;
+}
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+}
+.kpis article {
+  background: #fff;
+  border-top: 3px solid var(--blue);
+  padding: 17px;
+}
+.kpis span,
+.kpis small {
+  display: block;
+}
+.kpis span {
+  font-size: 8px;
+  letter-spacing: 0.11em;
+  color: var(--muted);
+  font-weight: 700;
+}
+.kpis strong {
+  display: block;
+  font: 800 28px "Barlow Condensed";
+  margin: 7px 0 2px;
+}
+.kpis small {
+  font-size: 8px;
+  color: var(--muted);
+}
+.visuals {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr;
+  gap: 14px;
+  margin-top: 14px;
+}
+.map-card,
+.chart-card,
+.sessions {
+  padding: 18px;
+}
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+}
+.head h2 {
+  font: 800 23px "Barlow Condensed";
+  text-transform: uppercase;
+  margin: 2px 0;
+}
+.head > span {
+  font-size: 9px;
+  color: var(--muted);
+}
+#map {
+  height: 410px;
+  margin-top: 13px;
+}
+#speed-chart {
+  width: 100%;
+  height: 410px;
+  background: #f8fafb;
+  margin-top: 13px;
+}
+.sessions {
+  margin-top: 14px;
+}
+.table-wrap {
+  overflow: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  font-size: 11px;
+}
+th,
+td {
+  text-align: left;
+  padding: 10px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+th {
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+.definitions {
+  margin-top: 14px;
+  background: #fff;
+  padding: 16px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+@media (max-width: 1050px) {
+  .kpis {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .visuals {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 650px) {
+  main {
+    padding: 28px 12px;
+  }
+  .hero {
+    display: block;
+  }
+  .access form,
+  .filters {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  header nav a:last-child {
+    display: none;
+  }
+}
