@@ -98,13 +98,40 @@ main {
 .generator,
 .inventory,
 .device-manager,
-.operator-manager {
+.operator-manager,
+.history-reset {
   padding: 25px;
 }
 .device-manager,
-.operator-manager {
+.operator-manager,
+.history-reset {
   grid-column: 1/-1;
   border-top-color: var(--blue);
+}
+.history-reset {
+  border-top-color: var(--red);
+}
+.danger-badge {
+  background: #fdebea;
+  color: var(--red);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  padding: 8px 10px;
+}
+.history-reset-form {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(260px, 1fr) auto;
+  margin-top: 18px;
+}
+.history-reset-form label {
+  margin-top: 0;
+}
+.history-reset-form button {
+  background: var(--red);
+  min-height: 47px;
 }
 label {
   display: block;
@@ -547,6 +574,9 @@ footer a {
   .device-manager {
     grid-column: auto;
   }
+  .history-reset-form {
+    grid-template-columns: 1fr;
+  }
   .device-form {
     grid-template-columns: 1fr 1fr;
   }
@@ -588,7 +618,8 @@ footer a {
   .generator,
   .inventory,
   .device-manager,
-  .operator-manager {
+  .operator-manager,
+  .history-reset {
     margin-left: -14px;
     margin-right: -14px;
   }

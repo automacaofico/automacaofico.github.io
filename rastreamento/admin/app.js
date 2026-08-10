@@ -61,6 +61,9 @@ const els = {
   operatorEditMessage: $("operator-edit-message"),
   operatorDialogClose: $("operator-dialog-close"),
   operatorDialogCancel: $("operator-dialog-cancel"),
+  historyResetForm: $("history-reset-form"),
+  historyResetPassword: $("history-reset-password"),
+  historyResetMessage: $("history-reset-message"),
 };
 let adminPassword = "";
 let currentDevices = [];
@@ -523,3 +526,30 @@ els.refresh.addEventListener("click", () =>
     message(els.generateMessage, error.message),
   ),
 );
+els.historyResetForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  message(els.historyResetMessage, "");
+  if (!confirm("Apagar definitivamente todas as posições, trajetos, turnos e indicadores de teste? Operadores e equipamentos serão preservados.")) return;
+  const button = els.historyResetForm.querySelector("button");
+  button.disabled = true;
+  try {
+    const data = await api("/api/v2/admin/history/reset", {
+      resetPassword: els.historyResetPassword.value,
+    });
+    els.historyResetForm.reset();
+    await loadOperators();
+    const total = Object.values(data.deleted || {}).reduce(
+      (sum, value) => sum + Number(value || 0),
+      0,
+    );
+    message(
+      els.historyResetMessage,
+      `Histórico zerado com sucesso. ${total.toLocaleString("pt-BR")} registro(s) de teste removido(s).`,
+      true,
+    );
+  } catch (error) {
+    message(els.historyResetMessage, error.message);
+  } finally {
+    button.disabled = false;
+  }
+});

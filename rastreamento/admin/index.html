@@ -190,6 +190,32 @@
           </div>
           <div id="codes-list" class="codes-list"></div>
         </div>
+
+        <div class="history-reset card">
+          <div class="inventory-head">
+            <div>
+              <p>ZONA DE TESTES</p>
+              <h2>Zerar histórico operacional</h2>
+            </div>
+            <span class="danger-badge">AÇÃO IRREVERSÍVEL</span>
+          </div>
+          <p class="helper">
+            Remove posições, trajetos, turnos e indicadores já registrados. Os
+            equipamentos, operadores e dispositivos cadastrados são preservados.
+            Use somente antes do início oficial da operação.
+          </p>
+          <form id="history-reset-form" class="history-reset-form">
+            <label
+              >Senha exclusiva para limpeza<input
+                id="history-reset-password"
+                type="password"
+                autocomplete="off"
+                required
+            /></label>
+            <button type="submit">APAGAR TODO O HISTÓRICO</button>
+          </form>
+          <div id="history-reset-message" class="message" role="alert" hidden></div>
+        </div>
       </section>
     </main>
     <dialog id="operator-dialog" class="operator-dialog">

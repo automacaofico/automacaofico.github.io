@@ -1,3 +1,5 @@
+import { analyzeProjectedTrack } from './operacao/motion.js';
+
 'use strict';
 
 const API_BASE = 'https://fico-tracking-api.automacaofico.workers.dev';
@@ -383,8 +385,28 @@ async function loadHistory(id) {
     const data = await response.json();
     if (state.historyEquipment !== id) return;
     const positions = data.positions || [];
-    if (state.map?.getSource('history')) state.map.getSource('history').setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: positions.map((p) => [p.longitude, p.latitude]) } });
-    els.history.textContent = positions.length ? `${positions.length.toLocaleString('pt-BR')} posições recebidas no período.` : 'Ainda não há percurso registrado nas últimas 24 horas.';
+    const projected = positions.map((point) => ({
+      ...point,
+      projection: projectToAxis(point.longitude, point.latitude),
+    }));
+    const analysis = analyzeProjectedTrack(projected, {
+      deadbandM: 30,
+      maxAccuracyM: 40,
+      maxRailDistanceM: 500,
+    });
+    const coordinates = analysis.accepted.map((point) => point.projection.coordinate);
+    if (state.map?.getSource('history')) state.map.getSource('history').setData({
+      type: 'Feature',
+      properties: {},
+      geometry: { type: 'LineString', coordinates: coordinates.length > 1 ? coordinates : [] },
+    });
+    if (!positions.length) {
+      els.history.textContent = 'Ainda não há percurso registrado nas últimas 24 horas.';
+    } else if (coordinates.length < 2) {
+      els.history.textContent = `${positions.length.toLocaleString('pt-BR')} posições recebidas; equipamento considerado parado pelo filtro de 30 m.`;
+    } else {
+      els.history.textContent = `${positions.length.toLocaleString('pt-BR')} posições recebidas; percurso corrigido pela precisão do GPS.`;
+    }
   } catch { if (state.historyEquipment === id) els.history.textContent = 'Não foi possível carregar o percurso recente.'; }
 }
 

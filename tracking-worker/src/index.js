@@ -78,6 +78,10 @@ function adminAuthorized(env, value) {
   return Boolean(env.OPERATOR_ADMIN_PASSWORD) && String(value || '') === env.OPERATOR_ADMIN_PASSWORD;
 }
 
+function historyResetAuthorized(env, value) {
+  return Boolean(env.HISTORY_RESET_PASSWORD) && String(value || '') === env.HISTORY_RESET_PASSWORD;
+}
+
 function createActivationCode() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const bytes = crypto.getRandomValues(new Uint8Array(8));
@@ -753,6 +757,47 @@ async function history(request, env, id) {
   return reply(request, { ok: true, equipmentId, since, positions: rows.results.map(serialize) }, 200, { 'cache-control': 'public, max-age=5' });
 }
 
+async function resetOperationalHistoryAdmin(request, env) {
+  const body = await request.json().catch(() => ({}));
+  if (!historyResetAuthorized(env, body.resetPassword)) {
+    return reply(request, { ok: false, error: 'Senha exclusiva de limpeza inválida.' }, 401);
+  }
+
+  const countStatements = [
+    ['positions', 'SELECT COUNT(*) AS total FROM positions'],
+    ['positionSamples', 'SELECT COUNT(*) AS total FROM position_samples'],
+    ['latestPositions', 'SELECT COUNT(*) AS total FROM latest_positions'],
+    ['sessions', 'SELECT COUNT(*) AS total FROM operator_sessions'],
+    ['sessionSummaries', 'SELECT COUNT(*) AS total FROM operation_session_summaries'],
+    ['operationalEvents', 'SELECT COUNT(*) AS total FROM operational_events'],
+  ];
+  const countResults = await env.DB.batch(
+    countStatements.map(([, sql]) => env.DB.prepare(sql)),
+  );
+  const deleted = Object.fromEntries(
+    countStatements.map(([name], index) => [
+      name,
+      Number(countResults[index]?.results?.[0]?.total || 0),
+    ]),
+  );
+
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM operational_events'),
+    env.DB.prepare('DELETE FROM operation_session_summaries'),
+    env.DB.prepare('DELETE FROM position_samples'),
+    env.DB.prepare('DELETE FROM positions'),
+    env.DB.prepare('DELETE FROM latest_positions'),
+    env.DB.prepare('DELETE FROM operator_sessions'),
+  ]);
+
+  return reply(request, {
+    ok: true,
+    deleted,
+    preserved: ['equipment', 'operators', 'personal_devices', 'activation_codes'],
+    resetAt: new Date().toISOString(),
+  });
+}
+
 async function route(request, env) {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(request) });
   const url = new URL(request.url);
@@ -770,6 +815,7 @@ async function route(request, env) {
   if (request.method === 'POST' && url.pathname === '/api/v2/admin/devices/list') return listPersonalDevicesAdmin(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v2/admin/devices/revoke') return revokePersonalDeviceAdmin(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v2/admin/operations/report') return operationsReport(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v2/admin/history/reset') return resetOperationalHistoryAdmin(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v2/device/enroll') return enrollPersonalAndroid(request, env);
   if (request.method === 'GET' && url.pathname === '/api/v1/operator/session') return getOperatorSession(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/operator/session/start') return startOperatorSession(request, env);
