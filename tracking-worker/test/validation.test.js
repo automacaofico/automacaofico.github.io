@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizePosition, publicEquipmentId, validatePosition } from '../src/validation.js';
+import { normalizeOwnTracksLocation, normalizePosition, publicEquipmentId, validatePosition } from '../src/validation.js';
 
 const valid = () => ({ equipmentId: 'NTC001', capturedAt: new Date().toISOString(), latitude: -14.01, longitude: -49.19, accuracyM: 6, batteryPct: 84 });
 
@@ -16,4 +16,12 @@ test('normalizes captured time and optional telemetry', () => {
   assert.equal(normalized.equipmentId, 'NTC001');
   assert.equal(normalized.speedMps, null);
   assert.equal(normalized.batteryPct, 84);
+});
+test('converts OwnTracks telemetry to the dashboard format', () => {
+  const normalized = normalizeOwnTracksLocation({ tst: 1786363200, lat: -14.01, lon: -49.19, acc: 7, vel: 36, cog: 91, alt: 410, batt: 62 }, 'NTC001');
+  assert.equal(normalized.equipmentId, 'NTC001');
+  assert.equal(normalized.speedMps, 10);
+  assert.equal(normalized.bearingDeg, 91);
+  assert.equal(normalized.batteryPct, 62);
+  assert.equal(validatePosition(normalized), null);
 });

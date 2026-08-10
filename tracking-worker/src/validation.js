@@ -33,6 +33,22 @@ export function normalizePosition(value, receivedAt) {
   };
 }
 
+export function normalizeOwnTracksLocation(value, equipmentId) {
+  const timestamp = Number(value?.tst);
+  return {
+    equipmentId,
+    capturedAt: Number.isFinite(timestamp) ? new Date(timestamp * 1000).toISOString() : '',
+    latitude: Number(value?.lat),
+    longitude: Number(value?.lon),
+    accuracyM: value?.acc == null ? null : Number(value.acc),
+    speedMps: value?.vel == null ? null : Number(value.vel) / 3.6,
+    bearingDeg: value?.cog == null ? null : Number(value.cog),
+    altitudeM: value?.alt == null ? null : Number(value.alt),
+    batteryPct: value?.batt == null ? null : Math.round(Number(value.batt)),
+    sequenceNo: Number.isFinite(timestamp) ? timestamp : null
+  };
+}
+
 export function publicEquipmentId(value) {
   return EQUIPMENT_ID.test(String(value || '')) ? String(value) : null;
 }

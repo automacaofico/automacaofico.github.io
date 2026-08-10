@@ -1,4 +1,4 @@
-import { normalizePosition, publicEquipmentId, validatePosition } from './validation.js';
+import { normalizeOwnTracksLocation, normalizePosition, publicEquipmentId, validatePosition } from './validation.js';
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
 
@@ -37,6 +37,21 @@ async function authenticate(request, env) {
   if (!match) return null;
   const hash = await sha256(match[1]);
   return env.DB.prepare('SELECT equipment_id FROM devices WHERE token_hash = ? AND active = 1').bind(hash).first();
+}
+
+async function authenticateOwnTracks(request, env) {
+  const match = request.headers.get('authorization')?.match(/^Basic\s+(.+)$/i);
+  if (!match) return null;
+  let decoded;
+  try { decoded = atob(match[1]); } catch { return null; }
+  const separator = decoded.indexOf(':');
+  if (separator < 1) return null;
+  const equipmentId = publicEquipmentId(decoded.slice(0, separator).toUpperCase());
+  const password = decoded.slice(separator + 1);
+  if (!equipmentId || !password) return null;
+  const hash = await sha256(password);
+  const device = await env.DB.prepare('SELECT equipment_id FROM devices WHERE equipment_id = ? AND token_hash = ? AND active = 1').bind(equipmentId, hash).first();
+  return device?.equipment_id === equipmentId ? device : null;
 }
 
 function statusFor(receivedAt) {
@@ -101,6 +116,36 @@ async function ingest(request, env) {
   return reply(request, { ok: true, accepted: positions.length, receivedAt }, 202);
 }
 
+async function ingestOwnTracks(request, env) {
+  const device = await authenticateOwnTracks(request, env);
+  if (!device) return reply(request, { ok: false, error: 'Credencial inválida.' }, 401, { 'www-authenticate': 'Basic realm="FICO OwnTracks"' });
+  const raw = await request.text();
+  if (!raw.trim()) return reply(request, [], 200);
+  let payload;
+  try { payload = JSON.parse(raw); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
+  if (payload?._type !== 'location') return reply(request, [], 200);
+  const position = normalizeOwnTracksLocation(payload, device.equipment_id);
+  const error = validatePosition(position);
+  if (error) return reply(request, { ok: false, error }, 400);
+  const receivedAt = new Date().toISOString();
+  const p = normalizePosition(position, receivedAt);
+  await env.DB.batch([
+    env.DB.prepare(`INSERT OR IGNORE INTO positions
+      (equipment_id,captured_at,received_at,latitude,longitude,accuracy_m,speed_mps,bearing_deg,altitude_m,battery_pct,sequence_no)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(p.equipmentId,p.capturedAt,p.receivedAt,p.latitude,p.longitude,p.accuracyM,p.speedMps,p.bearingDeg,p.altitudeM,p.batteryPct,p.sequenceNo),
+    env.DB.prepare(`INSERT INTO latest_positions
+      (equipment_id,captured_at,received_at,latitude,longitude,accuracy_m,speed_mps,bearing_deg,altitude_m,battery_pct,sequence_no)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(equipment_id) DO UPDATE SET
+        captured_at=excluded.captured_at, received_at=excluded.received_at,
+        latitude=excluded.latitude, longitude=excluded.longitude, accuracy_m=excluded.accuracy_m,
+        speed_mps=excluded.speed_mps, bearing_deg=excluded.bearing_deg, altitude_m=excluded.altitude_m,
+        battery_pct=excluded.battery_pct, sequence_no=excluded.sequence_no
+      WHERE excluded.captured_at >= latest_positions.captured_at`).bind(p.equipmentId,p.capturedAt,p.receivedAt,p.latitude,p.longitude,p.accuracyM,p.speedMps,p.bearingDeg,p.altitudeM,p.batteryPct,p.sequenceNo)
+  ]);
+  return reply(request, [], 200, { 'cache-control': 'no-store' });
+}
+
 async function activate(request, env) {
   let body;
   try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
@@ -153,6 +198,7 @@ async function route(request, env) {
   if (request.method === 'GET' && url.pathname === '/health') return reply(request, { ok: true, service: 'fico-tracking-api', time: new Date().toISOString() });
   if (request.method === 'POST' && url.pathname === '/api/v1/activate') return activate(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/positions') return ingest(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v1/owntracks') return ingestOwnTracks(request, env);
   if (request.method === 'GET' && url.pathname === '/api/v1/equipment/latest') return latest(request, env);
   const match = url.pathname.match(/^\/api\/v1\/equipment\/([^/]+)\/history$/);
   if (request.method === 'GET' && match) return history(request, env, decodeURIComponent(match[1]));
