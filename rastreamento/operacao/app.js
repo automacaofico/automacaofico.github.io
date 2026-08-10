@@ -1,3 +1,9 @@
+import {
+  GPS_DEADBAND_M,
+  GPS_MAX_PRECISION_M,
+  analyzeProjectedTrack,
+} from "./motion.js";
+
 const API = /^(?:localhost|127\.0\.0\.1)$/.test(location.hostname)
   ? "http://127.0.0.1:8791"
   : "https://fico-tracking-api.automacaofico.workers.dev";
@@ -84,7 +90,11 @@ function project(point) {
           candidate.coordinate[1],
         );
         if (!best || d < best.distanceM)
-          best = { stationM: candidate.station_m, distanceM: d };
+          best = {
+            stationM: candidate.station_m,
+            distanceM: d,
+            coordinate: candidate.coordinate,
+          };
       }
   return best;
 }
@@ -92,46 +102,39 @@ function calculate(points, sessions) {
   const sorted = [...points].sort(
     (a, b) => Date.parse(a.captured_at) - Date.parse(b.captured_at),
   );
-  let rail = 0,
-    moving = 0,
-    stopped = 0,
-    observed = 0,
-    max = 0,
-    speedSum = 0,
-    speedCount = 0,
-    previous = null;
-  for (const point of sorted) {
+  sorted.forEach((point) => {
     point.projection = project(point);
-    const speed = Number(point.speed_mps);
-    if (Number.isFinite(speed)) {
-      max = Math.max(max, speed);
-      if (speed >= 0.5) {
-        speedSum += speed;
-        speedCount++;
-      }
-    }
-    if (previous) {
-      const dt =
-        (Date.parse(point.captured_at) - Date.parse(previous.captured_at)) /
-        1000;
-      if (dt > 0 && dt <= 60) {
-        observed += dt;
-        if (Number(previous.speed_mps) >= 0.5) moving += dt;
-        else stopped += dt;
-      }
-      if (
-        dt > 0 &&
-        point.projection?.distanceM <= 500 &&
-        previous.projection?.distanceM <= 500
-      ) {
-        const delta = Math.abs(
-          point.projection.stationM - previous.projection.stationM,
-        );
-        if (delta <= Math.max(200, dt * 45)) rail += delta;
-      }
-    }
-    previous = point;
-  }
+  });
+  const grouped = Object.groupBy
+    ? Object.groupBy(
+        sorted,
+        (point) => `${point.equipment_id}:${point.operator_registration}`,
+      )
+    : sorted.reduce(
+        (groups, point) => (
+          (groups[`${point.equipment_id}:${point.operator_registration}`] ||= []).push(
+            point,
+          ),
+          groups
+        ),
+        {},
+      );
+  const analyses = Object.values(grouped).map((values) =>
+    analyzeProjectedTrack(values),
+  );
+  const timeline = analyses
+    .flatMap((analysis) => analysis.timeline)
+    .sort((a, b) => Date.parse(a.captured_at) - Date.parse(b.captured_at));
+  const movingSpeeds = timeline
+    .map((point) => Number(point.effective_speed_mps))
+    .filter((speed) => Number.isFinite(speed) && speed >= 0.5);
+  const rail = analyses.reduce((sum, analysis) => sum + analysis.distanceM, 0);
+  const moving = analyses.reduce((sum, analysis) => sum + analysis.movingS, 0);
+  const stopped = analyses.reduce(
+    (sum, analysis) => sum + analysis.stoppedS,
+    0,
+  );
+  const observed = analyses.reduce((sum, analysis) => sum + analysis.observedS, 0);
   const duration = sessions.reduce(
     (sum, item) =>
       sum +
@@ -144,13 +147,25 @@ function calculate(points, sessions) {
     0,
   );
   return {
-    sorted,
+    sorted: timeline,
+    tracks: analyses.map((analysis) => analysis.accepted),
     rail,
     moving,
     stopped,
-    max,
-    average: speedCount ? speedSum / speedCount : 0,
+    max: movingSpeeds.length ? Math.max(...movingSpeeds) : 0,
+    average: movingSpeeds.length
+      ? movingSpeeds.reduce((sum, speed) => sum + speed, 0) /
+        movingSpeeds.length
+      : 0,
     coverage: duration ? Math.min(100, (observed / duration) * 100) : 0,
+    rejectedCount: analyses.reduce(
+      (sum, analysis) => sum + analysis.rejectedCount,
+      0,
+    ),
+    suppressedCount: analyses.reduce(
+      (sum, analysis) => sum + analysis.suppressedCount,
+      0,
+    ),
   };
 }
 function renderKpis(metrics) {
@@ -209,7 +224,10 @@ function renderChart(points) {
     sample = points.filter((_, i) => i % sampleStep === 0),
     start = Date.parse(points[0].captured_at),
     end = Date.parse(points.at(-1).captured_at),
-    max = Math.max(10, ...sample.map((p) => Number(p.speed_mps || 0) * 3.6));
+    max = Math.max(
+      10,
+      ...sample.map((p) => Number(p.effective_speed_mps || 0) * 3.6),
+    );
   for (let i = 0; i < 5; i++) {
     const line = document.createElementNS(ns, "line");
     const y = padding + ((height - padding * 2) * i) / 4;
@@ -230,7 +248,8 @@ function renderChart(points) {
         y =
           height -
           padding -
-          (height - padding * 2) * ((Number(p.speed_mps || 0) * 3.6) / max);
+          (height - padding * 2) *
+            ((Number(p.effective_speed_mps || 0) * 3.6) / max);
       return `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(" ");
@@ -288,39 +307,23 @@ function initMap() {
     });
   });
 }
-function renderMap(points) {
+function renderMap(tracks) {
   if (!map?.getSource("track")) return;
-  const grouped = Object.groupBy
-    ? Object.groupBy(
-        points,
-        (p) => `${p.equipment_id}:${p.operator_registration}`,
-      )
-    : points.reduce(
-        (a, p) => (
-          (a[`${p.equipment_id}:${p.operator_registration}`] ||= []).push(p),
-          a
-        ),
-        {},
-      );
-  const features = Object.values(grouped)
+  const features = tracks
     .filter((v) => v.length > 1)
     .map((values) => ({
       type: "Feature",
       properties: {},
       geometry: {
         type: "LineString",
-        coordinates: values.map((p) => [
-          Number(p.longitude),
-          Number(p.latitude),
-        ]),
+        coordinates: values.map((p) => p.projection.coordinate),
       },
     }));
   map.getSource("track").setData({ type: "FeatureCollection", features });
-  if (points.length) {
+  const accepted = tracks.flat();
+  if (accepted.length) {
     const bounds = new maplibregl.LngLatBounds();
-    points.forEach((p) =>
-      bounds.extend([Number(p.longitude), Number(p.latitude)]),
-    );
+    accepted.forEach((point) => bounds.extend(point.projection.coordinate));
     map.fitBounds(bounds, { padding: 45, maxZoom: 14 });
   }
 }
@@ -359,12 +362,16 @@ async function load() {
     renderKpis(metrics);
     renderSessions(data.sessions);
     renderChart(metrics.sorted);
-    renderMap(metrics.sorted);
-    els.source.textContent = data.positions.some(
+    renderMap(metrics.tracks);
+    const sourceLabel = data.positions.some(
       (p) => Date.parse(p.captured_at) < Date.now() - 7 * 86400000,
     )
       ? "Sinais originais + amostra de 1 min"
       : "Sinais originais";
+    els.source.textContent =
+      `${sourceLabel} · filtro ${GPS_DEADBAND_M} m · ` +
+      `precisão ≤ ${GPS_MAX_PRECISION_M} m · ` +
+      `${metrics.suppressedCount.toLocaleString("pt-BR")} oscilações suprimidas`;
   } catch (error) {
     notify(els.message, error.message);
   } finally {

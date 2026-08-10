@@ -68,7 +68,7 @@
           </article>
           <article>
             <span>TEMPO EM MOVIMENTO</span><strong id="moving">—</strong
-            ><small>velocidade ≥ 1,8 km/h</small>
+            ><small>deslocamento confirmado fora da zona de 30 m</small>
           </article>
           <article>
             <span>TEMPO PARADO</span><strong id="stopped">—</strong
@@ -80,7 +80,7 @@
           </article>
           <article>
             <span>VELOCIDADE MÁXIMA</span><strong id="maximum">—</strong
-            ><small>maior sinal GPS válido</small>
+            ><small>maior sinal durante movimento confirmado</small>
           </article>
           <article>
             <span>COBERTURA GPS</span><strong id="coverage">—</strong
@@ -141,9 +141,11 @@
           <summary>Como os indicadores são calculados</summary>
           <p>
             <b>Distância na via:</b> soma das diferenças de quilometragem
-            projetada no eixo ferroviário, somente para pontos a até 500 m da
-            linha e sem saltos impossíveis. <b>Movimento:</b> velocidade GPS
-            igual ou superior a 0,5 m/s. <b>Cobertura:</b> intervalos entre
+            projetada no eixo ferroviário, com precisão GPS de até 40 m e zona
+            de imobilidade de 30 m. Duas posições consecutivas fora dessa zona
+            confirmam o movimento e eliminam o zigue-zague de equipamentos
+            parados. <b>Movimento:</b> deslocamento confirmado pelo mesmo filtro
+            espacial. <b>Cobertura:</b> intervalos entre
             sinais de até 60 s divididos pelo tempo total dos turnos. Os
             indicadores são diagnósticos operacionais; não substituem registros
             de segurança.
@@ -152,6 +154,6 @@
       </section>
     </main>
     <script src="../../mapa-pendencias/assets/vendor/maplibre/maplibre-gl.js"></script>
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
   </body>
 </html>

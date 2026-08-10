@@ -1,4 +1,5 @@
 import { normalizeOperatorName, normalizeOperatorPin, normalizeOwnTracksLocation, normalizePosition, normalizeRegistration, ownTracksEquipmentId, publicEquipmentId, validatePosition } from './validation.js';
+import { summarizeGpsMovement } from './motion.js';
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
 
@@ -166,52 +167,14 @@ async function activeSessionForOperator(env, registration) {
     WHERE s.operator_registration=? AND s.ended_at IS NULL LIMIT 1`).bind(registration).first();
 }
 
-function haversineMeters(a, b) {
-  const radius = 6_371_000;
-  const toRadians = (value) => value * Math.PI / 180;
-  const deltaLatitude = toRadians(b.latitude - a.latitude);
-  const deltaLongitude = toRadians(b.longitude - a.longitude);
-  const latitudeA = toRadians(a.latitude);
-  const latitudeB = toRadians(b.latitude);
-  const value = Math.sin(deltaLatitude / 2) ** 2
-    + Math.cos(latitudeA) * Math.cos(latitudeB) * Math.sin(deltaLongitude / 2) ** 2;
-  return 2 * radius * Math.asin(Math.sqrt(value));
-}
-
 function summarizePositionRows(rows, startedAt, endedAt) {
-  let movingS = 0;
-  let stoppedS = 0;
-  let distanceM = 0;
-  let maxSpeedMps = null;
-  let movingSpeedSum = 0;
-  let movingSpeedCount = 0;
-  for (let index = 0; index < rows.length; index += 1) {
-    const point = rows[index];
-    const speed = Number(point.speed_mps);
-    if (Number.isFinite(speed)) {
-      maxSpeedMps = maxSpeedMps === null ? speed : Math.max(maxSpeedMps, speed);
-      if (speed >= 0.5) { movingSpeedSum += speed; movingSpeedCount += 1; }
-    }
-    if (!index) continue;
-    const previous = rows[index - 1];
-    const elapsedS = Math.max(0, (Date.parse(point.captured_at) - Date.parse(previous.captured_at)) / 1000);
-    if (elapsedS <= 60) {
-      if (Number(previous.speed_mps) >= 0.5) movingS += elapsedS;
-      else stoppedS += elapsedS;
-    }
-    const segmentM = haversineMeters(
-      { latitude: Number(previous.latitude), longitude: Number(previous.longitude) },
-      { latitude: Number(point.latitude), longitude: Number(point.longitude) }
-    );
-    const plausibleM = Math.max(150, elapsedS * 45);
-    if (elapsedS > 0 && segmentM <= plausibleM) distanceM += segmentM;
-  }
+  const motion = summarizeGpsMovement(rows);
   return {
     durationS: Math.max(0, Math.round((Date.parse(endedAt) - Date.parse(startedAt)) / 1000)),
     pointsCount: rows.length,
-    movingS: Math.round(movingS), stoppedS: Math.round(stoppedS), gpsDistanceM: distanceM,
-    avgMovingSpeedMps: movingSpeedCount ? movingSpeedSum / movingSpeedCount : null,
-    maxSpeedMps
+    movingS: Math.round(motion.movingS), stoppedS: Math.round(motion.stoppedS), gpsDistanceM: motion.distanceM,
+    avgMovingSpeedMps: motion.avgMovingSpeedMps,
+    maxSpeedMps: motion.maxSpeedMps
   };
 }
 
@@ -219,7 +182,7 @@ async function finalizeSessionSummary(env, sessionId) {
   const session = await env.DB.prepare(`SELECT id,equipment_id,operator_registration,started_at,ended_at
     FROM operator_sessions WHERE id=? AND ended_at IS NOT NULL`).bind(sessionId).first();
   if (!session) return;
-  const result = await env.DB.prepare(`SELECT captured_at,latitude,longitude,speed_mps
+  const result = await env.DB.prepare(`SELECT captured_at,latitude,longitude,accuracy_m,speed_mps
     FROM positions WHERE equipment_id=? AND operator_registration=? AND captured_at>=? AND captured_at<=?
     ORDER BY captured_at`).bind(session.equipment_id, session.operator_registration, session.started_at, session.ended_at).all();
   const summary = summarizePositionRows(result.results, session.started_at, session.ended_at);
