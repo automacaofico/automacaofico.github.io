@@ -296,6 +296,22 @@ async function registerOperator(request, env) {
   return reply(request, { ok: true, operator: { registration, name } }, 201, { 'cache-control': 'no-store' });
 }
 
+async function createOperatorAdmin(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
+  if (!adminAuthorized(env, body.adminPassword)) return reply(request, { ok: false, error: 'Senha administrativa inválida.' }, 401);
+  const registration = normalizeRegistration(body.registration);
+  const name = normalizeOperatorName(body.name);
+  const pin = normalizeOperatorPin(body.pin);
+  if (!registration || !name || !pin) return reply(request, { ok: false, error: 'Informe nome, matrícula válida e PIN numérico de 4 a 8 dígitos.' }, 400);
+  const exists = await env.DB.prepare('SELECT registration FROM operators WHERE registration=?').bind(registration).first();
+  if (exists) return reply(request, { ok: false, error: 'Esta matrícula já está cadastrada. Use a opção Editar / PIN.' }, 409);
+  const salt = randomToken(16);
+  await env.DB.prepare(`INSERT INTO operators (registration,name,pin_salt,pin_hash,active,updated_at)
+    VALUES (?,?,?,?,1,CURRENT_TIMESTAMP)`).bind(registration, name, salt, await operatorPinHash(salt, pin)).run();
+  return reply(request, { ok: true, operator: { registration, name } }, 201, { 'cache-control': 'no-store' });
+}
+
 async function listActivationCodes(request, env) {
   let body;
   try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
@@ -340,8 +356,60 @@ async function listOperatorsAdmin(request, env) {
   let body;
   try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
   if (!adminAuthorized(env, body.adminPassword)) return reply(request, { ok: false, error: 'Senha administrativa inválida.' }, 401);
-  const rows = await env.DB.prepare(`SELECT registration,name,active,created_at,updated_at FROM operators ORDER BY name`).all();
-  return reply(request, { ok: true, operators: rows.results.map((row) => ({ registration: row.registration, name: row.name, active: Boolean(row.active), createdAt: row.created_at, updatedAt: row.updated_at })) }, 200, { 'cache-control': 'no-store' });
+  const rows = await env.DB.prepare(`SELECT o.registration,o.name,o.active,o.created_at,o.updated_at,
+    (SELECT COUNT(*) FROM operator_sessions s WHERE s.operator_registration=o.registration) AS sessions_count,
+    (SELECT s.equipment_id FROM operator_sessions s WHERE s.operator_registration=o.registration AND s.ended_at IS NULL LIMIT 1) AS active_equipment,
+    (SELECT COUNT(*) FROM personal_devices d WHERE d.operator_registration=o.registration) AS devices_count,
+    (SELECT COUNT(*) FROM personal_devices d WHERE d.operator_registration=o.registration AND d.active=1) AS active_devices_count,
+    (SELECT MAX(d.last_seen_at) FROM personal_devices d WHERE d.operator_registration=o.registration) AS last_seen_at
+    FROM operators o ORDER BY o.active DESC,o.name`).all();
+  return reply(request, { ok: true, operators: rows.results.map((row) => ({
+    registration: row.registration, name: row.name, active: Boolean(row.active), createdAt: row.created_at,
+    updatedAt: row.updated_at, sessionsCount: Number(row.sessions_count), activeEquipment: row.active_equipment || null,
+    devicesCount: Number(row.devices_count), activeDevicesCount: Number(row.active_devices_count), lastSeenAt: row.last_seen_at || null
+  })) }, 200, { 'cache-control': 'no-store' });
+}
+
+async function updateOperatorAdmin(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
+  if (!adminAuthorized(env, body.adminPassword)) return reply(request, { ok: false, error: 'Senha administrativa inválida.' }, 401);
+  const registration = normalizeRegistration(body.registration);
+  const name = normalizeOperatorName(body.name);
+  const pinProvided = String(body.pin || '').trim().length > 0;
+  const pin = pinProvided ? normalizeOperatorPin(body.pin) : null;
+  if (!registration || !name || (pinProvided && !pin)) return reply(request, { ok: false, error: 'Informe nome válido e, ao redefinir, PIN numérico de 4 a 8 dígitos.' }, 400);
+  const current = await env.DB.prepare('SELECT registration FROM operators WHERE registration=?').bind(registration).first();
+  if (!current) return reply(request, { ok: false, error: 'Operador não encontrado.' }, 404);
+  if (pinProvided) {
+    const salt = randomToken(16);
+    await env.DB.prepare(`UPDATE operators SET name=?,pin_salt=?,pin_hash=?,updated_at=CURRENT_TIMESTAMP WHERE registration=?`)
+      .bind(name, salt, await operatorPinHash(salt, pin), registration).run();
+  } else {
+    await env.DB.prepare('UPDATE operators SET name=?,updated_at=CURRENT_TIMESTAMP WHERE registration=?').bind(name, registration).run();
+  }
+  return reply(request, { ok: true, operator: { registration, name }, pinChanged: pinProvided }, 200, { 'cache-control': 'no-store' });
+}
+
+async function setOperatorStatusAdmin(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
+  if (!adminAuthorized(env, body.adminPassword)) return reply(request, { ok: false, error: 'Senha administrativa inválida.' }, 401);
+  const registration = normalizeRegistration(body.registration);
+  if (!registration || typeof body.active !== 'boolean') return reply(request, { ok: false, error: 'Operador ou status inválido.' }, 400);
+  const operator = await env.DB.prepare('SELECT registration,name,active FROM operators WHERE registration=?').bind(registration).first();
+  if (!operator) return reply(request, { ok: false, error: 'Operador não encontrado.' }, 404);
+  if (!body.active) {
+    const session = await activeSessionForOperator(env, registration);
+    if (session) return reply(request, { ok: false, error: `Encerre primeiro o turno ativo no ${session.equipment_id}.`, conflict: publicSession(session) }, 409);
+    const results = await env.DB.batch([
+      env.DB.prepare('UPDATE operators SET active=0,updated_at=CURRENT_TIMESTAMP WHERE registration=?').bind(registration),
+      env.DB.prepare('UPDATE personal_devices SET active=0 WHERE operator_registration=? AND active=1').bind(registration)
+    ]);
+    return reply(request, { ok: true, active: false, revokedDevices: results[1].meta.changes }, 200, { 'cache-control': 'no-store' });
+  }
+  await env.DB.prepare('UPDATE operators SET active=1,updated_at=CURRENT_TIMESTAMP WHERE registration=?').bind(registration).run();
+  return reply(request, { ok: true, active: true, requiresDeviceEnrollment: true }, 200, { 'cache-control': 'no-store' });
 }
 
 async function createPersonalDeviceAdmin(request, env) {
@@ -706,6 +774,9 @@ async function route(request, env) {
   if (request.method === 'POST' && url.pathname === '/api/v1/admin/activation-codes/list') return listActivationCodes(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/admin/activation-codes/generate') return generateActivationCode(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v2/admin/operators/list') return listOperatorsAdmin(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v2/admin/operators/create') return createOperatorAdmin(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v2/admin/operators/update') return updateOperatorAdmin(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v2/admin/operators/status') return setOperatorStatusAdmin(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v2/admin/devices/create') return createPersonalDeviceAdmin(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v2/admin/devices/list') return listPersonalDevicesAdmin(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v2/admin/devices/revoke') return revokePersonalDeviceAdmin(request, env);
