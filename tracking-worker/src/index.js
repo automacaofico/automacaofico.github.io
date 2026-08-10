@@ -1,4 +1,4 @@
-import { normalizeOwnTracksLocation, normalizePosition, publicEquipmentId, validatePosition } from './validation.js';
+import { normalizeOwnTracksLocation, normalizePosition, ownTracksEquipmentId, publicEquipmentId, validatePosition } from './validation.js';
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
 
@@ -46,7 +46,7 @@ async function authenticateOwnTracks(request, env) {
   try { decoded = atob(match[1]); } catch { return null; }
   const separator = decoded.indexOf(':');
   if (separator < 1) return null;
-  const equipmentId = publicEquipmentId(decoded.slice(0, separator).toUpperCase());
+  const equipmentId = ownTracksEquipmentId(decoded.slice(0, separator));
   const password = decoded.slice(separator + 1);
   if (!equipmentId || !password) return null;
   const hash = await sha256(password);

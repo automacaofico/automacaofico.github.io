@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeOwnTracksLocation, normalizePosition, publicEquipmentId, validatePosition } from '../src/validation.js';
+import { normalizeOwnTracksLocation, normalizePosition, ownTracksEquipmentId, publicEquipmentId, validatePosition } from '../src/validation.js';
 
 const valid = () => ({ equipmentId: 'NTC001', capturedAt: new Date().toISOString(), latitude: -14.01, longitude: -49.19, accuracyM: 6, batteryPct: 84 });
 
@@ -10,6 +10,11 @@ test('rejects invalid coordinates', () => assert.match(validatePosition({ ...val
 test('publishes only registered identifiers', () => {
   assert.equal(publicEquipmentId('LOCO007'), 'LOCO007');
   assert.equal(publicEquipmentId('LOCO008'), null);
+});
+test('maps simple locomotive aliases used by OwnTracks', () => {
+  assert.equal(ownTracksEquipmentId('LOC001'), 'LOCO001');
+  assert.equal(ownTracksEquipmentId('LOCO01'), 'LOCO001');
+  assert.equal(ownTracksEquipmentId('LOC008'), null);
 });
 test('normalizes captured time and optional telemetry', () => {
   const normalized = normalizePosition(valid(), '2026-08-10T12:00:00.000Z');

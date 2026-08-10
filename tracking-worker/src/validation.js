@@ -52,3 +52,11 @@ export function normalizeOwnTracksLocation(value, equipmentId) {
 export function publicEquipmentId(value) {
   return EQUIPMENT_ID.test(String(value || '')) ? String(value) : null;
 }
+
+export function ownTracksEquipmentId(value) {
+  const id = String(value || '').trim().toUpperCase();
+  if (publicEquipmentId(id)) return id;
+  if (/^LOC00[1-7]$/.test(id)) return `LOCO${id.slice(3)}`;
+  if (/^LOCO0[1-7]$/.test(id)) return `LOCO0${id.slice(4)}`;
+  return null;
+}
