@@ -4,9 +4,20 @@ const API_BASE = 'https://fico-tracking-api.automacaofico.workers.dev';
 const AXIS_URL = '../mapa-superestrutura/assets/data/fico-axis-full.json';
 const TYPE_LABELS = { locomotiva: 'Locomotiva', socadora: 'Socadora de via', reguladora: 'Reguladora de lastro', ntc: 'New Track Construction' };
 const TYPE_MARKS = { locomotiva: 'L', socadora: 'S', reguladora: 'R', ntc: 'N' };
+const PACKAGES = [
+  { id: 'P01', name: 'Pacote 01', start: 0, end: 38100, color: '#0075a9' },
+  { id: 'P02', name: 'Pacote 02', start: 38100, end: 71300, color: '#55a646' },
+  { id: 'P03', name: 'Pacote 03', start: 71300, end: 104500, color: '#ee7623' },
+  { id: 'P04', name: 'Pacote 04', start: 104500, end: 131260, color: '#7b61a8' },
+  { id: 'P05', name: 'Pacote 05', start: 131260, end: 167300, color: '#008a8a' },
+  { id: 'P06', name: 'Pacote 06', start: 167300, end: 225000, color: '#c34f5d' },
+  { id: 'P07', name: 'Pacote 07', start: 225000, end: 239950, color: '#657583' },
+  { id: 'P08', name: 'Pacote 08', start: 239950, end: 292260, color: '#b27a19' }
+];
 const state = {
   axis: [], map: null, equipment: [], markers: new Map(), popup: null, popupPinnedId: null,
-  selectedId: 'LOCO001', latest: null, sound: false, priorOfflineCount: null, historyEquipment: null
+  selectedId: 'LOCO001', latest: null, sound: false, priorOfflineCount: null, historyEquipment: null,
+  basemap: 'street', packageMarkers: [], kmPopup: null, initialFitDone: false
 };
 
 const $ = (id) => document.getElementById(id);
@@ -15,11 +26,80 @@ const els = {
   speed: $('speed-value'), accuracy: $('accuracy-value'), bearing: $('bearing-value'), battery: $('battery-value'),
   last: $('last-update'), coords: $('coordinates'), history: $('history-summary'), historyEquipment: $('history-equipment'),
   recenter: $('recenter'), sound: $('sound-toggle'), fleetList: $('fleet-list'), onlineCount: $('online-count'),
-  fleetCount: $('fleet-count'), equipmentName: $('equipment-name'), equipmentType: $('equipment-type'), equipmentMark: $('equipment-mark')
+  fleetCount: $('fleet-count'), equipmentName: $('equipment-name'), equipmentType: $('equipment-type'), equipmentMark: $('equipment-mark'),
+  fitFleet: $('fit-fleet')
 };
 
 function mapStyle() {
-  return { version: 8, sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap' } }, layers: [{ id: 'osm', type: 'raster', source: 'osm', paint: { 'raster-saturation': -0.7, 'raster-contrast': 0.08, 'raster-brightness-max': 0.92 } }] };
+  return {
+    version: 8,
+    sources: {
+      osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap' },
+      satellite: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 17, attribution: 'Esri' }
+    },
+    layers: [
+      { id: 'osm', type: 'raster', source: 'osm', paint: { 'raster-saturation': -0.7, 'raster-contrast': 0.08, 'raster-brightness-max': 0.92 } },
+      { id: 'satellite', type: 'raster', source: 'satellite', layout: { visibility: 'none' } }
+    ]
+  };
+}
+
+function pointAtStation(target) {
+  if (!state.axis.length) return null;
+  if (target <= state.axis[0].station_m) return state.axis[0].coordinate;
+  if (target >= state.axis[state.axis.length - 1].station_m) return state.axis[state.axis.length - 1].coordinate;
+  let low = 0, high = state.axis.length - 1;
+  while (low + 1 < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (state.axis[middle].station_m <= target) low = middle; else high = middle;
+  }
+  const before = state.axis[low], after = state.axis[high];
+  const ratio = (target - before.station_m) / Math.max(1, after.station_m - before.station_m);
+  return [before.coordinate[0] + (after.coordinate[0] - before.coordinate[0]) * ratio, before.coordinate[1] + (after.coordinate[1] - before.coordinate[1]) * ratio];
+}
+
+function sliceCoordinates(start, end) {
+  const coordinates = [pointAtStation(start)];
+  state.axis.forEach((point) => { if (point.station_m > start && point.station_m < end) coordinates.push(point.coordinate); });
+  coordinates.push(pointAtStation(end));
+  return coordinates.filter(Boolean);
+}
+
+function packageAt(stationM) {
+  return PACKAGES.find((item) => stationM >= item.start && stationM < item.end) || PACKAGES.at(-1);
+}
+
+function packageCollection() {
+  const maximum = state.axis.at(-1)?.station_m || 0;
+  return {
+    type: 'FeatureCollection',
+    features: PACKAGES.map((item) => ({
+      type: 'Feature', properties: item,
+      geometry: { type: 'LineString', coordinates: sliceCoordinates(item.start, Math.min(item.end, maximum)) }
+    }))
+  };
+}
+
+function addPackageMarkers() {
+  state.packageMarkers.forEach((marker) => marker.remove());
+  state.packageMarkers = PACKAGES.map((item) => {
+    const element = document.createElement('div');
+    element.className = 'package-map-label'; element.textContent = item.id; element.style.setProperty('--package', item.color);
+    element.title = `${item.name} · KM ${formatKm(item.start)} — ${formatKm(Math.min(item.end, state.axis.at(-1).station_m))}`;
+    return new maplibregl.Marker({ element, anchor: 'center' }).setLngLat(pointAtStation((item.start + Math.min(item.end, state.axis.at(-1).station_m)) / 2)).addTo(state.map);
+  });
+}
+
+function showKmReadout(lngLat) {
+  const projection = projectToAxis(lngLat.lng, lngLat.lat);
+  if (!projection) return;
+  const pack = packageAt(projection.stationM);
+  const content = document.createElement('div'); content.className = 'km-readout';
+  const packageName = document.createElement('span'); packageName.textContent = pack.name;
+  const km = document.createElement('strong'); km.textContent = `KM ${formatKm(projection.stationM)}`;
+  content.append(packageName, km);
+  if (!state.kmPopup) state.kmPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 13, className: 'km-popup' });
+  state.kmPopup.setLngLat(lngLat).setDOMContent(content).addTo(state.map);
 }
 
 function initMap(axis) {
@@ -27,12 +107,19 @@ function initMap(axis) {
   state.map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-left');
   state.map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
   state.map.on('load', () => {
-    state.map.addSource('fico-axis', { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: axis.map((p) => p.coordinate) } } });
-    state.map.addLayer({ id: 'axis-shadow', type: 'line', source: 'fico-axis', paint: { 'line-color': '#082b4c', 'line-width': 7, 'line-opacity': .8 } });
-    state.map.addLayer({ id: 'axis', type: 'line', source: 'fico-axis', paint: { 'line-color': '#f28b22', 'line-width': 2.5 } });
+    state.map.addSource('packages', { type: 'geojson', data: packageCollection() });
+    state.map.addLayer({ id: 'package-casing', type: 'line', source: 'packages', paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 6, 14, 11], 'line-opacity': .9 } });
+    state.map.addLayer({ id: 'package-lines', type: 'line', source: 'packages', paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 3, 14, 7], 'line-opacity': .94 } });
+    state.map.addLayer({ id: 'package-hit', type: 'line', source: 'packages', paint: { 'line-color': '#ffffff', 'line-width': 24, 'line-opacity': .01 } });
     state.map.addSource('history', { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [] } } });
     state.map.addLayer({ id: 'history', type: 'line', source: 'history', paint: { 'line-color': '#32a6d8', 'line-width': 4, 'line-opacity': .9 } });
+    addPackageMarkers();
+    state.map.on('mouseenter', 'package-hit', () => { state.map.getCanvas().style.cursor = 'crosshair'; });
+    state.map.on('mousemove', 'package-hit', (event) => showKmReadout(event.lngLat));
+    state.map.on('mouseleave', 'package-hit', () => { state.map.getCanvas().style.cursor = ''; state.kmPopup?.remove(); });
     state.equipment.forEach(updateMarker);
+    setBasemap(state.basemap);
+    if (!state.initialFitDone && state.equipment.some((item) => item.receivedAt)) { state.initialFitDone = true; fitFleet(); }
   });
   state.map.on('click', () => { state.popupPinnedId = null; state.popup?.remove(); });
 }
@@ -208,6 +295,30 @@ function selectEquipment(id, fly) {
   if (fly && item.receivedAt) state.map?.easeTo({ center: [item.longitude, item.latitude], zoom: Math.max(state.map.getZoom(), 13), duration: 800 });
 }
 
+function fitFleet() {
+  if (!state.map || !state.axis.length) return;
+  const positioned = state.equipment.filter((item) => item.receivedAt && Number.isFinite(item.longitude) && Number.isFinite(item.latitude));
+  if (positioned.length === 1) {
+    state.map.easeTo({ center: [positioned[0].longitude, positioned[0].latitude], zoom: 13, duration: 800 });
+    return;
+  }
+  const bounds = new maplibregl.LngLatBounds();
+  if (positioned.length) positioned.forEach((item) => bounds.extend([item.longitude, item.latitude]));
+  else state.axis.forEach((point) => bounds.extend(point.coordinate));
+  state.map.fitBounds(bounds, { padding: window.innerWidth < 700 ? 45 : 85, maxZoom: 13, duration: 900 });
+}
+
+function setBasemap(mode) {
+  state.basemap = mode;
+  if (!state.map?.loaded()) return;
+  state.map.setLayoutProperty('osm', 'visibility', mode === 'street' ? 'visible' : 'none');
+  state.map.setLayoutProperty('satellite', 'visibility', mode === 'satellite' ? 'visible' : 'none');
+  document.querySelectorAll('[data-basemap]').forEach((button) => {
+    const active = button.dataset.basemap === mode;
+    button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
+  });
+}
+
 async function loadLatest() {
   try {
     const response = await fetch(`${API_BASE}/api/v1/equipment/latest`, { cache: 'no-store' });
@@ -218,6 +329,7 @@ async function loadLatest() {
     renderFleetState(); renderFleetList(); state.equipment.forEach(updateMarker);
     const selected = currentEquipment(state.selectedId) || state.equipment[0];
     if (selected) { state.selectedId = selected.equipmentId; renderSelected(selected); if (selected.receivedAt && state.historyEquipment !== selected.equipmentId) loadHistory(selected.equipmentId); }
+    if (!state.initialFitDone && state.map?.loaded() && state.equipment.some((item) => item.receivedAt)) { state.initialFitDone = true; fitFleet(); }
   } catch (error) {
     els.system.className = 'system-state offline'; els.system.querySelector('span').textContent = 'Serviço de rastreamento indisponível';
     console.warn('Falha ao consultar posições', error);
@@ -244,6 +356,8 @@ els.sound.addEventListener('click', () => {
   els.sound.lastChild.textContent = state.sound ? ' Som ativo' : ' Ativar som'; if (state.sound) alertSound();
 });
 els.recenter.addEventListener('click', () => state.latest?.receivedAt && state.map.easeTo({ center: [state.latest.longitude, state.latest.latitude], zoom: 14, duration: 700 }));
+els.fitFleet.addEventListener('click', fitFleet);
+document.querySelectorAll('[data-basemap]').forEach((button) => button.addEventListener('click', () => setBasemap(button.dataset.basemap)));
 
 fetch(AXIS_URL).then((response) => response.json()).then((data) => {
   state.axis = data.points; initMap(state.axis); loadLatest();
