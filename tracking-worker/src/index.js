@@ -42,6 +42,48 @@ async function operatorPinHash(salt, pin) {
   return sha256(`${salt}:${pin}`);
 }
 
+function base64Url(bytes) {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function fromBase64Url(value) {
+  const normalized = String(value).replace(/-/g, '+').replace(/_/g, '/');
+  const binary = atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '='));
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+async function activationEncryptionKey(env) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`fico-activation:${env.OPERATOR_ADMIN_PASSWORD}`));
+  return crypto.subtle.importKey('raw', digest, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+
+async function encryptActivationCode(env, code) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await activationEncryptionKey(env), new TextEncoder().encode(code));
+  return { ciphertext: base64Url(new Uint8Array(encrypted)), iv: base64Url(iv) };
+}
+
+async function decryptActivationCode(env, ciphertext, iv) {
+  if (!ciphertext || !iv) return null;
+  try {
+    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromBase64Url(iv) }, await activationEncryptionKey(env), fromBase64Url(ciphertext));
+    return new TextDecoder().decode(decrypted);
+  } catch { return null; }
+}
+
+function adminAuthorized(env, value) {
+  return Boolean(env.OPERATOR_ADMIN_PASSWORD) && String(value || '') === env.OPERATOR_ADMIN_PASSWORD;
+}
+
+function createActivationCode() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  const token = [...bytes].map((byte) => alphabet[byte % alphabet.length]).join('');
+  return `FICO-${token.slice(0, 4)}-${token.slice(4)}`;
+}
+
 async function authenticatedOperator(env, registrationValue, pinValue) {
   const registration = normalizeRegistration(registrationValue);
   const pin = normalizeOperatorPin(pinValue);
@@ -119,7 +161,7 @@ function publicSession(row) {
 async function registerOperator(request, env) {
   let body;
   try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
-  if (!env.OPERATOR_ADMIN_PASSWORD || String(body.adminPassword || '') !== env.OPERATOR_ADMIN_PASSWORD) {
+  if (!adminAuthorized(env, body.adminPassword)) {
     return reply(request, { ok: false, error: 'Senha administrativa inválida.' }, 401);
   }
   const registration = normalizeRegistration(body.registration);
@@ -133,6 +175,46 @@ async function registerOperator(request, env) {
     ON CONFLICT(registration) DO UPDATE SET name=excluded.name,pin_salt=excluded.pin_salt,pin_hash=excluded.pin_hash,active=1,updated_at=CURRENT_TIMESTAMP`)
     .bind(registration, name, salt, hash).run();
   return reply(request, { ok: true, operator: { registration, name } }, 201, { 'cache-control': 'no-store' });
+}
+
+async function listActivationCodes(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
+  if (!adminAuthorized(env, body.adminPassword)) return reply(request, { ok: false, error: 'Senha administrativa inválida.' }, 401);
+  const rows = await env.DB.prepare(`SELECT code_hash,equipment_id,expires_at,used_at,installation_id,created_at,code_ciphertext,code_iv
+    FROM activation_codes ORDER BY created_at DESC LIMIT 250`).all();
+  const now = Date.now();
+  const codes = [];
+  for (const row of rows.results) {
+    const status = row.used_at ? 'used' : Date.parse(row.expires_at) <= now ? 'expired' : 'active';
+    codes.push({
+      id: row.code_hash,
+      equipmentId: row.equipment_id,
+      code: status === 'active' ? await decryptActivationCode(env, row.code_ciphertext, row.code_iv) : null,
+      status,
+      createdAt: row.created_at,
+      expiresAt: row.expires_at,
+      usedAt: row.used_at,
+      installationId: row.installation_id
+    });
+  }
+  return reply(request, { ok: true, codes }, 200, { 'cache-control': 'no-store' });
+}
+
+async function generateActivationCode(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return reply(request, { ok: false, error: 'JSON inválido.' }, 400); }
+  if (!adminAuthorized(env, body.adminPassword)) return reply(request, { ok: false, error: 'Senha administrativa inválida.' }, 401);
+  const equipmentId = publicEquipmentId(body.equipmentId);
+  const validDays = Math.min(90, Math.max(1, Math.round(Number(body.validDays) || 30)));
+  if (!equipmentId) return reply(request, { ok: false, error: 'Equipamento inválido.' }, 400);
+  const code = createActivationCode();
+  const codeHash = await sha256(code);
+  const encrypted = await encryptActivationCode(env, code);
+  const expiresAt = new Date(Date.now() + validDays * 86_400_000).toISOString();
+  await env.DB.prepare(`INSERT INTO activation_codes (code_hash,equipment_id,expires_at,code_ciphertext,code_iv)
+    VALUES (?,?,?,?,?)`).bind(codeHash, equipmentId, expiresAt, encrypted.ciphertext, encrypted.iv).run();
+  return reply(request, { ok: true, activationCode: { id: codeHash, equipmentId, code, status: 'active', createdAt: new Date().toISOString(), expiresAt } }, 201, { 'cache-control': 'no-store' });
 }
 
 async function activeOperatorSession(env, equipmentId) {
@@ -300,6 +382,8 @@ async function route(request, env) {
   if (request.method === 'GET' && url.pathname === '/health') return reply(request, { ok: true, service: 'fico-tracking-api', time: new Date().toISOString() });
   if (request.method === 'POST' && url.pathname === '/api/v1/activate') return activate(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/operators') return registerOperator(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v1/admin/activation-codes/list') return listActivationCodes(request, env);
+  if (request.method === 'POST' && url.pathname === '/api/v1/admin/activation-codes/generate') return generateActivationCode(request, env);
   if (request.method === 'GET' && url.pathname === '/api/v1/operator/session') return getOperatorSession(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/operator/session/start') return startOperatorSession(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/operator/session/end') return endOperatorSession(request, env);

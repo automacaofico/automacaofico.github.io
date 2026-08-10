@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Administração do rastreamento | FICO</title>
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#082b4c">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header><a href="../"><img src="../../mapa-pendencias/assets/brand/fico-logo-color.png" alt="FICO"></a><span>ADMINISTRAÇÃO DO RASTREAMENTO</span></header>
+  <main>
+    <section class="intro"><p>CREDENCIAIS DOS APARELHOS</p><h1>Códigos de<br><span>ativação.</span></h1><small>Gere códigos descartáveis para vincular o aplicativo Android ao equipamento correto. Cada código funciona uma única vez.</small></section>
+
+    <section id="login-card" class="card login-card">
+      <h2>Acesso da coordenação</h2>
+      <form id="login-form">
+        <label>Senha administrativa<input id="admin-password" type="password" autocomplete="current-password" required autofocus></label>
+        <button type="submit">ENTRAR</button>
+        <div id="login-message" class="message" role="alert" hidden></div>
+      </form>
+    </section>
+
+    <section id="admin-panel" class="admin-panel" hidden>
+      <div class="generator card">
+        <div><p>NOVO CÓDIGO</p><h2>Gerar ativação</h2></div>
+        <form id="generate-form">
+          <label>Equipamento<select id="equipment"></select></label>
+          <label>Validade<select id="valid-days"><option value="7">7 dias</option><option value="30" selected>30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option></select></label>
+          <button type="submit">GERAR CÓDIGO</button>
+        </form>
+        <div id="generated-code" class="generated-code" hidden>
+          <span>CÓDIGO GERADO</span><strong id="generated-value"></strong><button id="copy-generated" type="button">COPIAR</button>
+          <small>Entregue este código ao responsável pela instalação do aparelho.</small>
+        </div>
+        <div id="generate-message" class="message" role="alert" hidden></div>
+      </div>
+
+      <div class="inventory card">
+        <div class="inventory-head"><div><p>CONTROLE</p><h2>Códigos cadastrados</h2></div><button id="refresh" type="button">ATUALIZAR</button></div>
+        <div class="summary"><span><b id="active-count">0</b> ativos</span><span><b id="used-count">0</b> utilizados</span><span><b id="expired-count">0</b> expirados</span></div>
+        <div id="codes-list" class="codes-list"></div>
+      </div>
+    </section>
+  </main>
+  <footer><span>Central FICO · acesso restrito</span><a href="../">Voltar ao mapa</a></footer>
+  <script src="app.js"></script>
+</body>
+</html>

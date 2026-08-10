@@ -11,6 +11,8 @@ API Cloudflare Worker + D1 para receber posições autenticadas e publicar a loc
 - `GET /api/v1/operator/session?equipmentId=...` — consulta o operador atualmente associado.
 - `POST /api/v1/operator/session/start` — abre ou transfere um turno operacional.
 - `POST /api/v1/operator/session/end` — encerra o turno autenticado do operador.
+- `POST /api/v1/admin/activation-codes/list` — lista códigos de ativação para a coordenação.
+- `POST /api/v1/admin/activation-codes/generate` — gera um código descartável criptografado.
 - `GET /api/v1/equipment/latest` — posição pública atual da frota.
 - `GET /api/v1/equipment/:id/history` — histórico público de até sete dias.
 - `GET /health` — diagnóstico do serviço.
