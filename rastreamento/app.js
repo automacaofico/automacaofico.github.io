@@ -307,6 +307,7 @@ function selectEquipment(id, fly) {
 
 function fitFleet() {
   if (!state.map || !state.axis.length) return;
+  document.querySelectorAll('[data-package]').forEach((button) => button.classList.remove('active'));
   const positioned = state.equipment.filter((item) => item.receivedAt && Number.isFinite(item.longitude) && Number.isFinite(item.latitude));
   if (positioned.length === 1) {
     state.map.easeTo({ center: [positioned[0].longitude, positioned[0].latitude], zoom: 13, duration: 800 });
@@ -316,6 +317,22 @@ function fitFleet() {
   if (positioned.length) positioned.forEach((item) => bounds.extend([item.longitude, item.latitude]));
   else state.axis.forEach((point) => bounds.extend(point.coordinate));
   state.map.fitBounds(bounds, { padding: window.innerWidth < 700 ? 45 : 85, maxZoom: 13, duration: 900 });
+}
+
+function focusPackage(packageId) {
+  if (!state.map || !state.axis.length) return;
+  const selectedPackage = PACKAGES.find((item) => item.id === packageId);
+  if (!selectedPackage) return;
+  const maximum = state.axis.at(-1).station_m;
+  const coordinates = sliceCoordinates(selectedPackage.start, Math.min(selectedPackage.end, maximum));
+  const bounds = new maplibregl.LngLatBounds();
+  coordinates.forEach((coordinate) => bounds.extend(coordinate));
+  state.map.fitBounds(bounds, { padding: window.innerWidth < 700 ? 55 : 105, maxZoom: 14, duration: 900 });
+  document.querySelectorAll('[data-package]').forEach((button) => {
+    const active = button.dataset.package === packageId;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
 }
 
 function setBasemap(mode) {
@@ -368,6 +385,7 @@ els.sound.addEventListener('click', () => {
 els.recenter.addEventListener('click', () => state.latest?.receivedAt && state.map.easeTo({ center: [state.latest.longitude, state.latest.latitude], zoom: 14, duration: 700 }));
 els.fitFleet.addEventListener('click', fitFleet);
 document.querySelectorAll('[data-basemap]').forEach((button) => button.addEventListener('click', () => setBasemap(button.dataset.basemap)));
+document.querySelectorAll('[data-package]').forEach((button) => button.addEventListener('click', () => focusPackage(button.dataset.package)));
 
 fetch(AXIS_URL).then((response) => response.json()).then((data) => {
   state.axis = data.points; initMap(state.axis); loadLatest();
