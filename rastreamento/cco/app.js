@@ -1,6 +1,7 @@
 import { createSafetyAudio } from '../safety-audio.js?v=20260811-5';
 import { addInfrastructureLayers } from '../rail-infrastructure-map.js?v=20260811-2';
 import { availableLines, lineCoordinates, LINE_LABELS } from '../rail-infrastructure.js?v=20260811-2';
+import { RAIL_PACKAGES, packageAt, packageCollection } from '../rail-packages.js?v=20260811-1';
 
 const API = /^(?:localhost|127\.0\.0\.1)$/.test(location.hostname)
   ? 'http://127.0.0.1:8791'
@@ -21,7 +22,7 @@ const elements = {
   permissiveForm: $('permissive-form'), permEquipment: $('perm-equipment'), permOperator: $('perm-operator'), permLine: $('perm-line'), permKmStart: $('perm-km-start'), permKmEnd: $('perm-km-end'), permTrackContext: $('perm-track-context'),
   permStart: $('perm-start'), permEnd: $('perm-end'), permChannel: $('perm-channel'), permDescription: $('perm-description'), permJustification: $('perm-justification'), permConflicts: $('perm-conflicts'), permConfirmed: $('perm-confirmed'), permMessage: $('perm-message')
 };
-let sessionToken = sessionStorage.getItem('ficoCcoToken') || '', state = null, axis = [], map, kmPopup, basemap = 'street', equipmentMarkers = new Map();
+let sessionToken = sessionStorage.getItem('ficoCcoToken') || '', state = null, axis = [], map, kmPopup, operationPopup, equipmentPopup, basemap = 'street', equipmentMarkers = new Map(), packageMarkers = [];
 let loading = false, lastCriticalSignature = '', lastWarningSignature = '', lastCriticalSoundAt = 0;
 const safetyAudio = createSafetyAudio(elements.sound, 'ficoCcoSafetySound');
 
@@ -84,6 +85,22 @@ function pointAtStation(target) {
   return [a.coordinate[0] + ratio * (b.coordinate[0] - a.coordinate[0]), a.coordinate[1] + ratio * (b.coordinate[1] - a.coordinate[1])];
 }
 function sliceAxis(start, end) { return [pointAtStation(start), ...axis.filter((p) => p.station_m > start && p.station_m < end).map((p) => p.coordinate), pointAtStation(end)]; }
+
+function addPackageMarkers() {
+  packageMarkers.forEach((marker) => marker.remove());
+  packageMarkers = RAIL_PACKAGES.map((item) => {
+    const element = document.createElement('div'); element.className = 'cco-package-map-label'; element.textContent = item.id; element.style.setProperty('--package', item.color);
+    element.title = `${item.name} · KM ${formatKm(item.start)} — ${formatKm(item.end)}`;
+    return new maplibregl.Marker({ element, anchor: 'center' }).setLngLat(pointAtStation((item.start + item.end) / 2)).addTo(map);
+  });
+}
+
+function focusPackage(packageId) {
+  const selected = RAIL_PACKAGES.find((item) => item.id === packageId); if (!selected || !map) return;
+  const bounds = new maplibregl.LngLatBounds(); sliceAxis(selected.start, selected.end).forEach((coordinate) => bounds.extend(coordinate));
+  map.fitBounds(bounds, { padding: window.innerWidth < 700 ? 55 : 105, maxZoom: 14, duration: 900 });
+  document.querySelectorAll('[data-package]').forEach((button) => { const active = button.dataset.package === packageId; button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active)); });
+}
 function projectToAxis(lon, lat) {
   let best = null; const cos = Math.cos(lat * Math.PI / 180);
   for (let i = 0; i < axis.length - 1; i++) {
@@ -113,12 +130,61 @@ function setBasemap(mode) {
 function showKmReadout(lngLat) {
   const projection = projectToAxis(lngLat.lng, lngLat.lat); if (!projection) return;
   const content = document.createElement('div'); content.className = 'cco-km-popup';
-  const line = document.createElement('span'); line.textContent = 'Linha 01 · eixo FICO';
+  const line = document.createElement('span'); line.textContent = `${packageAt(projection.stationM).name} · eixo FICO`;
   const km = document.createElement('strong'); km.textContent = `KM ${formatKm(projection.stationM)}`;
   const hint = document.createElement('small'); hint.textContent = 'Posição projetada sobre a ferrovia';
   content.append(line, km, hint);
   if (!kmPopup) kmPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12 });
   kmPopup.setLngLat(lngLat).setDOMContent(content).addTo(map);
+}
+
+function findMapOperation(kind, id) {
+  if (kind === 'ldl') return activeLdl().find((item) => item.id === id);
+  if (kind === 'circulation') return activeCirculations().find((item) => item.id === id);
+  return activePermissives().find((item) => item.id === id);
+}
+
+function operationPopupContent(item, kind) {
+  const card = document.createElement('article'); card.className = `cco-operation-popup-card ${kind}`;
+  const header = document.createElement('header'), code = document.createElement('strong'), badge = document.createElement('span');
+  code.textContent = displayCode(item, kind === 'ldl' ? 'LDL' : kind === 'circulation' ? 'CIRC' : 'PERM');
+  badge.textContent = kind === 'ldl' ? 'TRECHO BLOQUEADO' : kind === 'circulation' ? 'CIRCULAÇÃO AUTORIZADA' : 'PERMISSIVO · 15 KM/H';
+  header.append(code, badge);
+  const body = document.createElement('div'); body.className = 'cco-operation-popup-body';
+  const km = document.createElement('b'); km.textContent = `KM ${formatKm(item.km_start)}–${formatKm(item.km_end)}`;
+  const line = document.createElement('span'); line.textContent = kind === 'ldl' ? item.lines.map(lineLabel).join(' + ') : lineLabel(item.line_id);
+  const main = document.createElement('strong');
+  main.textContent = kind === 'ldl' ? `${item.requester_code} · ${item.requester_name}` : `${item.equipment_id} · ${item.equipment_name}`;
+  const detail = document.createElement('small');
+  detail.textContent = kind === 'ldl'
+    ? `${item.workforce_count} pessoas · Serviço: ${item.work_description}`
+    : kind === 'circulation'
+      ? `Sentido: ${item.direction} · Operador: ${item.operator_name || 'não informado'}${item.restrictions ? ` · Restrições: ${item.restrictions}` : ''}`
+      : `Operador: ${item.operator_name || 'não informado'} · Serviço: ${item.work_description} · ${item.justification}`;
+  const period = document.createElement('small'); period.textContent = `${date(kind === 'ldl' ? item.requested_start : item.planned_start)} → ${date(kind === 'ldl' ? item.requested_end : item.planned_end)}`;
+  body.append(km, line, main, detail, period); card.append(header, body); return card;
+}
+
+function showOperationHover(event) {
+  const feature = event.features?.[0]; if (!feature) return;
+  const item = findMapOperation(feature.properties.kind, feature.properties.id); if (!item) return;
+  kmPopup?.remove(); map.getCanvas().style.cursor = 'pointer';
+  if (!operationPopup) operationPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 16, className: 'cco-operation-popup' });
+  operationPopup.setLngLat(event.lngLat).setDOMContent(operationPopupContent(item, feature.properties.kind)).addTo(map);
+}
+
+function showEquipmentPopup(item, projection) {
+  const equipment = state.equipment.find((entry) => entry.id === item.equipment_id), circulation = activeCirculations().find((entry) => entry.equipment_id === item.equipment_id);
+  const card = document.createElement('article'); card.className = 'cco-equipment-popup-card';
+  const header = document.createElement('header'), name = document.createElement('strong'), badge = document.createElement('span'); name.textContent = item.equipment_id; badge.textContent = 'POSIÇÃO GPS'; header.append(name, badge);
+  const body = document.createElement('div'); body.className = 'cco-operation-popup-body';
+  const km = document.createElement('b'); km.textContent = `KM ${formatKm(projection.stationM)}`;
+  const alias = document.createElement('strong'); alias.textContent = equipment?.name || item.equipment_id;
+  const detail = document.createElement('small'); detail.textContent = `${equipment?.description || equipment?.type || 'Equipamento ferroviário'} · ${Number(item.speed_mps || 0) * 3.6 < .5 ? 'parado' : `${(Number(item.speed_mps) * 3.6).toFixed(1).replace('.', ',')} km/h`}`;
+  const operator = document.createElement('small'); operator.textContent = `Operador: ${circulation?.operator_name || 'não informado'} · Sinal: ${date(item.captured_at)}`;
+  body.append(km, alias, detail, operator); card.append(header, body);
+  if (!equipmentPopup) equipmentPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 20, className: 'cco-equipment-popup' });
+  equipmentPopup.setLngLat(projection.coordinate).setDOMContent(card).addTo(map);
 }
 function initMap() {
   map = new maplibregl.Map({ container: 'map', style: mapStyle(), center: [-50.3, -14.08], zoom: 7.3, attributionControl: false });
@@ -127,18 +193,29 @@ function initMap() {
     map.addSource('axis', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: axis.map((p) => p.coordinate) } } });
     map.addLayer({ id: 'axis-case', type: 'line', source: 'axis', paint: { 'line-color': '#fff', 'line-width': 8 } });
     map.addLayer({ id: 'axis', type: 'line', source: 'axis', paint: { 'line-color': '#082b4c', 'line-width': 4 } });
-    map.addLayer({ id: 'axis-hit', type: 'line', source: 'axis', paint: { 'line-color': '#fff', 'line-width': 24, 'line-opacity': .01 } });
+    map.addSource('packages', { type: 'geojson', data: packageCollection(sliceAxis, axis.at(-1).station_m) });
+    map.addLayer({ id: 'package-casing', type: 'line', source: 'packages', paint: { 'line-color': '#fff', 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 6, 14, 11], 'line-opacity': .92 } });
+    map.addLayer({ id: 'package-lines', type: 'line', source: 'packages', paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 3, 14, 7], 'line-opacity': .96 } });
+    map.addLayer({ id: 'package-hit', type: 'line', source: 'packages', paint: { 'line-color': '#fff', 'line-width': 24, 'line-opacity': .01 } });
     addInfrastructureLayers(map, { sliceAxis, pointAtStation });
     map.addSource('operations', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addLayer({ id: 'operations', type: 'line', source: 'operations', paint: { 'line-color': ['get', 'color'], 'line-width': 8, 'line-opacity': .9 } });
     map.addSource('permissives', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addLayer({ id: 'permissives-case', type: 'line', source: 'permissives', paint: { 'line-color': '#082b4c', 'line-width': 12, 'line-opacity': .92 } });
     map.addLayer({ id: 'permissives', type: 'line', source: 'permissives', paint: { 'line-color': '#f4c430', 'line-width': 7, 'line-dasharray': [1.2, .8] } });
-    map.on('click', 'operations', (event) => { const p = event.features[0].properties; new maplibregl.Popup().setLngLat(event.lngLat).setHTML(`<b>${p.code}</b><br>${p.line}<br>KM ${p.km}`).addTo(map); });
-    map.on('click', 'permissives', (event) => { const p = event.features[0].properties; new maplibregl.Popup().setLngLat(event.lngLat).setHTML(`<b>${p.code}</b><br>OPERAÇÃO PERMISSIVA · 15 KM/H<br>${p.equipment}<br>${p.line}<br>KM ${p.km}`).addTo(map); });
-    map.on('mouseenter', 'axis-hit', () => { map.getCanvas().style.cursor = 'crosshair'; });
-    map.on('mousemove', 'axis-hit', (event) => showKmReadout(event.lngLat));
-    map.on('mouseleave', 'axis-hit', () => { map.getCanvas().style.cursor = ''; kmPopup?.remove(); });
+    addPackageMarkers();
+    map.on('mouseenter', 'package-hit', () => { map.getCanvas().style.cursor = 'crosshair'; });
+    map.on('mousemove', 'package-hit', (event) => {
+      const operation = map.queryRenderedFeatures(event.point, { layers: ['operations', 'permissives'] });
+      if (!operation.length) showKmReadout(event.lngLat);
+    });
+    map.on('mouseleave', 'package-hit', () => { map.getCanvas().style.cursor = ''; kmPopup?.remove(); });
+    for (const layer of ['operations', 'permissives']) {
+      map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
+      map.on('mousemove', layer, showOperationHover);
+      map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; operationPopup?.remove(); });
+      map.on('click', layer, showOperationHover);
+    }
     setBasemap(basemap);
     renderMap();
   });
@@ -147,15 +224,20 @@ function renderMap() {
   if (!map?.getSource('operations') || !state) return;
   const now = Date.now(), features = [];
   const helpers = { sliceAxis, pointAtStation };
-  for (const item of activeLdl()) for (const lineId of item.lines) features.push({ type: 'Feature', properties: { code: displayCode(item, 'LDL'), line: lineLabel(lineId), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, color: Date.parse(item.requested_end) < now ? '#cf7a18' : '#c83f39' }, geometry: { type: 'LineString', coordinates: lineCoordinates(lineId, item.km_start, item.km_end, helpers) } });
-  for (const item of activeCirculations()) features.push({ type: 'Feature', properties: { code: displayCode(item, 'CIRC'), line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, color: '#2b82c4' }, geometry: { type: 'LineString', coordinates: lineCoordinates(item.line_id, item.km_start, item.km_end, helpers) } });
+  for (const item of activeLdl()) for (const lineId of item.lines) features.push({ type: 'Feature', properties: { id: item.id, kind: 'ldl', code: displayCode(item, 'LDL'), line: lineLabel(lineId), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, color: Date.parse(item.requested_end) < now ? '#cf7a18' : '#c83f39' }, geometry: { type: 'LineString', coordinates: lineCoordinates(lineId, item.km_start, item.km_end, helpers) } });
+  for (const item of activeCirculations()) features.push({ type: 'Feature', properties: { id: item.id, kind: 'circulation', code: displayCode(item, 'CIRC'), line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, color: '#2b82c4' }, geometry: { type: 'LineString', coordinates: lineCoordinates(item.line_id, item.km_start, item.km_end, helpers) } });
   map.getSource('operations').setData({ type: 'FeatureCollection', features });
-  const permissiveFeatures = activePermissives().map((item) => ({ type: 'Feature', properties: { code: displayCode(item, 'PERM'), equipment: item.equipment_id, line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}` }, geometry: { type: 'LineString', coordinates: lineCoordinates(item.line_id, item.km_start, item.km_end, helpers) } }));
+  const permissiveFeatures = activePermissives().map((item) => ({ type: 'Feature', properties: { id: item.id, kind: 'permissive', code: displayCode(item, 'PERM'), equipment: item.equipment_id, line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}` }, geometry: { type: 'LineString', coordinates: lineCoordinates(item.line_id, item.km_start, item.km_end, helpers) } }));
   map.getSource('permissives')?.setData({ type: 'FeatureCollection', features: permissiveFeatures });
   for (const item of state.latest || []) {
     const projection = projectToAxis(Number(item.longitude), Number(item.latitude)); if (!projection) continue;
     let marker = equipmentMarkers.get(item.equipment_id);
-    if (!marker) { const el = document.createElement('div'); el.className = 'equipment-marker'; el.dataset.label = item.equipment_id; marker = new maplibregl.Marker({ element: el }).setLngLat(projection.coordinate).addTo(map); equipmentMarkers.set(item.equipment_id, marker); }
+    if (!marker) {
+      const el = document.createElement('div'); el.className = 'equipment-marker'; el.dataset.label = item.equipment_id; el.tabIndex = 0; el.setAttribute('role', 'button');
+      const show = () => { const current = state.latest.find((entry) => entry.equipment_id === item.equipment_id); if (!current) return; const currentProjection = projectToAxis(Number(current.longitude), Number(current.latitude)); if (currentProjection) showEquipmentPopup(current, currentProjection); };
+      el.addEventListener('mouseenter', show); el.addEventListener('focus', show); el.addEventListener('mouseleave', () => equipmentPopup?.remove()); el.addEventListener('blur', () => equipmentPopup?.remove());
+      marker = new maplibregl.Marker({ element: el }).setLngLat(projection.coordinate).addTo(map); equipmentMarkers.set(item.equipment_id, marker);
+    }
     marker.setLngLat(projection.coordinate); marker.getElement().title = `${item.equipment_id} · KM ${formatKm(projection.stationM)}`;
   }
 }
@@ -343,6 +425,7 @@ elements.excel.onclick = () => {
 document.querySelectorAll('[data-open]').forEach((button) => button.onclick = () => { const dialog = $(button.dataset.open), now = Date.now(); if (dialog.id === 'ldl-dialog') { elements.ldlStart.value = isoLocal(now); elements.ldlEnd.value = isoLocal(now + 4 * 3600000); updateTrackContext('ldl'); } else if (dialog.id === 'circulation-dialog') { elements.circStart.value = isoLocal(now); elements.circEnd.value = isoLocal(now + 2 * 3600000); updateTrackContext('circulation'); } else { elements.permStart.value = isoLocal(now); elements.permEnd.value = isoLocal(now + 2 * 3600000); updateTrackContext('permissive'); renderPermissiveConflicts(); } dialog.showModal(); });
 document.querySelectorAll('[data-close]').forEach((button) => button.onclick = () => button.closest('dialog').close());
 document.querySelectorAll('[data-basemap]').forEach((button) => button.onclick = () => setBasemap(button.dataset.basemap));
+document.querySelectorAll('[data-package]').forEach((button) => button.onclick = () => focusPackage(button.dataset.package));
 for (const input of [elements.ldlKmStart, elements.ldlKmEnd]) input.addEventListener('input', () => updateTrackContext('ldl'));
 for (const input of [elements.circKmStart, elements.circKmEnd]) input.addEventListener('input', () => updateTrackContext('circulation'));
 for (const input of [elements.permKmStart, elements.permKmEnd]) input.addEventListener('input', () => updateTrackContext('permissive'));
