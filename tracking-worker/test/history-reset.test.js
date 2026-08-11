@@ -73,5 +73,9 @@ test('history reset clears operational data and preserves registrations', async 
     'operators',
     'personal_devices',
     'activation_codes',
+    'requesters',
+    'cco_controllers',
+    'ldl',
+    'circulations',
   ]);
 });

@@ -1,0 +1,173 @@
+CREATE TABLE track_lines (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  geometry_status TEXT NOT NULL CHECK (geometry_status IN ('ready','pending')),
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO track_lines (id,name,geometry_status) VALUES
+  ('line01','Linha 01','ready'),
+  ('line02','Linha 02','pending');
+
+CREATE TABLE requesters (
+  code TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  role TEXT,
+  company TEXT,
+  supervisor TEXT,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE cco_controllers (
+  code TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  pin_salt TEXT NOT NULL,
+  pin_hash TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE cco_sessions (
+  token_hash TEXT PRIMARY KEY,
+  controller_code TEXT NOT NULL REFERENCES cco_controllers(code),
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_cco_sessions_expiry ON cco_sessions(expires_at);
+
+CREATE TABLE monthly_sequences (
+  kind TEXT NOT NULL CHECK (kind IN ('LDL','CIRC')),
+  month TEXT NOT NULL,
+  last_value INTEGER NOT NULL,
+  PRIMARY KEY (kind,month)
+);
+
+CREATE TABLE ldl (
+  id TEXT PRIMARY KEY,
+  sequence_number INTEGER NOT NULL,
+  sequence_month TEXT NOT NULL,
+  permanent_code TEXT NOT NULL UNIQUE,
+  requester_code TEXT NOT NULL REFERENCES requesters(code),
+  km_start REAL NOT NULL,
+  km_end REAL NOT NULL,
+  workforce_count INTEGER NOT NULL,
+  work_description TEXT NOT NULL,
+  requested_start TEXT NOT NULL,
+  requested_end TEXT NOT NULL,
+  request_channel TEXT NOT NULL CHECK (request_channel IN ('radio','whatsapp')),
+  status TEXT NOT NULL CHECK (status IN ('active','returned','cancelled')) DEFAULT 'active',
+  created_by_controller TEXT NOT NULL REFERENCES cco_controllers(code),
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  returned_at TEXT,
+  returned_by_controller TEXT REFERENCES cco_controllers(code),
+  return_note TEXT,
+  cancelled_at TEXT,
+  cancelled_by_controller TEXT REFERENCES cco_controllers(code),
+  cancel_reason TEXT,
+  UNIQUE(sequence_month,sequence_number)
+);
+
+CREATE TABLE ldl_lines (
+  ldl_id TEXT NOT NULL REFERENCES ldl(id) ON DELETE CASCADE,
+  line_id TEXT NOT NULL REFERENCES track_lines(id),
+  PRIMARY KEY (ldl_id,line_id)
+);
+
+CREATE INDEX idx_ldl_status_time ON ldl(status,requested_start,requested_end);
+CREATE INDEX idx_ldl_km ON ldl(km_start,km_end);
+CREATE INDEX idx_ldl_lines_line ON ldl_lines(line_id,ldl_id);
+
+CREATE TABLE ldl_events (
+  id TEXT PRIMARY KEY,
+  ldl_id TEXT NOT NULL REFERENCES ldl(id),
+  event_type TEXT NOT NULL,
+  controller_code TEXT NOT NULL REFERENCES cco_controllers(code),
+  occurred_at TEXT NOT NULL,
+  payload_json TEXT
+);
+
+CREATE TABLE circulations (
+  id TEXT PRIMARY KEY,
+  sequence_number INTEGER NOT NULL,
+  sequence_month TEXT NOT NULL,
+  permanent_code TEXT NOT NULL UNIQUE,
+  equipment_id TEXT NOT NULL REFERENCES equipment(id),
+  operator_registration TEXT REFERENCES operators(registration),
+  line_id TEXT NOT NULL REFERENCES track_lines(id),
+  km_start REAL NOT NULL,
+  km_end REAL NOT NULL,
+  planned_start TEXT NOT NULL,
+  planned_end TEXT NOT NULL,
+  direction TEXT NOT NULL CHECK (direction IN ('crescente','decrescente','manobra')),
+  restrictions TEXT,
+  status TEXT NOT NULL CHECK (status IN ('authorized','completed','cancelled')) DEFAULT 'authorized',
+  authorized_by_controller TEXT NOT NULL REFERENCES cco_controllers(code),
+  authorized_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  completed_at TEXT,
+  completed_by_controller TEXT REFERENCES cco_controllers(code),
+  cancelled_at TEXT,
+  cancelled_by_controller TEXT REFERENCES cco_controllers(code),
+  cancel_reason TEXT,
+  UNIQUE(sequence_month,sequence_number)
+);
+
+CREATE INDEX idx_circulations_status_time ON circulations(status,planned_start,planned_end);
+CREATE INDEX idx_circulations_line_km ON circulations(line_id,km_start,km_end);
+
+CREATE TABLE circulation_events (
+  id TEXT PRIMARY KEY,
+  circulation_id TEXT NOT NULL REFERENCES circulations(id),
+  event_type TEXT NOT NULL,
+  controller_code TEXT NOT NULL REFERENCES cco_controllers(code),
+  occurred_at TEXT NOT NULL,
+  payload_json TEXT
+);
+
+INSERT INTO requesters (code,name,role,company,supervisor) VALUES
+('DELTA05','JOYMAIRON MARTINS NUNES','ENCARREGADO GERAL','CMC/Somafel',NULL),
+('DELTA07','JACKSON NICOLAU CRUZ','INSPETOR SOLDA','CMC/Somafel','ANA PAULA CARVALHO'),
+('DELTA12','JOSE ROBERTO CALIXTO','LIDER','HARSCO','NATÁLIA RIBEIRO'),
+('DELTA13','LEONARDO LEITE VIEIRA','ENCARREGADO','CMC/Somafel','JOYMAIRON'),
+('DELTA14','LAURO SILVA CAMPOS','ENCARREGADO','CMC/Somafel','JOYMAIRON'),
+('DELTA15','ELIZANDRO DA CONCEIÇÃO','ENCARREGADO','CMC/Somafel','JOYMAIRON'),
+('DELTA16','JOSÉ CARLOS PEREIRA DOS SANTOS','ENCARREGADO','CMC/Somafel','JOYMAIRON'),
+('DELTA18','MIZAEL LEITE PEREIRA','OPERADOR RODOFERROVIÁRIO','CMC/Somafel','JOYMAIRON'),
+('DELTA19','FARMAN COSTA BARRETO','INSPETOR DE QUALIDADE','MCA','MARIO WENCESLAU'),
+('DELTA20','ROMARIO GOMES DE MATOS DA SILVA','TOPOGRAFO','MCA','LUIS NETO'),
+('DELTA21','FILIPE AUGUSTO MILANI','ENG SUPERESTRUTURA','EGIS','EDAN RIOS'),
+('DELTA22','LUIZ CLAUDIO CANI FILHO','ENG SUPERESTRUTURA','VALE','ALMADA'),
+('DELTA25','RENATO DOS SANTOS SILVA','ENGENHEIRO','IEME','PATRICK DOUGLAS'),
+('DELTA26','JUENI MACHADO DA SILVA','ENCARREGADO','SOMAFEL/CMC','JOYMAIRON'),
+('DELTA27','THIAGO CARVALHO DOS ANJOS','APONTADOR','SOMAFEL/CMC','JOYMAIRON'),
+('DELTA28','MARCOS SIONE FEITOSA CONCEIÇÃO','ENCARREGADO','SOMAFEL/CMC','JOYMAIRON'),
+('DELTA29','ANTONIO FERREIRA IRINEU','ENCARREGADO','SOMAFEL/CMC','JOYMAIRON'),
+('DELTA30','RAIMUNDO NONATO SILVA DO NASCIMENTO','ENCARREGADO','GSA','ANA PAULA'),
+('DELTA31','SHIRLEY MARIA DE SOUZA','TÉC SEGURANÇA','GSA','ANA PAULA'),
+('DELTA32','MÁRCIO JUNIOR XAVIER DA CRUZ','OPERADOR DE EQUIPAMENTOS PESADOS','SOMAFEL/CMC','ADÃO/JUENIR'),
+('DELTA33','PAULO SÉRGIO NUNES DA SILVA','ENCARREGADO DE OBRAS','CIVIL MASTER',NULL),
+('DELTA34','SIMEÃO DE SOUZA PONTE','ENCARREGADO DE OBRAS','CIVIL MASTER',NULL),
+('DELTA45','THARLLESON MARINHO SOBRINHO','ENCARREGADO','CONSÓRCIO','JOYMAIRON'),
+('DELTA49','EDSON PEREIRA DE MIRANDA','ENCARREGADO','CIVIL MASTER','CARLOS BEZERRA DA SILVA'),
+('DELTA59','TALLISON BRUNO PEREIRA GODOIS','TÉCNICO DE SEGURANÇA','GSA','ANA PAULA ALMEIDA FREITAS'),
+('DELTA60','WANIA DA PENHA SOUZA','TÉCNICO DE SEGURANÇA','GSA','ANA PAULA ALMEIDA FREITAS'),
+('DELTA61','BRUNO GONÇALVES DA SILVA','TÉCNICO DE SEGURANÇA','CIVIL MASTER','CARLOS BEZERRA DA SILVA'),
+('DELTA62','ALAN ANANIAS DA SILVA','ENCARREGADO','CIVIL MASTER','CARLOS BEZERRA DA SILVA'),
+('DELTA64','CLEBERSON BARBOSA SOARES','ENCARREGADO GERAL','TEIXEIRA DUARTE','MURILO RIOS'),
+('DELTA65','EMERSON SILVA WEBA','ENCARREGADO','TEIXEIRA DUARTE','CLEBERSON BARBOSA'),
+('DELTA67','MURILO DIAS DE OLIVEIRA','ENGENHEIRO','TEIXEIRA DUARTE','MURILO RIOS'),
+('DELTA70','JOSE ALBERTO SILVA MENDES','ENCARREGADO','TEIXEIRA DUARTE','MURILO RIOS'),
+('GAMA01','THYAGO VIEGAS','GERENTE','VALE','LUCIANO ALMADA'),
+('GAMA02','SEBASTIÃO SOUSA DE CARVALHO','C C O','VALE','THYAGO VIEGAS'),
+('GAMA03','ENEAS NEVES FURTADO','SUPERESTRUTURA','MCA','LUIZ CLAUDIO CANI'),
+('GAMA04','JEREMIAS RODRIGUES LIMA','C C O','MCA','SEBASTIÃO SOUSA DE CARVALHO'),
+('GAMA08','LUCINEY SANCHES VALENTE','C C O','MCA','SEBASTIÃO SOUSA DE CARVALHO'),
+('GAMA11','LINDINELSON','INSP OPERAÇÃO','SOMAFEL/CMC','VALTER CESAR NETO'),
+('ALFA01','MARCO ANTÔNIO DE MOURA PEREIRA','MECÂNICO DE VAGÃO','CONSÓRCIO','JOÃO PAULO SOARES DE LIMA'),
+('ALFA02','ROBERTO FERNANDO DE SOUZA SILVA','MECÂNICO DE LOCOMOTIVA','CONSÓRCIO','JOÃO PAULO SOARES DE LIMA'),
+('ALFA03','JULIANO ANESTOU DOS SANTOS SOUZA','ELÉTRICA DE LOCOMOTIVA','CONSÓRCIO','JOÃO PAULO SOARES DE LIMA'),
+('BETA01','JOSE GERALDO OLIVEIRA DA SILVA','FISCAL DE SUPERESTRUTURA','INFRA S/A',NULL);

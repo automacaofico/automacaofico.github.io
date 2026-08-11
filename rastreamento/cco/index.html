@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Controle Operacional CCO | FICO</title>
+  <link rel="stylesheet" href="../../mapa-pendencias/assets/vendor/maplibre/maplibre-gl.css">
+  <link rel="stylesheet" href="styles.css?v=20260811-1">
+</head>
+<body>
+  <header>
+    <a class="brand" href="../"><img src="../../mapa-pendencias/assets/brand/fico-logo-color.png" alt="FICO"><span>CONTROLE OPERACIONAL CCO</span></a>
+    <div class="session"><i></i><span id="controller-name">AGUARDANDO ACESSO</span><time id="clock">--:--:--</time><button id="logout" hidden>SAIR</button></div>
+  </header>
+
+  <main>
+    <section id="login" class="login card">
+      <p>ACESSO INDIVIDUAL · CONTROLADOR</p>
+      <h1>Assumir painel<br><span>do CCO.</span></h1>
+      <form id="login-form">
+        <label>Código do controlador<input id="controller-code" placeholder="Ex.: GAMA02" autocomplete="username" required></label>
+        <label>PIN individual<input id="controller-pin" type="password" inputmode="numeric" autocomplete="current-password" required></label>
+        <button>ENTRAR NO CCO</button>
+      </form>
+      <div id="login-message" class="message" hidden></div>
+    </section>
+
+    <section id="app" hidden>
+      <nav class="actions">
+        <button data-open="ldl-dialog">+ NOVA LDL</button>
+        <button data-open="circulation-dialog">+ AUTORIZAR CIRCULAÇÃO</button>
+        <button id="refresh" class="secondary">ATUALIZAR</button>
+        <button id="pdf" class="secondary">RELATÓRIO PDF</button>
+        <button id="excel" class="secondary">EXPORTAR EXCEL</button>
+        <a href="admin/">CADASTROS CCO</a>
+      </nav>
+
+      <section class="kpis">
+        <article><span>LDLs ATIVAS</span><strong id="kpi-ldl">0</strong><small>trechos bloqueados</small></article>
+        <article><span>PESSOAS NA VIA</span><strong id="kpi-people">0</strong><small>efetivo declarado</small></article>
+        <article class="warning"><span>ALERTAS DE PRAZO</span><strong id="kpi-deadline">0</strong><small>30 min, 15 min ou vencidas</small></article>
+        <article><span>CIRCULAÇÕES</span><strong id="kpi-circulation">0</strong><small>autorizações abertas</small></article>
+        <article class="danger"><span>APROXIMAÇÕES</span><strong id="kpi-approach">0</strong><small>equipamentos a até 500 m</small></article>
+      </section>
+
+      <div id="message" class="message" hidden></div>
+      <section class="workspace">
+        <article class="map-card card">
+          <div class="card-head"><div><p>SITUAÇÃO DA VIA</p><h2>Bloqueios e circulações</h2></div><span id="freshness">Carregando…</span></div>
+          <div class="map-note"><b>Linha 01</b> traçado ativo <span>·</span> <b>Linha 02</b> traçado geográfico pendente</div>
+          <div id="map"></div>
+          <div class="legend"><span><i class="ldl"></i>LDL ativa</span><span><i class="expired"></i>LDL vencida</span><span><i class="circ"></i>Circulação</span><span><i class="equipment"></i>Equipamento</span></div>
+        </article>
+        <aside class="card">
+          <div class="card-head"><div><p>ALERTAS</p><h2>Atenção imediata</h2></div><b id="alert-count">0</b></div>
+          <div id="alerts" class="alerts"></div>
+        </aside>
+      </section>
+
+      <section class="lists">
+        <article class="card list-card"><div class="card-head"><div><p>BLOQUEIOS</p><h2>LDLs em aberto</h2></div></div><div id="ldl-list" class="records"></div></article>
+        <article class="card list-card"><div class="card-head"><div><p>MOVIMENTAÇÃO</p><h2>Circulações autorizadas</h2></div></div><div id="circulation-list" class="records"></div></article>
+      </section>
+
+      <section class="card history-card">
+        <div class="card-head"><div><p>AUDITORIA</p><h2>Histórico recente</h2></div><label>Mostrar<select id="history-filter"><option value="all">LDLs e circulações</option><option value="ldl">Somente LDLs</option><option value="circulation">Somente circulações</option></select></label></div>
+        <div class="table-wrap"><table><thead><tr><th>Código</th><th>Situação</th><th>Responsável/equipamento</th><th>Linha</th><th>Trecho</th><th>Início</th><th>Fim</th><th>Controlador</th></tr></thead><tbody id="history-body"></tbody></table></div>
+      </section>
+      <p class="safety">Ferramenta de controle e evidência operacional. Não substitui intertravamento, sinalização, comunicação por rádio ou os procedimentos formais do CCO.</p>
+    </section>
+  </main>
+
+  <dialog id="ldl-dialog"><form id="ldl-form" method="dialog"><div class="dialog-head"><div><p>NOVO BLOQUEIO</p><h2>Emitir LDL</h2></div><button type="button" data-close>×</button></div>
+    <div class="form-grid"><label>Solicitante<select id="ldl-requester" required></select></label><label>Canal<select id="ldl-channel"><option value="radio">Rádio</option><option value="whatsapp">WhatsApp</option></select></label><label>KM inicial<input id="ldl-km-start" placeholder="100+000" required></label><label>KM final<input id="ldl-km-end" placeholder="104+500" required></label><fieldset><legend>Linhas bloqueadas</legend><label><input type="checkbox" name="ldl-line" value="line01" checked> Linha 01</label><label><input type="checkbox" name="ldl-line" value="line02"> Linha 02</label></fieldset><label>Efetivo<input id="ldl-workforce" type="number" min="1" max="2000" value="1" required></label><label>Início<input id="ldl-start" type="datetime-local" required></label><label>Fim previsto<input id="ldl-end" type="datetime-local" required></label><label class="wide">Serviço<input id="ldl-description" maxlength="500" required></label></div><div class="dialog-actions"><button type="button" data-close class="secondary">CANCELAR</button><button type="submit">VERIFICAR E EMITIR LDL</button></div><div id="ldl-message" class="message" hidden></div></form></dialog>
+
+  <dialog id="circulation-dialog"><form id="circulation-form" method="dialog"><div class="dialog-head"><div><p>NOVA AUTORIZAÇÃO</p><h2>Liberar circulação</h2></div><button type="button" data-close>×</button></div>
+    <div class="form-grid"><label>Equipamento<select id="circ-equipment" required></select></label><label>Operador<select id="circ-operator"><option value="">Não informado</option></select></label><label>Linha<select id="circ-line"><option value="line01">Linha 01</option><option value="line02">Linha 02</option></select></label><label>Sentido<select id="circ-direction"><option value="crescente">KM crescente</option><option value="decrescente">KM decrescente</option><option value="manobra">Manobra</option></select></label><label>KM inicial<input id="circ-km-start" placeholder="0+000" required></label><label>KM final<input id="circ-km-end" placeholder="104+500" required></label><label>Início<input id="circ-start" type="datetime-local" required></label><label>Fim previsto<input id="circ-end" type="datetime-local" required></label><label class="wide">Restrições/observações<input id="circ-restrictions" maxlength="500"></label></div><div class="dialog-actions"><button type="button" data-close class="secondary">CANCELAR</button><button type="submit">VERIFICAR E AUTORIZAR</button></div><div id="circ-message" class="message" hidden></div></form></dialog>
+
+  <script src="../../mapa-pendencias/assets/vendor/maplibre/maplibre-gl.js"></script>
+  <script type="module" src="app.js?v=20260811-1"></script>
+</body></html>

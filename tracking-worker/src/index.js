@@ -1,5 +1,6 @@
 import { normalizeOperatorName, normalizeOperatorPin, normalizeOwnTracksLocation, normalizePosition, normalizeRegistration, ownTracksEquipmentId, publicEquipmentId, validatePosition } from './validation.js';
 import { summarizeGpsMovement } from './motion.js';
+import { routeCco } from './cco.js';
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
 
@@ -794,7 +795,7 @@ async function resetOperationalHistoryAdmin(request, env) {
   return reply(request, {
     ok: true,
     deleted,
-    preserved: ['equipment', 'operators', 'personal_devices', 'activation_codes'],
+    preserved: ['equipment', 'operators', 'personal_devices', 'activation_codes', 'requesters', 'cco_controllers', 'ldl', 'circulations'],
     resetAt: new Date().toISOString(),
   });
 }
@@ -843,6 +844,8 @@ async function updateEquipmentAdmin(request, env) {
 async function route(request, env) {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(request) });
   const url = new URL(request.url);
+  const ccoResponse = await routeCco(request, env);
+  if (ccoResponse) return ccoResponse;
   if (request.method === 'GET' && url.pathname === '/health') return reply(request, { ok: true, service: 'fico-tracking-api', time: new Date().toISOString() });
   if (request.method === 'POST' && url.pathname === '/api/v1/activate') return activate(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/operators') return registerOperator(request, env);
@@ -879,7 +882,8 @@ export default {
   async scheduled(_event, env, ctx) {
     ctx.waitUntil(env.DB.batch([
       env.DB.prepare("DELETE FROM positions WHERE captured_at < datetime('now','-7 days')"),
-      env.DB.prepare("DELETE FROM position_samples WHERE captured_at < datetime('now','-90 days')")
+      env.DB.prepare("DELETE FROM position_samples WHERE captured_at < datetime('now','-90 days')"),
+      env.DB.prepare("DELETE FROM cco_sessions WHERE expires_at < CURRENT_TIMESTAMP")
     ]));
   }
 };
