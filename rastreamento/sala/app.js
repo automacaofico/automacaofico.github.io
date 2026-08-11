@@ -1,4 +1,6 @@
 import { createSafetyAudio } from '../safety-audio.js?v=20260811-5';
+import { addInfrastructureLayers } from '../rail-infrastructure-map.js?v=20260811-2';
+import { lineCoordinates, LINE_LABELS } from '../rail-infrastructure.js?v=20260811-2';
 
 const API = /^(?:localhost|127\.0\.0\.1)$/.test(location.hostname)
   ? 'http://127.0.0.1:8791'
@@ -24,7 +26,7 @@ const safetyAudio = createSafetyAudio(els.sound, 'ficoTvSafetySound');
 
 const formatKm = (meters) => { const value = Math.max(0, Math.round(Number(meters) || 0)); return `${Math.floor(value / 1000)}+${String(value % 1000).padStart(3, '0')}`; };
 const formatTime = (value) => new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(new Date(value));
-const lineLabel = (line) => line === 'line02' ? 'Linha 02' : 'Linha 01';
+const lineLabel = (line) => LINE_LABELS[line] || line;
 const age = (value) => { const seconds = Math.max(0, (Date.now() - Date.parse(value)) / 1000); return seconds < 60 ? `${Math.round(seconds)} s` : seconds < 3600 ? `${Math.round(seconds / 60)} min` : `${Math.round(seconds / 3600)} h`; };
 const equipmentStatus = (item) => !item.receivedAt ? 'no-signal' : Date.now() - Date.parse(item.receivedAt) <= 30000 ? 'online' : Date.now() - Date.parse(item.receivedAt) <= 120000 ? 'unstable' : 'offline';
 const displayCode = (item, prefix) => `${prefix} ${String(item.sequence_number || '').padStart(3, '0')}`;
@@ -119,6 +121,7 @@ function initMap() {
     map.addLayer({ id: 'package-case', type: 'line', source: 'packages', paint: { 'line-color': '#fff', 'line-width': 8, 'line-opacity': .9 } });
     map.addLayer({ id: 'packages', type: 'line', source: 'packages', paint: { 'line-color': ['get', 'color'], 'line-width': 5 } });
     map.addLayer({ id: 'rail-hit', type: 'line', source: 'packages', paint: { 'line-color': '#fff', 'line-width': 26, 'line-opacity': .01 } });
+    addInfrastructureLayers(map, { sliceAxis, pointAtStation });
     for (const item of PACKAGES) { const element = document.createElement('div'); element.className = 'package-label'; element.style.setProperty('--package', item.color); element.textContent = item.id; new maplibregl.Marker({ element }).setLngLat(pointAtStation((item.start + item.end) / 2)).addTo(map); }
     for (const source of ['ldl', 'circulation', 'permissive']) map.addSource(source, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addLayer({ id: 'ldl-case', type: 'line', source: 'ldl', paint: { 'line-color': '#3c0a0a', 'line-width': 14, 'line-opacity': .9 } });
@@ -152,16 +155,17 @@ function initMap() {
 }
 
 function operationalFeatures(items, type) {
-  return items.filter((item) => type === 'ldl' ? item.lines?.includes('line01') : item.line_id === 'line01').map((item) => {
+  const helpers = { sliceAxis, pointAtStation };
+  return items.flatMap((item) => (type === 'ldl' ? item.lines : [item.line_id]).map((lineId) => {
     const code = displayCode(item, type === 'ldl' ? 'LDL' : type === 'circulation' ? 'CIRC' : 'PERM');
     const shared = { kind: type, code, km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}` };
     const properties = type === 'ldl'
-      ? { ...shared, category: 'LDL · TRECHO BLOQUEADO', headline: `${item.requester_name || item.requester_code} · ${item.workforce_count} pessoas`, line: item.lines.map(lineLabel).join(' + '), timing: `Prevista até ${formatTime(item.requested_end)}`, detail: item.work_description || '' }
+      ? { ...shared, category: 'LDL · TRECHO BLOQUEADO', headline: `${item.requester_name || item.requester_code} · ${item.workforce_count} pessoas`, line: lineLabel(lineId), timing: `Prevista até ${formatTime(item.requested_end)}`, detail: item.work_description || '' }
       : type === 'circulation'
         ? { ...shared, category: 'CIRCULAÇÃO AUTORIZADA', headline: `${item.equipment_id} · ${item.equipment_name || item.direction || 'Circulação'}`, line: lineLabel(item.line_id), timing: `${item.direction || 'circulação'} · prevista até ${formatTime(item.planned_end)}`, detail: '' }
         : { ...shared, category: 'OPERAÇÃO PERMISSIVA · 15 KM/H', headline: `${item.equipment_id} · ${item.equipment_name || 'Equipamento'}`, line: lineLabel(item.line_id), timing: `Velocidade máxima 15 km/h · até ${formatTime(item.planned_end)}`, detail: item.work_description || item.justification || '' };
-    return { type: 'Feature', properties, geometry: { type: 'LineString', coordinates: sliceAxis(Number(item.km_start), Number(item.km_end)) } };
-  });
+    return { type: 'Feature', properties, geometry: { type: 'LineString', coordinates: lineCoordinates(lineId, Number(item.km_start), Number(item.km_end), helpers) } };
+  }));
 }
 function renderMap() {
   if (!map?.getSource('ldl')) return;

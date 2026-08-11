@@ -1,4 +1,6 @@
 import { analyzeProjectedTrack } from './operacao/motion.js';
+import { addInfrastructureLayers } from './rail-infrastructure-map.js?v=20260811-2';
+import { lineCoordinates, LINE_LABELS } from './rail-infrastructure.js?v=20260811-2';
 
 'use strict';
 
@@ -110,14 +112,15 @@ function showKmReadout(lngLat) {
 
 function operationCode(item, prefix) { return `${prefix} ${String(item.sequence_number).padStart(3, '0')}`; }
 function operationDate(value) { return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)); }
-function operationLineLabel(id) { return id === 'line01' ? 'Linha 01' : 'Linha 02'; }
+function operationLineLabel(id) { return LINE_LABELS[id] || id; }
 
 function operationCollections() {
-  const ldlFeatures = (state.operations.ldls || []).filter((item) => item.lines.includes('line01')).map((item) => ({
-    type: 'Feature', properties: { id: item.id, kind: 'ldl' }, geometry: { type: 'LineString', coordinates: sliceCoordinates(Number(item.km_start), Number(item.km_end)) }
-  }));
-  const permissiveFeatures = (state.operations.permissives || []).filter((item) => item.line_id === 'line01').map((item) => ({
-    type: 'Feature', properties: { id: item.id, kind: 'permissive' }, geometry: { type: 'LineString', coordinates: sliceCoordinates(Number(item.km_start), Number(item.km_end)) }
+  const helpers = { sliceAxis: sliceCoordinates, pointAtStation };
+  const ldlFeatures = (state.operations.ldls || []).flatMap((item) => item.lines.map((lineId) => ({
+    type: 'Feature', properties: { id: item.id, kind: 'ldl', lineId }, geometry: { type: 'LineString', coordinates: lineCoordinates(lineId, Number(item.km_start), Number(item.km_end), helpers) }
+  })));
+  const permissiveFeatures = (state.operations.permissives || []).map((item) => ({
+    type: 'Feature', properties: { id: item.id, kind: 'permissive', lineId: item.line_id }, geometry: { type: 'LineString', coordinates: lineCoordinates(item.line_id, Number(item.km_start), Number(item.km_end), helpers) }
   }));
   return {
     ldls: { type: 'FeatureCollection', features: ldlFeatures },
@@ -149,7 +152,7 @@ function showOperationPopup(item, kind, lngLat) {
 function renderOperationMarkers() {
   state.operationMarkers.forEach((marker) => marker.remove()); state.operationMarkers = [];
   if (!state.map?.getSource('ldl-blocks')) return;
-  for (const item of state.operations.ldls.filter((entry) => entry.lines.includes('line01'))) {
+  for (const item of state.operations.ldls) {
     const element = document.createElement('button'); element.type = 'button'; element.className = `ldl-map-label${Date.parse(item.requested_end) < Date.now() ? ' expired' : ''}`; element.textContent = operationCode(item, 'LDL');
     element.setAttribute('aria-label', `${operationCode(item, 'LDL')}, trecho bloqueado do KM ${formatKm(item.km_start)} ao ${formatKm(item.km_end)}.`);
     const coordinate = pointAtStation((Number(item.km_start) + Number(item.km_end)) / 2);
@@ -160,9 +163,8 @@ function renderOperationMarkers() {
 }
 
 function focusOperation(item, kind) {
-  const onMap = kind === 'ldl' ? item.lines.includes('line01') : item.line_id === 'line01';
-  if (!onMap || !state.map) return;
-  const coordinates = sliceCoordinates(Number(item.km_start), Number(item.km_end)), bounds = new maplibregl.LngLatBounds(); coordinates.forEach((coordinate) => bounds.extend(coordinate));
+  if (!state.map) return;
+  const lineId = kind === 'ldl' ? item.lines[0] : item.line_id, coordinates = lineCoordinates(lineId, Number(item.km_start), Number(item.km_end), { sliceAxis: sliceCoordinates, pointAtStation }), bounds = new maplibregl.LngLatBounds(); coordinates.forEach((coordinate) => bounds.extend(coordinate));
   state.map.fitBounds(bounds, { padding: window.innerWidth < 700 ? 65 : 125, maxZoom: 14, duration: 800 });
   const center = pointAtStation((Number(item.km_start) + Number(item.km_end)) / 2); setTimeout(() => showOperationPopup(item, kind, center), 850);
 }
@@ -170,7 +172,7 @@ function focusOperation(item, kind) {
 function renderOperationItems() {
   els.railOperationItems.replaceChildren();
   for (const [kind, items] of [['ldl', state.operations.ldls], ['permissive', state.operations.permissives]]) for (const item of items) {
-    const onMap = kind === 'ldl' ? item.lines.includes('line01') : item.line_id === 'line01', node = document.createElement(onMap ? 'button' : 'div');
+    const onMap = true, node = document.createElement('button');
     if (onMap) node.type = 'button'; node.className = `rail-operation-item${kind === 'permissive' ? ' permissive' : ''}`; node.dataset.map = String(onMap);
     const code = document.createElement('b'); code.textContent = operationCode(item, kind === 'ldl' ? 'LDL' : 'PERM');
     const detail = document.createTextNode(`KM ${formatKm(item.km_start)}–${formatKm(item.km_end)} · ${kind === 'ldl' ? item.lines.map(operationLineLabel).join(' + ') : `${operationLineLabel(item.line_id)} · 15 km/h`}`);
@@ -188,7 +190,7 @@ function renderRailOperations() {
   els.railOperations.className = `rail-operations ${ldls.length ? 'blocked' : permissives.length ? 'permissive' : 'clear'}`;
   els.railOperations.querySelector('.rail-operation-icon').textContent = ldls.length ? '!' : permissives.length ? '15' : '✓';
   els.railOperationStatus.textContent = ldls.length ? `${ldls.length} ${ldls.length === 1 ? 'LDL ATIVA' : 'LDLs ATIVAS'} · VIA BLOQUEADA` : permissives.length ? `${permissives.length} ${permissives.length === 1 ? 'PERMISSIVO ATIVO' : 'PERMISSIVOS ATIVOS'}` : 'SEM LDL ATIVA';
-  const lineSummary = lines.map((line) => line === 'Linha 02' ? 'Linha 02 (traçado ainda não disponível no mapa)' : line).join(' + ');
+  const lineSummary = lines.join(' + ');
   els.railOperationDetail.textContent = `${permissives.length} permissivo${permissives.length === 1 ? '' : 's'} · ${lineSummary || 'linha livre'} · atualizado ${ageLabel(state.operations.serverTime)}`;
   els.fitBlocks.hidden = !collections.ldls.features.length && !collections.permissives.features.length;
 }
@@ -210,6 +212,7 @@ function initMap(axis) {
     state.map.addLayer({ id: 'package-casing', type: 'line', source: 'packages', paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 6, 14, 11], 'line-opacity': .9 } });
     state.map.addLayer({ id: 'package-lines', type: 'line', source: 'packages', paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 3, 14, 7], 'line-opacity': .94 } });
     state.map.addLayer({ id: 'package-hit', type: 'line', source: 'packages', paint: { 'line-color': '#ffffff', 'line-width': 24, 'line-opacity': .01 } });
+    addInfrastructureLayers(state.map, { sliceAxis: sliceCoordinates, pointAtStation });
     state.map.addSource('history', { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [] } } });
     state.map.addLayer({ id: 'history', type: 'line', source: 'history', paint: { 'line-color': '#32a6d8', 'line-width': 4, 'line-opacity': .9 } });
     state.map.addSource('ldl-blocks', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });

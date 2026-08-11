@@ -1,4 +1,6 @@
 import { createSafetyAudio } from '../safety-audio.js?v=20260811-5';
+import { addInfrastructureLayers } from '../rail-infrastructure-map.js?v=20260811-2';
+import { availableLines, lineCoordinates, LINE_LABELS } from '../rail-infrastructure.js?v=20260811-2';
 
 const API = /^(?:localhost|127\.0\.0\.1)$/.test(location.hostname)
   ? 'http://127.0.0.1:8791'
@@ -12,11 +14,11 @@ const elements = {
   freshness: $('freshness'), alerts: $('alerts'), alertCount: $('alert-count'), ldlList: $('ldl-list'), circulationList: $('circulation-list'), permissiveList: $('permissive-list'),
   historyBody: $('history-body'), historyFilter: $('history-filter'), pdf: $('pdf'), excel: $('excel'),
   kpiLdl: $('kpi-ldl'), kpiPeople: $('kpi-people'), kpiDeadline: $('kpi-deadline'), kpiCirculation: $('kpi-circulation'), kpiPermissive: $('kpi-permissive'), kpiApproach: $('kpi-approach'),
-  ldlForm: $('ldl-form'), ldlRequester: $('ldl-requester'), ldlChannel: $('ldl-channel'), ldlKmStart: $('ldl-km-start'), ldlKmEnd: $('ldl-km-end'),
+  ldlForm: $('ldl-form'), ldlRequester: $('ldl-requester'), ldlChannel: $('ldl-channel'), ldlKmStart: $('ldl-km-start'), ldlKmEnd: $('ldl-km-end'), ldlTrackContext: $('ldl-track-context'),
   ldlWorkforce: $('ldl-workforce'), ldlStart: $('ldl-start'), ldlEnd: $('ldl-end'), ldlDescription: $('ldl-description'), ldlMessage: $('ldl-message'),
-  circulationForm: $('circulation-form'), circEquipment: $('circ-equipment'), circOperator: $('circ-operator'), circLine: $('circ-line'), circDirection: $('circ-direction'),
+  circulationForm: $('circulation-form'), circEquipment: $('circ-equipment'), circOperator: $('circ-operator'), circLine: $('circ-line'), circDirection: $('circ-direction'), circTrackContext: $('circ-track-context'),
   circKmStart: $('circ-km-start'), circKmEnd: $('circ-km-end'), circStart: $('circ-start'), circEnd: $('circ-end'), circRestrictions: $('circ-restrictions'), circMessage: $('circ-message'),
-  permissiveForm: $('permissive-form'), permEquipment: $('perm-equipment'), permOperator: $('perm-operator'), permLine: $('perm-line'), permKmStart: $('perm-km-start'), permKmEnd: $('perm-km-end'),
+  permissiveForm: $('permissive-form'), permEquipment: $('perm-equipment'), permOperator: $('perm-operator'), permLine: $('perm-line'), permKmStart: $('perm-km-start'), permKmEnd: $('perm-km-end'), permTrackContext: $('perm-track-context'),
   permStart: $('perm-start'), permEnd: $('perm-end'), permChannel: $('perm-channel'), permDescription: $('perm-description'), permJustification: $('perm-justification'), permConflicts: $('perm-conflicts'), permConfirmed: $('perm-confirmed'), permMessage: $('perm-message')
 };
 let sessionToken = sessionStorage.getItem('ficoCcoToken') || '', state = null, axis = [], map, kmPopup, basemap = 'street', equipmentMarkers = new Map();
@@ -33,12 +35,38 @@ function isoLocal(value) { const d = new Date(value); return new Date(d - d.getT
 function formatKm(meters) { const value = Math.max(0, Math.round(Number(meters))); return `${Math.floor(value / 1000)}+${String(value % 1000).padStart(3, '0')}`; }
 function parseKm(value) { const normalized = String(value).trim().replace(',', '.'); if (/^\d+\+\d{1,3}$/.test(normalized)) { const [km, m] = normalized.split('+'); return Number(km) * 1000 + Number(m); } const number = Number(normalized); return Number.isFinite(number) ? (number < 1000 ? number * 1000 : number) : null; }
 function displayCode(item, prefix) { return `${prefix} ${String(item.sequence_number).padStart(3, '0')}`; }
-function lineLabel(id) { return id === 'line01' ? 'Linha 01' : 'Linha 02'; }
+function lineLabel(id) { return LINE_LABELS[id] || id; }
 function activeLdl() { return (state?.ldls || []).filter((item) => item.status === 'active'); }
 function activeCirculations() { return (state?.circulations || []).filter((item) => item.status === 'authorized'); }
 function activePermissives() { return (state?.permissives || []).filter((item) => item.status === 'active'); }
 function activeSafetyEvents() { return (state?.safetyEvents || []).filter((item) => item.status === 'active'); }
 function intervalsOverlap(aStart, aEnd, bStart, bEnd) { return aStart <= bEnd && aEnd >= bStart; }
+
+function updateTrackContext(kind) {
+  const config = kind === 'ldl'
+    ? { start: elements.ldlKmStart, end: elements.ldlKmEnd, context: elements.ldlTrackContext, select: null }
+    : kind === 'circulation'
+      ? { start: elements.circKmStart, end: elements.circKmEnd, context: elements.circTrackContext, select: elements.circLine }
+      : { start: elements.permKmStart, end: elements.permKmEnd, context: elements.permTrackContext, select: elements.permLine };
+  const start = parseKm(config.start.value), end = parseKm(config.end.value);
+  const availability = start === null || end === null || end <= start ? { lines: ['line01'], structures: [], partialStructures: [] } : availableLines(start, end);
+  const validInterval = start !== null && end !== null && end > start;
+  if (!validInterval) config.context.textContent = 'Informe o trecho para verificar as linhas disponíveis.';
+  else if (availability.structures.length) config.context.textContent = `Disponíveis neste trecho: ${availability.lines.map(lineLabel).join(' · ')}. Estrutura: ${availability.structures.map((item) => `${item.name}${item.provisional ? ' (provisória)' : ''}`).join(' + ')}.`;
+  else if (availability.partialStructures.length) config.context.textContent = `O trecho atravessa o limite de ${availability.partialStructures.map((item) => item.name).join(' + ')}. Divida a autorização para selecionar outras linhas.`;
+  else config.context.textContent = 'Trecho em linha singela · somente Linha 01 disponível.';
+  config.context.classList.toggle('warning', validInterval && availability.partialStructures.length > 0);
+  if (kind === 'ldl') {
+    for (const checkbox of document.querySelectorAll('[name="ldl-line"]')) {
+      if (checkbox.value === 'line01') continue;
+      checkbox.disabled = !availability.lines.includes(checkbox.value);
+      if (checkbox.disabled) checkbox.checked = false;
+    }
+  } else {
+    for (const option of config.select.options) if (option.value !== 'line01') option.disabled = !availability.lines.includes(option.value);
+    if (!availability.lines.includes(config.select.value)) config.select.value = 'line01';
+  }
+}
 
 async function api(path, options = {}) {
   const response = await fetch(`${API}${path}`, { ...options, headers: { 'content-type': 'application/json', ...(sessionToken ? { authorization: `Bearer ${sessionToken}` } : {}), ...(options.headers || {}) }, cache: 'no-store' });
@@ -100,6 +128,7 @@ function initMap() {
     map.addLayer({ id: 'axis-case', type: 'line', source: 'axis', paint: { 'line-color': '#fff', 'line-width': 8 } });
     map.addLayer({ id: 'axis', type: 'line', source: 'axis', paint: { 'line-color': '#082b4c', 'line-width': 4 } });
     map.addLayer({ id: 'axis-hit', type: 'line', source: 'axis', paint: { 'line-color': '#fff', 'line-width': 24, 'line-opacity': .01 } });
+    addInfrastructureLayers(map, { sliceAxis, pointAtStation });
     map.addSource('operations', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addLayer({ id: 'operations', type: 'line', source: 'operations', paint: { 'line-color': ['get', 'color'], 'line-width': 8, 'line-opacity': .9 } });
     map.addSource('permissives', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -117,10 +146,11 @@ function initMap() {
 function renderMap() {
   if (!map?.getSource('operations') || !state) return;
   const now = Date.now(), features = [];
-  for (const item of activeLdl()) if (item.lines.includes('line01')) features.push({ type: 'Feature', properties: { code: displayCode(item, 'LDL'), line: 'Linha 01', km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, color: Date.parse(item.requested_end) < now ? '#cf7a18' : '#c83f39' }, geometry: { type: 'LineString', coordinates: sliceAxis(item.km_start, item.km_end) } });
-  for (const item of activeCirculations()) if (item.line_id === 'line01') features.push({ type: 'Feature', properties: { code: displayCode(item, 'CIRC'), line: 'Linha 01', km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, color: '#2b82c4' }, geometry: { type: 'LineString', coordinates: sliceAxis(item.km_start, item.km_end) } });
+  const helpers = { sliceAxis, pointAtStation };
+  for (const item of activeLdl()) for (const lineId of item.lines) features.push({ type: 'Feature', properties: { code: displayCode(item, 'LDL'), line: lineLabel(lineId), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, color: Date.parse(item.requested_end) < now ? '#cf7a18' : '#c83f39' }, geometry: { type: 'LineString', coordinates: lineCoordinates(lineId, item.km_start, item.km_end, helpers) } });
+  for (const item of activeCirculations()) features.push({ type: 'Feature', properties: { code: displayCode(item, 'CIRC'), line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, color: '#2b82c4' }, geometry: { type: 'LineString', coordinates: lineCoordinates(item.line_id, item.km_start, item.km_end, helpers) } });
   map.getSource('operations').setData({ type: 'FeatureCollection', features });
-  const permissiveFeatures = activePermissives().filter((item) => item.line_id === 'line01').map((item) => ({ type: 'Feature', properties: { code: displayCode(item, 'PERM'), equipment: item.equipment_id, line: 'Linha 01', km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}` }, geometry: { type: 'LineString', coordinates: sliceAxis(item.km_start, item.km_end) } }));
+  const permissiveFeatures = activePermissives().map((item) => ({ type: 'Feature', properties: { code: displayCode(item, 'PERM'), equipment: item.equipment_id, line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}` }, geometry: { type: 'LineString', coordinates: lineCoordinates(item.line_id, item.km_start, item.km_end, helpers) } }));
   map.getSource('permissives')?.setData({ type: 'FeatureCollection', features: permissiveFeatures });
   for (const item of state.latest || []) {
     const projection = projectToAxis(Number(item.longitude), Number(item.latitude)); if (!projection) continue;
@@ -310,9 +340,12 @@ elements.excel.onclick = () => {
   const csv = '\ufeff' + rows.map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"','""')}"`).join(';')).join('\r\n'), url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })), link = document.createElement('a'); link.href = url; link.download = `controle-cco-${new Date().toISOString().slice(0,7)}.csv`; link.click(); URL.revokeObjectURL(url);
 };
 
-document.querySelectorAll('[data-open]').forEach((button) => button.onclick = () => { const dialog = $(button.dataset.open), now = Date.now(); if (dialog.id === 'ldl-dialog') { elements.ldlStart.value = isoLocal(now); elements.ldlEnd.value = isoLocal(now + 4 * 3600000); } else if (dialog.id === 'circulation-dialog') { elements.circStart.value = isoLocal(now); elements.circEnd.value = isoLocal(now + 2 * 3600000); } else { elements.permStart.value = isoLocal(now); elements.permEnd.value = isoLocal(now + 2 * 3600000); renderPermissiveConflicts(); } dialog.showModal(); });
+document.querySelectorAll('[data-open]').forEach((button) => button.onclick = () => { const dialog = $(button.dataset.open), now = Date.now(); if (dialog.id === 'ldl-dialog') { elements.ldlStart.value = isoLocal(now); elements.ldlEnd.value = isoLocal(now + 4 * 3600000); updateTrackContext('ldl'); } else if (dialog.id === 'circulation-dialog') { elements.circStart.value = isoLocal(now); elements.circEnd.value = isoLocal(now + 2 * 3600000); updateTrackContext('circulation'); } else { elements.permStart.value = isoLocal(now); elements.permEnd.value = isoLocal(now + 2 * 3600000); updateTrackContext('permissive'); renderPermissiveConflicts(); } dialog.showModal(); });
 document.querySelectorAll('[data-close]').forEach((button) => button.onclick = () => button.closest('dialog').close());
 document.querySelectorAll('[data-basemap]').forEach((button) => button.onclick = () => setBasemap(button.dataset.basemap));
+for (const input of [elements.ldlKmStart, elements.ldlKmEnd]) input.addEventListener('input', () => updateTrackContext('ldl'));
+for (const input of [elements.circKmStart, elements.circKmEnd]) input.addEventListener('input', () => updateTrackContext('circulation'));
+for (const input of [elements.permKmStart, elements.permKmEnd]) input.addEventListener('input', () => updateTrackContext('permissive'));
 elements.ldlForm.addEventListener('submit', async (event) => {
   event.preventDefault(); notify(elements.ldlMessage, ''); const lines = [...document.querySelectorAll('[name="ldl-line"]:checked')].map((item) => item.value);
   try { const data = await api('/api/v1/cco/ldl/create', { method: 'POST', body: JSON.stringify({ requesterCode: elements.ldlRequester.value, channel: elements.ldlChannel.value, kmStart: parseKm(elements.ldlKmStart.value), kmEnd: parseKm(elements.ldlKmEnd.value), lines, workforceCount: elements.ldlWorkforce.value, start: elements.ldlStart.value, end: elements.ldlEnd.value, description: elements.ldlDescription.value }) }); elements.ldlForm.closest('dialog').close(); notify(elements.message, `${data.ldl.displayCode} emitida com sucesso.`, true); elements.ldlForm.reset(); await load(); }

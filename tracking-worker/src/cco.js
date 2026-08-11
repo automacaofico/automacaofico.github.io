@@ -27,6 +27,16 @@ function iso(value) { const date = new Date(value); return Number.isFinite(date.
 function numeric(value) { const number = Number(value); return Number.isFinite(number) ? number : null; }
 function activeAuthorized(env, value) { return Boolean(env.OPERATOR_ADMIN_PASSWORD) && String(value || '') === env.OPERATOR_ADMIN_PASSWORD; }
 
+const DOUBLE_TRACK_RANGES = [[3880,6929],[19699,20299],[32182,34217],[47902,48502],[59878,61914],[72242,72842],[84222,86207],[101202,101802],[110662,112737],[120192,120792]];
+const SPECIAL_TRACK_RANGES = { south_loop: [0,2734], line_egp: [5520,6084], welding_yard: [6099,6538] };
+const OPERATIONAL_LINES = ['line01', 'line02', ...Object.keys(SPECIAL_TRACK_RANGES)];
+export function lineRangeAvailable(line, kmStart, kmEnd) {
+  if (line === 'line01') return true;
+  if (line === 'line02') return DOUBLE_TRACK_RANGES.some(([start, end]) => Number(kmStart) >= start && Number(kmEnd) <= end);
+  const range = SPECIAL_TRACK_RANGES[line];
+  return Boolean(range && Number(kmStart) >= range[0] && Number(kmEnd) <= range[1]);
+}
+
 export function permissiveLinksMatch(conflicts, suppliedLinks) {
   const required = conflicts.map((item) => `${item.kind}:${item.id}`).sort();
   const supplied = suppliedLinks.filter((item) => /^(LDL|CIRC):/.test(item)).sort();
@@ -200,9 +210,10 @@ async function syncSafetyEvents(request, env, controller) {
 async function createLdl(request, env, controller) {
   const body = await request.json().catch(() => ({})), requesterCode = code(body.requesterCode);
   const kmStart = numeric(body.kmStart), kmEnd = numeric(body.kmEnd), start = iso(body.start), end = iso(body.end);
-  const lines = [...new Set(Array.isArray(body.lines) ? body.lines.map((line) => clean(line)) : [])].filter((line) => ['line01', 'line02'].includes(line));
+  const lines = [...new Set(Array.isArray(body.lines) ? body.lines.map((line) => clean(line)) : [])].filter((line) => OPERATIONAL_LINES.includes(line));
   const workforce = Math.round(numeric(body.workforceCount) || 0), description = clean(body.description, 500), channel = body.channel;
   if (!requesterCode || kmStart === null || kmEnd === null || kmStart < 0 || kmEnd <= kmStart || !start || !end || end <= start || !lines.length || workforce < 1 || workforce > 2000 || description.length < 3 || !['radio', 'whatsapp'].includes(channel)) return reply(request, { ok: false, error: 'Revise solicitante, linhas, KM, horários, efetivo, serviço e canal.' }, 400);
+  if (lines.some((line) => !lineRangeAvailable(line, kmStart, kmEnd))) return reply(request, { ok: false, error: 'Uma das linhas selecionadas não existe em todo o trecho informado. Divida a LDL conforme os limites do pátio, DTO ou linha especial.' }, 400);
   const requester = await env.DB.prepare('SELECT code FROM requesters WHERE code=? AND active=1').bind(requesterCode).first();
   if (!requester) return reply(request, { ok: false, error: 'Solicitante inativo ou não cadastrado.' }, 400);
   const conflicts = await findConflicts(env, { lines, kmStart, kmEnd, start, end });
@@ -234,7 +245,8 @@ async function closeLdl(request, env, controller) {
 async function createCirculation(request, env, controller) {
   const body = await request.json().catch(() => ({})), equipmentId = code(body.equipmentId), operatorRegistration = code(body.operatorRegistration), line = clean(body.line);
   const kmStart = numeric(body.kmStart), kmEnd = numeric(body.kmEnd), start = iso(body.start), end = iso(body.end), direction = body.direction, restrictions = clean(body.restrictions, 500);
-  if (!equipmentId || !['line01', 'line02'].includes(line) || kmStart === null || kmEnd === null || kmStart < 0 || kmEnd <= kmStart || !start || !end || end <= start || !['crescente', 'decrescente', 'manobra'].includes(direction)) return reply(request, { ok: false, error: 'Revise equipamento, linha, KM, horários e sentido.' }, 400);
+  if (!equipmentId || !OPERATIONAL_LINES.includes(line) || kmStart === null || kmEnd === null || kmStart < 0 || kmEnd <= kmStart || !start || !end || end <= start || !['crescente', 'decrescente', 'manobra'].includes(direction)) return reply(request, { ok: false, error: 'Revise equipamento, linha, KM, horários e sentido.' }, 400);
+  if (!lineRangeAvailable(line, kmStart, kmEnd)) return reply(request, { ok: false, error: 'A linha selecionada não existe em todo o trecho informado. Divida a circulação conforme os limites da infraestrutura.' }, 400);
   const equipment = await env.DB.prepare('SELECT id FROM equipment WHERE id=? AND active=1').bind(equipmentId).first();
   if (!equipment) return reply(request, { ok: false, error: 'Equipamento não cadastrado.' }, 400);
   if (operatorRegistration && !await env.DB.prepare('SELECT registration FROM operators WHERE registration=? AND active=1').bind(operatorRegistration).first()) return reply(request, { ok: false, error: 'Operador não cadastrado.' }, 400);
@@ -268,7 +280,8 @@ async function createPermissive(request, env, controller) {
   const kmStart = numeric(body.kmStart), kmEnd = numeric(body.kmEnd), start = iso(body.start), end = iso(body.end);
   const description = clean(body.description, 500), justification = clean(body.justification, 500), channel = body.channel;
   const selectedLinks = [...new Set((Array.isArray(body.linkedRecords) ? body.linkedRecords : []).map((item) => `${clean(item?.kind, 8).toUpperCase()}:${clean(item?.id, 80)}`))];
-  if (!equipmentId || !['line01', 'line02'].includes(line) || kmStart === null || kmEnd === null || kmStart < 0 || kmEnd <= kmStart || !start || !end || end <= start || description.length < 3 || justification.length < 5 || !['radio', 'whatsapp'].includes(channel) || body.communicationConfirmed !== true) return reply(request, { ok: false, error: 'Revise equipamento, linha, KM, horários, serviço, justificativa e confirmação da comunicação.' }, 400);
+  if (!equipmentId || !OPERATIONAL_LINES.includes(line) || kmStart === null || kmEnd === null || kmStart < 0 || kmEnd <= kmStart || !start || !end || end <= start || description.length < 3 || justification.length < 5 || !['radio', 'whatsapp'].includes(channel) || body.communicationConfirmed !== true) return reply(request, { ok: false, error: 'Revise equipamento, linha, KM, horários, serviço, justificativa e confirmação da comunicação.' }, 400);
+  if (!lineRangeAvailable(line, kmStart, kmEnd)) return reply(request, { ok: false, error: 'A linha selecionada não existe em todo o trecho permissivo informado.' }, 400);
   const equipment = await env.DB.prepare('SELECT id FROM equipment WHERE id=? AND active=1').bind(equipmentId).first();
   if (!equipment) return reply(request, { ok: false, error: 'Equipamento não cadastrado.' }, 400);
   if (operatorRegistration && !await env.DB.prepare('SELECT registration FROM operators WHERE registration=? AND active=1').bind(operatorRegistration).first()) return reply(request, { ok: false, error: 'Operador não cadastrado.' }, 400);
