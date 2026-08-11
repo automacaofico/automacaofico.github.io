@@ -18,7 +18,7 @@ const els = {
   fleet: $('fleet'), fit: $('fit'), fullscreen: $('fullscreen'), sound: $('sound'), criticalBanner: $('critical-banner'), criticalText: $('critical-text')
 };
 let axis = [], grid = new Map(), map, equipment = [], operations = { ldls: [], circulations: [], permissives: [], safetyEvents: [] };
-let markers = new Map(), kmPopup, lastSuccess = 0;
+let markers = new Map(), kmPopup, operationPopup, equipmentPopup, hoveredEquipmentId = null, lastSuccess = 0;
 let lastCriticalSignature = '', lastCriticalSoundAt = 0, lastWarningSignature = '';
 const safetyAudio = createSafetyAudio(els.sound, 'ficoTvSafetySound');
 
@@ -56,6 +56,60 @@ function mapStyle() { return { version: 8, sources: {
   satellite: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 17, attribution: 'Esri World Imagery' }
 }, layers: [{ id: 'osm', type: 'raster', source: 'osm', layout: { visibility: 'none' } }, { id: 'satellite', type: 'raster', source: 'satellite' }] }; }
 
+function operationPopupContent(features) {
+  const content = document.createElement('section'); content.className = 'map-context-card';
+  const heading = document.createElement('div'); heading.className = 'map-context-heading';
+  const eyebrow = document.createElement('span'); eyebrow.textContent = features.length > 1 ? 'REGISTROS SOBREPOSTOS' : 'CONTROLE OPERACIONAL';
+  const title = document.createElement('strong'); title.textContent = features.length > 1 ? `${features.length} REGISTROS NESTE TRECHO` : features[0].properties.category;
+  heading.append(eyebrow, title); content.append(heading);
+  for (const feature of features) {
+    const item = feature.properties, record = document.createElement('article'); record.className = `map-context-record ${item.kind}`;
+    const code = document.createElement('b'); code.textContent = item.code;
+    const category = document.createElement('span'); category.textContent = item.category;
+    const headline = document.createElement('strong'); headline.textContent = item.headline;
+    const route = document.createElement('p'); route.textContent = `${item.line} · KM ${item.km}`;
+    const timing = document.createElement('small'); timing.textContent = item.timing;
+    record.append(code, category, headline, route, timing);
+    if (item.detail) { const detail = document.createElement('em'); detail.textContent = item.detail; record.append(detail); }
+    content.append(record);
+  }
+  return content;
+}
+
+function showOperationalPopup(features, lngLat) {
+  const unique = features.filter((feature, index, list) => list.findIndex((item) => item.properties.code === feature.properties.code) === index);
+  if (!unique.length || hoveredEquipmentId) return;
+  if (!operationPopup) operationPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 14, className: 'operation-map-popup', maxWidth: '360px' });
+  operationPopup.setLngLat(lngLat).setDOMContent(operationPopupContent(unique)).addTo(map);
+}
+
+function equipmentPopupContent(item, projection) {
+  const content = document.createElement('section'); content.className = 'map-context-card equipment-context-card';
+  const heading = document.createElement('div'); heading.className = 'map-context-heading';
+  const eyebrow = document.createElement('span'); eyebrow.textContent = 'EQUIPAMENTO MONITORADO';
+  const title = document.createElement('strong'); title.textContent = item.equipmentId;
+  heading.append(eyebrow, title);
+  const status = equipmentStatus(item), statusLine = document.createElement('div'); statusLine.className = `equipment-context-status ${status}`;
+  statusLine.textContent = status === 'online' ? 'ONLINE' : status === 'unstable' ? 'SINAL INSTÁVEL' : 'ÚLTIMA POSIÇÃO';
+  const km = document.createElement('b'); km.className = 'equipment-context-km'; km.textContent = `KM ${formatKm(projection.stationM)}`;
+  const name = document.createElement('strong'); name.className = 'equipment-context-name'; name.textContent = item.name || item.type || item.equipmentId;
+  const telemetry = document.createElement('p'); telemetry.textContent = `${(Number(item.speedMps || 0) * 3.6).toFixed(1).replace('.', ',')} km/h · ${Math.round(projection.distanceM)} m do eixo`;
+  const operator = document.createElement('small'); operator.textContent = item.operatorName ? `Operador: ${item.operatorName} · ${item.operatorRegistration}` : 'Operador não identificado';
+  const signal = document.createElement('small'); signal.textContent = `Último sinal há ${age(item.receivedAt)}`;
+  content.append(heading, statusLine, km, name);
+  if (item.description) { const description = document.createElement('em'); description.textContent = item.description; content.append(description); }
+  content.append(telemetry, operator, signal);
+  return content;
+}
+
+function showEquipmentPopup(item) {
+  if (!item?.receivedAt || !map) return;
+  const projection = projectToAxis(item.longitude, item.latitude); if (!projection) return;
+  operationPopup?.remove(); kmPopup?.remove();
+  if (!equipmentPopup) equipmentPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 24, className: 'equipment-map-popup', maxWidth: '330px' });
+  equipmentPopup.setLngLat(projection.coordinate).setDOMContent(equipmentPopupContent(item, projection)).addTo(map);
+}
+
 function initMap() {
   map = new maplibregl.Map({ container: 'map', style: mapStyle(), center: [-50.3, -14.08], zoom: 7.3, attributionControl: false });
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-left');
@@ -73,7 +127,17 @@ function initMap() {
     map.addLayer({ id: 'circulation', type: 'line', source: 'circulation', paint: { 'line-color': '#2a8bc8', 'line-width': 7 } });
     map.addLayer({ id: 'permissive-case', type: 'line', source: 'permissive', paint: { 'line-color': '#031827', 'line-width': 13, 'line-opacity': .9 } });
     map.addLayer({ id: 'permissive', type: 'line', source: 'permissive', paint: { 'line-color': '#f1c433', 'line-width': 8, 'line-dasharray': [1.2, .8] } });
-    map.on('mousemove', 'rail-hit', (event) => {
+    map.addLayer({ id: 'ldl-hit', type: 'line', source: 'ldl', paint: { 'line-color': '#fff', 'line-width': 24, 'line-opacity': .01 } });
+    map.addLayer({ id: 'circulation-hit', type: 'line', source: 'circulation', paint: { 'line-color': '#fff', 'line-width': 24, 'line-opacity': .01 } });
+    map.addLayer({ id: 'permissive-hit', type: 'line', source: 'permissive', paint: { 'line-color': '#fff', 'line-width': 24, 'line-opacity': .01 } });
+    map.on('mousemove', (event) => {
+      if (hoveredEquipmentId) return;
+      const operational = map.queryRenderedFeatures(event.point, { layers: ['permissive-hit', 'ldl-hit', 'circulation-hit'] });
+      if (operational.length) {
+        map.getCanvas().style.cursor = 'pointer'; kmPopup?.remove(); showOperationalPopup(operational, event.lngLat); return;
+      }
+      operationPopup?.remove(); map.getCanvas().style.cursor = '';
+      if (!map.queryRenderedFeatures(event.point, { layers: ['rail-hit'] }).length) { kmPopup?.remove(); return; }
       const projection = projectToAxis(event.lngLat.lng, event.lngLat.lat); if (!projection) return;
       const pack = PACKAGES.find((item) => projection.stationM >= item.start && projection.stationM < item.end);
       const content = document.createElement('div'); content.className = 'km-pop';
@@ -82,16 +146,22 @@ function initMap() {
       if (!kmPopup) kmPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 10 });
       kmPopup.setLngLat(event.lngLat).setDOMContent(content).addTo(map);
     });
-    map.on('mouseleave', 'rail-hit', () => kmPopup?.remove());
+    map.on('mouseout', () => { if (!hoveredEquipmentId) { operationPopup?.remove(); kmPopup?.remove(); map.getCanvas().style.cursor = ''; } });
     fitRailway(); renderMap(); renderEquipmentMarkers();
   });
 }
 
 function operationalFeatures(items, type) {
-  return items.filter((item) => type === 'ldl' ? item.lines?.includes('line01') : item.line_id === 'line01').map((item) => ({
-    type: 'Feature', properties: { code: displayCode(item, type === 'ldl' ? 'LDL' : type === 'circulation' ? 'CIRC' : 'PERM') },
-    geometry: { type: 'LineString', coordinates: sliceAxis(Number(item.km_start), Number(item.km_end)) }
-  }));
+  return items.filter((item) => type === 'ldl' ? item.lines?.includes('line01') : item.line_id === 'line01').map((item) => {
+    const code = displayCode(item, type === 'ldl' ? 'LDL' : type === 'circulation' ? 'CIRC' : 'PERM');
+    const shared = { kind: type, code, km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}` };
+    const properties = type === 'ldl'
+      ? { ...shared, category: 'LDL · TRECHO BLOQUEADO', headline: `${item.requester_name || item.requester_code} · ${item.workforce_count} pessoas`, line: item.lines.map(lineLabel).join(' + '), timing: `Prevista até ${formatTime(item.requested_end)}`, detail: item.work_description || '' }
+      : type === 'circulation'
+        ? { ...shared, category: 'CIRCULAÇÃO AUTORIZADA', headline: `${item.equipment_id} · ${item.equipment_name || item.direction || 'Circulação'}`, line: lineLabel(item.line_id), timing: `${item.direction || 'circulação'} · prevista até ${formatTime(item.planned_end)}`, detail: '' }
+        : { ...shared, category: 'OPERAÇÃO PERMISSIVA · 15 KM/H', headline: `${item.equipment_id} · ${item.equipment_name || 'Equipamento'}`, line: lineLabel(item.line_id), timing: `Velocidade máxima 15 km/h · até ${formatTime(item.planned_end)}`, detail: item.work_description || item.justification || '' };
+    return { type: 'Feature', properties, geometry: { type: 'LineString', coordinates: sliceAxis(Number(item.km_start), Number(item.km_end)) } };
+  });
 }
 function renderMap() {
   if (!map?.getSource('ldl')) return;
@@ -106,8 +176,17 @@ function renderEquipmentMarkers() {
     if (!item.receivedAt) { markers.get(item.equipmentId)?.remove(); markers.delete(item.equipmentId); continue; }
     const projection = projectToAxis(item.longitude, item.latitude); if (!projection) continue;
     let marker = markers.get(item.equipmentId);
-    if (!marker) { const element = document.createElement('div'); element.className = 'equipment-marker'; element.dataset.label = item.equipmentId; marker = new maplibregl.Marker({ element }).setLngLat(projection.coordinate).addTo(map); markers.set(item.equipmentId, marker); }
-    marker.setLngLat(projection.coordinate); marker.getElement().className = `equipment-marker ${equipmentStatus(item)}`; marker.getElement().title = `${item.equipmentId} · KM ${formatKm(projection.stationM)}`;
+    if (!marker) {
+      const element = document.createElement('div'); element.className = 'equipment-marker'; element.dataset.label = item.equipmentId; element.tabIndex = 0; element.setAttribute('role', 'button');
+      marker = new maplibregl.Marker({ element }).setLngLat(projection.coordinate).addTo(map); markers.set(item.equipmentId, marker);
+      const current = () => equipment.find((entry) => entry.equipmentId === item.equipmentId);
+      element.addEventListener('mouseenter', () => { hoveredEquipmentId = item.equipmentId; showEquipmentPopup(current()); });
+      element.addEventListener('focus', () => { hoveredEquipmentId = item.equipmentId; showEquipmentPopup(current()); });
+      element.addEventListener('mouseleave', () => { hoveredEquipmentId = null; equipmentPopup?.remove(); });
+      element.addEventListener('blur', () => { hoveredEquipmentId = null; equipmentPopup?.remove(); });
+    }
+    marker.setLngLat(projection.coordinate); marker.getElement().className = `equipment-marker ${equipmentStatus(item)}`;
+    marker.getElement().setAttribute('aria-label', `${item.equipmentId}, KM ${formatKm(projection.stationM)}. Passe o mouse para ver os detalhes.`);
   }
 }
 
@@ -147,7 +226,7 @@ function renderFleet() {
   for (const item of equipment) {
     const status = equipmentStatus(item), projection = item.receivedAt ? projectToAxis(item.longitude, item.latitude) : null, card = document.createElement('button');
     card.className = `unit ${status}`; card.innerHTML = '<strong></strong><span></span><small></small>';
-    card.querySelector('strong').textContent = item.equipmentId; card.querySelector('span').textContent = projection ? `KM ${formatKm(projection.stationM)}` : 'SEM SINAL'; card.querySelector('small').textContent = item.receivedAt ? `${Number(item.speed || 0).toFixed(1).replace('.', ',')} km/h · ${age(item.receivedAt)}` : (item.name || item.type);
+    card.querySelector('strong').textContent = item.equipmentId; card.querySelector('span').textContent = projection ? `KM ${formatKm(projection.stationM)}` : 'SEM SINAL'; card.querySelector('small').textContent = item.receivedAt ? `${(Number(item.speedMps || 0) * 3.6).toFixed(1).replace('.', ',')} km/h · ${age(item.receivedAt)}` : (item.name || item.type);
     if (projection) card.onclick = () => map.easeTo({ center: projection.coordinate, zoom: 14, duration: 700 }); els.fleet.append(card);
   }
 }
