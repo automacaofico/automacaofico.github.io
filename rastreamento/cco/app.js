@@ -16,7 +16,7 @@ const elements = {
   permissiveForm: $('permissive-form'), permEquipment: $('perm-equipment'), permOperator: $('perm-operator'), permLine: $('perm-line'), permKmStart: $('perm-km-start'), permKmEnd: $('perm-km-end'),
   permStart: $('perm-start'), permEnd: $('perm-end'), permChannel: $('perm-channel'), permDescription: $('perm-description'), permJustification: $('perm-justification'), permConflicts: $('perm-conflicts'), permConfirmed: $('perm-confirmed'), permMessage: $('perm-message')
 };
-let sessionToken = sessionStorage.getItem('ficoCcoToken') || '', state = null, axis = [], map, equipmentMarkers = new Map();
+let sessionToken = sessionStorage.getItem('ficoCcoToken') || '', state = null, axis = [], map, kmPopup, basemap = 'street', equipmentMarkers = new Map();
 
 function notify(element, text, success = false) {
   element.textContent = text;
@@ -59,7 +59,33 @@ function projectToAxis(lon, lat) {
   }
   return best ? { stationM: best.a.station_m + best.t * (best.b.station_m - best.a.station_m), distanceM: Math.sqrt(best.d2) * 111320, coordinate: best.coordinate } : null;
 }
-function mapStyle() { return { version: 8, sources: { osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap' } }, layers: [{ id: 'osm', type: 'raster', source: 'osm' }] }; }
+function mapStyle() { return { version: 8, sources: {
+  osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap' },
+  satellite: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 17, attribution: 'Esri World Imagery' }
+}, layers: [
+  { id: 'osm', type: 'raster', source: 'osm' },
+  { id: 'satellite', type: 'raster', source: 'satellite', layout: { visibility: 'none' } }
+] }; }
+function setBasemap(mode) {
+  basemap = mode === 'satellite' ? 'satellite' : 'street';
+  if (map?.getLayer('osm')) map.setLayoutProperty('osm', 'visibility', basemap === 'street' ? 'visible' : 'none');
+  if (map?.getLayer('satellite')) map.setLayoutProperty('satellite', 'visibility', basemap === 'satellite' ? 'visible' : 'none');
+  document.querySelectorAll('[data-basemap]').forEach((button) => {
+    const active = button.dataset.basemap === basemap;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+}
+function showKmReadout(lngLat) {
+  const projection = projectToAxis(lngLat.lng, lngLat.lat); if (!projection) return;
+  const content = document.createElement('div'); content.className = 'cco-km-popup';
+  const line = document.createElement('span'); line.textContent = 'Linha 01 · eixo FICO';
+  const km = document.createElement('strong'); km.textContent = `KM ${formatKm(projection.stationM)}`;
+  const hint = document.createElement('small'); hint.textContent = 'Posição projetada sobre a ferrovia';
+  content.append(line, km, hint);
+  if (!kmPopup) kmPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12 });
+  kmPopup.setLngLat(lngLat).setDOMContent(content).addTo(map);
+}
 function initMap() {
   map = new maplibregl.Map({ container: 'map', style: mapStyle(), center: [-50.3, -14.08], zoom: 7.3, attributionControl: false });
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-left');
@@ -67,6 +93,7 @@ function initMap() {
     map.addSource('axis', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: axis.map((p) => p.coordinate) } } });
     map.addLayer({ id: 'axis-case', type: 'line', source: 'axis', paint: { 'line-color': '#fff', 'line-width': 8 } });
     map.addLayer({ id: 'axis', type: 'line', source: 'axis', paint: { 'line-color': '#082b4c', 'line-width': 4 } });
+    map.addLayer({ id: 'axis-hit', type: 'line', source: 'axis', paint: { 'line-color': '#fff', 'line-width': 24, 'line-opacity': .01 } });
     map.addSource('operations', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addLayer({ id: 'operations', type: 'line', source: 'operations', paint: { 'line-color': ['get', 'color'], 'line-width': 8, 'line-opacity': .9 } });
     map.addSource('permissives', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -74,6 +101,10 @@ function initMap() {
     map.addLayer({ id: 'permissives', type: 'line', source: 'permissives', paint: { 'line-color': '#f4c430', 'line-width': 7, 'line-dasharray': [1.2, .8] } });
     map.on('click', 'operations', (event) => { const p = event.features[0].properties; new maplibregl.Popup().setLngLat(event.lngLat).setHTML(`<b>${p.code}</b><br>${p.line}<br>KM ${p.km}`).addTo(map); });
     map.on('click', 'permissives', (event) => { const p = event.features[0].properties; new maplibregl.Popup().setLngLat(event.lngLat).setHTML(`<b>${p.code}</b><br>OPERAÇÃO PERMISSIVA · 15 KM/H<br>${p.equipment}<br>${p.line}<br>KM ${p.km}`).addTo(map); });
+    map.on('mouseenter', 'axis-hit', () => { map.getCanvas().style.cursor = 'crosshair'; });
+    map.on('mousemove', 'axis-hit', (event) => showKmReadout(event.lngLat));
+    map.on('mouseleave', 'axis-hit', () => { map.getCanvas().style.cursor = ''; kmPopup?.remove(); });
+    setBasemap(basemap);
     renderMap();
   });
 }
@@ -237,6 +268,7 @@ elements.excel.onclick = () => {
 
 document.querySelectorAll('[data-open]').forEach((button) => button.onclick = () => { const dialog = $(button.dataset.open), now = Date.now(); if (dialog.id === 'ldl-dialog') { elements.ldlStart.value = isoLocal(now); elements.ldlEnd.value = isoLocal(now + 4 * 3600000); } else if (dialog.id === 'circulation-dialog') { elements.circStart.value = isoLocal(now); elements.circEnd.value = isoLocal(now + 2 * 3600000); } else { elements.permStart.value = isoLocal(now); elements.permEnd.value = isoLocal(now + 2 * 3600000); renderPermissiveConflicts(); } dialog.showModal(); });
 document.querySelectorAll('[data-close]').forEach((button) => button.onclick = () => button.closest('dialog').close());
+document.querySelectorAll('[data-basemap]').forEach((button) => button.onclick = () => setBasemap(button.dataset.basemap));
 elements.ldlForm.addEventListener('submit', async (event) => {
   event.preventDefault(); notify(elements.ldlMessage, ''); const lines = [...document.querySelectorAll('[name="ldl-line"]:checked')].map((item) => item.value);
   try { const data = await api('/api/v1/cco/ldl/create', { method: 'POST', body: JSON.stringify({ requesterCode: elements.ldlRequester.value, channel: elements.ldlChannel.value, kmStart: parseKm(elements.ldlKmStart.value), kmEnd: parseKm(elements.ldlKmEnd.value), lines, workforceCount: elements.ldlWorkforce.value, start: elements.ldlStart.value, end: elements.ldlEnd.value, description: elements.ldlDescription.value }) }); elements.ldlForm.closest('dialog').close(); notify(elements.message, `${data.ldl.displayCode} emitida com sucesso.`, true); elements.ldlForm.reset(); await load(); }
