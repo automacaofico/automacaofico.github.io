@@ -1,6 +1,58 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Sala de controle | FICO</title><link rel="stylesheet" href="../../mapa-pendencias/assets/vendor/maplibre/maplibre-gl.css"><link rel="stylesheet" href="styles.css?v=20260811-1"></head><body>
-<header><a href="../"><img src="../../mapa-pendencias/assets/brand/fico-logo-color.png" alt="FICO"><span>SALA DE CONTROLE</span></a><div class="live"><i></i><b>MONITORAMENTO AO VIVO</b><time id="clock">--:--:--</time></div><nav><a href="../cco/">Controle CCO</a><a href="../operacao/">Inteligência operacional</a><button id="fullscreen">TELA CHEIA</button></nav></header>
-<main><section class="status"><article><span>ONLINE</span><strong id="online">0</strong></article><article><span>INSTÁVEIS</span><strong id="unstable">0</strong></article><article><span>OFFLINE</span><strong id="offline">0</strong></article><article><span>SEM SINAL</span><strong id="no-signal">0</strong></article><article class="alert-kpi"><span>ALERTAS ATIVOS</span><strong id="alert-total">0</strong></article><p id="updated">Aguardando dados…</p></section>
-<section class="workspace"><article class="map-panel"><div class="map-tools"><button data-basemap="street" class="active">RUAS</button><button data-basemap="satellite">SATÉLITE</button><button id="fit">VER TODA A FROTA</button></div><div id="map"></div><div class="legend"><span><i class="online"></i>Online</span><span><i class="unstable"></i>Instável</span><span><i class="offline"></i>Offline</span></div></article><aside><div class="aside-head"><div><small>ATENÇÃO OPERACIONAL</small><h1>Alertas da frota</h1></div><b id="aside-count">0</b></div><div id="alerts" class="alerts"></div></aside></section>
-<section><div class="fleet-head"><div><small>VISÃO GERAL</small><h2>Equipamentos monitorados</h2></div><span>Clique em um equipamento para centralizá-lo no mapa</span></div><div id="fleet" class="fleet"></div></section></main>
-<script src="../../mapa-pendencias/assets/vendor/maplibre/maplibre-gl.js"></script><script type="module" src="app.js?v=20260811-1"></script></body></html>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Gestão à vista CCO | FICO</title>
+  <link rel="stylesheet" href="../../mapa-pendencias/assets/vendor/maplibre/maplibre-gl.css">
+  <link rel="stylesheet" href="styles.css?v=20260811-2">
+</head>
+<body>
+  <header>
+    <a class="brand" href="../"><img src="../../mapa-pendencias/assets/brand/fico-logo-color.png" alt="FICO"><span>GESTÃO À VISTA <b>· CCO</b></span></a>
+    <div class="live"><i></i><div><b id="connection">MONITORAMENTO AO VIVO</b><small id="updated">Conectando…</small></div></div>
+    <div class="clock"><time id="clock">--:--:--</time><span id="today">--</span></div>
+    <nav><a href="../cco/">CONTROLE CCO</a><button id="fullscreen">TELA CHEIA</button></nav>
+  </header>
+
+  <main>
+    <section class="status" aria-label="Indicadores operacionais">
+      <article class="ldl"><span>LDLs ATIVAS</span><strong id="ldl">0</strong><small>trechos bloqueados</small></article>
+      <article class="people"><span>PESSOAS NA VIA</span><strong id="people">0</strong><small>efetivo protegido</small></article>
+      <article class="circulation"><span>CIRCULAÇÕES</span><strong id="circulations">0</strong><small>autorizações abertas</small></article>
+      <article class="permissive"><span>PERMISSIVOS</span><strong id="permissives">0</strong><small>máximo de 15 km/h</small></article>
+      <article class="online"><span>FROTA ONLINE</span><strong id="online">0</strong><small>de 14 equipamentos</small></article>
+      <article class="alerts"><span>ALERTAS ATIVOS</span><strong id="alert-total">0</strong><small>atenção operacional</small></article>
+    </section>
+
+    <section class="workspace">
+      <article class="map-panel">
+        <div class="panel-title"><span>LINHA TRONCO · 0+000 — 292+260</span><h1>Situação da ferrovia em tempo real</h1></div>
+        <div class="map-tools" role="group" aria-label="Tipo de mapa"><button data-basemap="street">RUAS</button><button data-basemap="satellite" class="active">SATÉLITE</button><button id="fit">VER TODA A VIA</button></div>
+        <div id="map" aria-label="Mapa operacional da FICO"></div>
+        <div class="legend"><span><i class="ldl"></i>LDL · bloqueado</span><span><i class="circulation"></i>Circulação</span><span><i class="permissive"></i>Permissivo · 15 km/h</span><span><i class="equipment"></i>Equipamento</span></div>
+      </article>
+
+      <aside>
+        <section class="operations-panel">
+          <div class="aside-head"><div><small>CONTROLE DE VIA</small><h2>Operações abertas</h2></div><b id="operation-total">0</b></div>
+          <div id="operations" class="operations"><div class="empty">Aguardando dados do CCO…</div></div>
+        </section>
+        <section class="alerts-panel">
+          <div class="aside-head"><div><small>ATENÇÃO IMEDIATA</small><h2>Alertas</h2></div><b id="aside-alert-count">0</b></div>
+          <div id="alert-list" class="alert-list"><div class="empty">Aguardando monitoramento…</div></div>
+        </section>
+      </aside>
+    </section>
+
+    <section class="fleet-panel">
+      <div class="fleet-head"><div><span>FROTA MONITORADA</span><h2>Posição dos equipamentos</h2></div><small>Atualização automática a cada 5 segundos</small></div>
+      <div id="fleet" class="fleet"></div>
+    </section>
+  </main>
+
+  <script src="../../mapa-pendencias/assets/vendor/maplibre/maplibre-gl.js"></script>
+  <script type="module" src="app.js?v=20260811-2"></script>
+</body>
+</html>

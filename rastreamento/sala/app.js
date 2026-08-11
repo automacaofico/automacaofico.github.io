@@ -1,23 +1,166 @@
-const API=/^(?:localhost|127\.0\.0\.1)$/.test(location.hostname)?"http://127.0.0.1:8791":"https://fico-tracking-api.automacaofico.workers.dev",AXIS="../../mapa-superestrutura/assets/data/fico-axis-full.json";
-const PACKAGES=[{id:"P01",start:0,end:38100,color:"#0075a9"},{id:"P02",start:38100,end:71300,color:"#55a646"},{id:"P03",start:71300,end:104500,color:"#ee7623"},{id:"P04",start:104500,end:131260,color:"#7b61a8"},{id:"P05",start:131260,end:167300,color:"#008a8a"},{id:"P06",start:167300,end:225000,color:"#c34f5d"},{id:"P07",start:225000,end:239950,color:"#657583"},{id:"P08",start:239950,end:292260,color:"#b27a19"}];
-const $=id=>document.getElementById(id),els={clock:$("clock"),online:$("online"),unstable:$("unstable"),offline:$("offline"),noSignal:$("no-signal"),alertTotal:$("alert-total"),updated:$("updated"),alerts:$("alerts"),asideCount:$("aside-count"),fleet:$("fleet"),fit:$("fit"),fullscreen:$("fullscreen")};
-let axis=[],grid=new Map(),map,equipment=[],markers=new Map(),packageMarkers=[],kmPopup;
-const formatDate=v=>new Intl.DateTimeFormat("pt-BR",{dateStyle:"short",timeStyle:"medium"}).format(new Date(v));
-const formatKm=m=>`${Math.floor(Math.max(0,Math.round(m))/1000)}+${String(Math.max(0,Math.round(m))%1000).padStart(3,"0")}`;
-const status=x=>!x.receivedAt?"sem-sinal":Date.now()-Date.parse(x.receivedAt)<=30000?"online":Date.now()-Date.parse(x.receivedAt)<=120000?"unstable":"offline";
-const age=v=>{const s=Math.max(0,(Date.now()-Date.parse(v))/1000);return s<60?`${Math.round(s)} s`:s<3600?`${Math.round(s/60)} min`:`${Math.round(s/3600)} h`};
-const key=(lon,lat)=>`${Math.floor(lon/.02)}:${Math.floor(lat/.02)}`;
-function prepare(points){axis=points;for(const p of points){const k=key(p.coordinate[0],p.coordinate[1]);if(!grid.has(k))grid.set(k,[]);grid.get(k).push(p)}}
-function dist(a,b,c,d){const y=(d-b)*111320,x=(c-a)*111320*Math.cos((b+d)*Math.PI/360);return Math.hypot(x,y)}
-function project(lon,lat){lon=Number(lon);lat=Number(lat);const gx=Math.floor(lon/.02),gy=Math.floor(lat/.02);let best;for(let x=gx-1;x<=gx+1;x++)for(let y=gy-1;y<=gy+1;y++)for(const p of grid.get(`${x}:${y}`)||[]){const d=dist(lon,lat,p.coordinate[0],p.coordinate[1]);if(!best||d<best.distanceM)best={stationM:p.station_m,distanceM:d,coordinate:p.coordinate}}return best}
-function atStation(target){let lo=0,hi=axis.length-1;while(lo+1<hi){const m=(lo+hi)>>1;if(axis[m].station_m<=target)lo=m;else hi=m}const a=axis[lo],b=axis[hi],t=(target-a.station_m)/Math.max(1,b.station_m-a.station_m);return[a.coordinate[0]+t*(b.coordinate[0]-a.coordinate[0]),a.coordinate[1]+t*(b.coordinate[1]-a.coordinate[1])]}
-function slice(start,end){return[atStation(start),...axis.filter(p=>p.station_m>start&&p.station_m<end).map(p=>p.coordinate),atStation(end)]}
-function mapStyle(){return{version:8,sources:{osm:{type:"raster",tiles:["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],tileSize:256,attribution:"© OpenStreetMap"},sat:{type:"raster",tiles:["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],tileSize:256,attribution:"Esri"}},layers:[{id:"osm",type:"raster",source:"osm"},{id:"sat",type:"raster",source:"sat",layout:{visibility:"none"}}]}}
-function initMap(){map=new maplibregl.Map({container:"map",style:mapStyle(),center:[-50.3,-14.08],zoom:7.3,attributionControl:false});map.addControl(new maplibregl.NavigationControl({showCompass:false}),"bottom-left");map.on("load",()=>{const features=PACKAGES.map(p=>({type:"Feature",properties:p,geometry:{type:"LineString",coordinates:slice(p.start,Math.min(p.end,axis.at(-1).station_m))}}));map.addSource("packages",{type:"geojson",data:{type:"FeatureCollection",features}});map.addLayer({id:"package-case",type:"line",source:"packages",paint:{"line-color":"#fff","line-width":8}});map.addLayer({id:"packages",type:"line",source:"packages",paint:{"line-color":["get","color"],"line-width":5}});map.addLayer({id:"hit",type:"line",source:"packages",paint:{"line-color":"#fff","line-width":24,"line-opacity":.01}});packageMarkers=PACKAGES.map(p=>{const el=document.createElement("div");el.className="package-label";el.style.setProperty("--package",p.color);el.textContent=p.id;return new maplibregl.Marker({element:el}).setLngLat(atStation((p.start+Math.min(p.end,axis.at(-1).station_m))/2)).addTo(map)});map.on("mousemove","hit",ev=>{const pr=project(ev.lngLat.lng,ev.lngLat.lat);if(!pr)return;const pack=PACKAGES.find(p=>pr.stationM>=p.start&&pr.stationM<p.end);const d=document.createElement("div");d.className="km-pop";d.innerHTML="<span></span><strong></strong>";d.querySelector("span").textContent=pack?.id||"FICO";d.querySelector("strong").textContent=`KM ${formatKm(pr.stationM)}`;(kmPopup||=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:10})).setLngLat(ev.lngLat).setDOMContent(d).addTo(map)});map.on("mouseleave","hit",()=>kmPopup?.remove());render()})}
-function alertsFor(list){const a=[];for(const x of list){const s=status(x),pr=x.receivedAt?project(x.longitude,x.latitude):null;if(s==="offline")a.push({high:true,title:`${x.equipmentId} offline`,text:`Sem atualização há ${age(x.receivedAt)} · ${x.operatorName||"sem operador"}`});else if(s==="unstable")a.push({title:`${x.equipmentId} instável`,text:`Último sinal há ${age(x.receivedAt)}`});if(x.receivedAt&&Number(x.battery)<20)a.push({title:`Bateria baixa · ${x.equipmentId}`,text:`Carga informada em ${x.battery}%`});if(x.receivedAt&&Number(x.accuracy)>40)a.push({title:`Precisão insuficiente · ${x.equipmentId}`,text:`Margem atual de ${Math.round(x.accuracy)} m`});if(pr&&pr.distanceM>100)a.push({high:true,title:`${x.equipmentId} fora da faixa`,text:`Sinal a ${Math.round(pr.distanceM)} m do eixo ferroviário`})}return a}
-function updateMarker(x){if(!x.receivedAt)return;const pr=project(x.longitude,x.latitude);if(!pr)return;let marker=markers.get(x.equipmentId);if(!marker){const el=document.createElement("div");el.className="equipment-marker";el.dataset.label=x.equipmentId;marker=new maplibregl.Marker({element:el}).setLngLat(pr.coordinate).addTo(map);markers.set(x.equipmentId,marker)}marker.setLngLat(pr.coordinate);marker.getElement().className=`equipment-marker ${status(x)}`;marker.getElement().title=`${x.equipmentId} · KM ${formatKm(pr.stationM)} · ${x.operatorName||"sem operador"}`}
-function render(){if(!equipment.length)return;const counts={online:0,unstable:0,offline:0,"sem-sinal":0};equipment.forEach(x=>counts[status(x)]++);els.online.textContent=counts.online;els.unstable.textContent=counts.unstable;els.offline.textContent=counts.offline;els.noSignal.textContent=counts["sem-sinal"];const alerts=alertsFor(equipment);els.alertTotal.textContent=alerts.length;els.asideCount.textContent=alerts.length;els.alerts.replaceChildren();if(!alerts.length)els.alerts.innerHTML='<div class="empty">Nenhum alerta ativo.</div>';for(const x of alerts){const d=document.createElement("div");d.className=`alert ${x.high?"high":""}`;d.innerHTML="<strong></strong><span></span>";d.querySelector("strong").textContent=x.title;d.querySelector("span").textContent=x.text;els.alerts.append(d)}els.fleet.replaceChildren();for(const x of equipment){const s=status(x),pr=x.receivedAt?project(x.longitude,x.latitude):null,b=document.createElement("button");b.className=`unit ${s}`;b.innerHTML="<strong></strong><span></span><span class=km></span><small></small>";b.querySelector("strong").textContent=x.equipmentId;b.querySelector("span").textContent=x.name||x.description||x.type;b.querySelector(".km").textContent=pr?`KM ${formatKm(pr.stationM)}`:"SEM SINAL";b.querySelector("small").textContent=x.receivedAt?`${x.operatorName||"Sem operador"} · ${Number(x.speed||0).toFixed(1)} km/h · ${age(x.receivedAt)}`:"Aguardando primeira posição";if(pr)b.onclick=()=>map.easeTo({center:pr.coordinate,zoom:14,duration:700});els.fleet.append(b);updateMarker(x)}}
-function fit(){const b=new maplibregl.LngLatBounds();let n=0;for(const x of equipment)if(x.receivedAt){const p=project(x.longitude,x.latitude);if(p){b.extend(p.coordinate);n++}}if(n)map.fitBounds(b,{padding:90,maxZoom:13})}
-async function load(){try{const r=await fetch(`${API}/api/v1/equipment/latest`,{cache:"no-store"});if(!r.ok)throw new Error(`HTTP ${r.status}`);const d=await r.json();equipment=(d.equipment||[]).sort((a,b)=>a.equipmentId.localeCompare(b.equipmentId));els.updated.textContent=`Atualizado em ${formatDate(d.serverTime||new Date())} · ciclo de 5 s`;render()}catch(err){els.updated.textContent=`Falha na atualização · ${err.message}`}}
-document.querySelectorAll("[data-basemap]").forEach(b=>b.onclick=()=>{const sat=b.dataset.basemap==="satellite";map.setLayoutProperty("osm","visibility",sat?"none":"visible");map.setLayoutProperty("sat","visibility",sat?"visible":"none");document.querySelectorAll("[data-basemap]").forEach(x=>x.classList.toggle("active",x===b))});els.fit.onclick=fit;els.fullscreen.onclick=()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();document.addEventListener("fullscreenchange",()=>els.fullscreen.textContent=document.fullscreenElement?"SAIR DA TELA CHEIA":"TELA CHEIA");setInterval(()=>els.clock.textContent=new Date().toLocaleTimeString("pt-BR"),1000);
-fetch(AXIS).then(r=>r.json()).then(d=>{prepare(d.points);initMap();load();setInterval(load,5000)}).catch(err=>els.updated.textContent=`Traçado indisponível · ${err.message}`);
+const API = /^(?:localhost|127\.0\.0\.1)$/.test(location.hostname)
+  ? 'http://127.0.0.1:8791'
+  : 'https://fico-tracking-api.automacaofico.workers.dev';
+const AXIS_URL = '../../mapa-superestrutura/assets/data/fico-axis-full.json';
+const PACKAGES = [
+  { id: 'P01', start: 0, end: 38100, color: '#1e86ba' }, { id: 'P02', start: 38100, end: 71300, color: '#55a646' },
+  { id: 'P03', start: 71300, end: 104500, color: '#ee7623' }, { id: 'P04', start: 104500, end: 131260, color: '#8c6fba' },
+  { id: 'P05', start: 131260, end: 167300, color: '#19a6a6' }, { id: 'P06', start: 167300, end: 225000, color: '#c95b69' },
+  { id: 'P07', start: 225000, end: 239950, color: '#778997' }, { id: 'P08', start: 239950, end: 292260, color: '#bd8121' }
+];
+const $ = (id) => document.getElementById(id);
+const els = {
+  connection: $('connection'), updated: $('updated'), clock: $('clock'), today: $('today'), ldl: $('ldl'), people: $('people'),
+  circulations: $('circulations'), permissives: $('permissives'), online: $('online'), alertTotal: $('alert-total'),
+  operationTotal: $('operation-total'), operations: $('operations'), asideAlertCount: $('aside-alert-count'), alertList: $('alert-list'),
+  fleet: $('fleet'), fit: $('fit'), fullscreen: $('fullscreen')
+};
+let axis = [], grid = new Map(), map, equipment = [], operations = { ldls: [], circulations: [], permissives: [] };
+let markers = new Map(), kmPopup, lastSuccess = 0;
+
+const formatKm = (meters) => { const value = Math.max(0, Math.round(Number(meters) || 0)); return `${Math.floor(value / 1000)}+${String(value % 1000).padStart(3, '0')}`; };
+const formatTime = (value) => new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+const lineLabel = (line) => line === 'line02' ? 'Linha 02' : 'Linha 01';
+const age = (value) => { const seconds = Math.max(0, (Date.now() - Date.parse(value)) / 1000); return seconds < 60 ? `${Math.round(seconds)} s` : seconds < 3600 ? `${Math.round(seconds / 60)} min` : `${Math.round(seconds / 3600)} h`; };
+const equipmentStatus = (item) => !item.receivedAt ? 'no-signal' : Date.now() - Date.parse(item.receivedAt) <= 30000 ? 'online' : Date.now() - Date.parse(item.receivedAt) <= 120000 ? 'unstable' : 'offline';
+const displayCode = (item, prefix) => `${prefix} ${String(item.sequence_number || '').padStart(3, '0')}`;
+const gridKey = (lon, lat) => `${Math.floor(lon / .02)}:${Math.floor(lat / .02)}`;
+
+function prepareAxis(points) {
+  axis = points; grid = new Map();
+  for (const point of points) { const key = gridKey(point.coordinate[0], point.coordinate[1]); if (!grid.has(key)) grid.set(key, []); grid.get(key).push(point); }
+}
+function distance(lonA, latA, lonB, latB) { const y = (latB - latA) * 111320, x = (lonB - lonA) * 111320 * Math.cos((latA + latB) * Math.PI / 360); return Math.hypot(x, y); }
+function projectToAxis(lon, lat) {
+  lon = Number(lon); lat = Number(lat); const gx = Math.floor(lon / .02), gy = Math.floor(lat / .02); let best;
+  for (let x = gx - 1; x <= gx + 1; x++) for (let y = gy - 1; y <= gy + 1; y++) for (const point of grid.get(`${x}:${y}`) || []) {
+    const distanceM = distance(lon, lat, point.coordinate[0], point.coordinate[1]);
+    if (!best || distanceM < best.distanceM) best = { stationM: point.station_m, distanceM, coordinate: point.coordinate };
+  }
+  return best;
+}
+function pointAtStation(target) {
+  target = Math.max(axis[0].station_m, Math.min(Number(target), axis.at(-1).station_m));
+  let low = 0, high = axis.length - 1;
+  while (low + 1 < high) { const middle = (low + high) >> 1; if (axis[middle].station_m <= target) low = middle; else high = middle; }
+  const a = axis[low], b = axis[high], ratio = (target - a.station_m) / Math.max(1, b.station_m - a.station_m);
+  return [a.coordinate[0] + ratio * (b.coordinate[0] - a.coordinate[0]), a.coordinate[1] + ratio * (b.coordinate[1] - a.coordinate[1])];
+}
+function sliceAxis(start, end) { return [pointAtStation(start), ...axis.filter((point) => point.station_m > start && point.station_m < end).map((point) => point.coordinate), pointAtStation(end)]; }
+function mapStyle() { return { version: 8, sources: {
+  osm: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap' },
+  satellite: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 17, attribution: 'Esri World Imagery' }
+}, layers: [{ id: 'osm', type: 'raster', source: 'osm', layout: { visibility: 'none' } }, { id: 'satellite', type: 'raster', source: 'satellite' }] }; }
+
+function initMap() {
+  map = new maplibregl.Map({ container: 'map', style: mapStyle(), center: [-50.3, -14.08], zoom: 7.3, attributionControl: false });
+  map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-left');
+  map.on('load', () => {
+    const packages = PACKAGES.map((item) => ({ type: 'Feature', properties: item, geometry: { type: 'LineString', coordinates: sliceAxis(item.start, item.end) } }));
+    map.addSource('packages', { type: 'geojson', data: { type: 'FeatureCollection', features: packages } });
+    map.addLayer({ id: 'package-case', type: 'line', source: 'packages', paint: { 'line-color': '#fff', 'line-width': 8, 'line-opacity': .9 } });
+    map.addLayer({ id: 'packages', type: 'line', source: 'packages', paint: { 'line-color': ['get', 'color'], 'line-width': 5 } });
+    map.addLayer({ id: 'rail-hit', type: 'line', source: 'packages', paint: { 'line-color': '#fff', 'line-width': 26, 'line-opacity': .01 } });
+    for (const item of PACKAGES) { const element = document.createElement('div'); element.className = 'package-label'; element.style.setProperty('--package', item.color); element.textContent = item.id; new maplibregl.Marker({ element }).setLngLat(pointAtStation((item.start + item.end) / 2)).addTo(map); }
+    for (const source of ['ldl', 'circulation', 'permissive']) map.addSource(source, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addLayer({ id: 'ldl-case', type: 'line', source: 'ldl', paint: { 'line-color': '#3c0a0a', 'line-width': 14, 'line-opacity': .9 } });
+    map.addLayer({ id: 'ldl', type: 'line', source: 'ldl', paint: { 'line-color': '#e14e46', 'line-width': 9 } });
+    map.addLayer({ id: 'circulation-case', type: 'line', source: 'circulation', paint: { 'line-color': '#031827', 'line-width': 12, 'line-opacity': .85 } });
+    map.addLayer({ id: 'circulation', type: 'line', source: 'circulation', paint: { 'line-color': '#2a8bc8', 'line-width': 7 } });
+    map.addLayer({ id: 'permissive-case', type: 'line', source: 'permissive', paint: { 'line-color': '#031827', 'line-width': 13, 'line-opacity': .9 } });
+    map.addLayer({ id: 'permissive', type: 'line', source: 'permissive', paint: { 'line-color': '#f1c433', 'line-width': 8, 'line-dasharray': [1.2, .8] } });
+    map.on('mousemove', 'rail-hit', (event) => {
+      const projection = projectToAxis(event.lngLat.lng, event.lngLat.lat); if (!projection) return;
+      const pack = PACKAGES.find((item) => projection.stationM >= item.start && projection.stationM < item.end);
+      const content = document.createElement('div'); content.className = 'km-pop';
+      const label = document.createElement('span'); label.textContent = pack?.id || 'FICO';
+      const km = document.createElement('strong'); km.textContent = `KM ${formatKm(projection.stationM)}`; content.append(label, km);
+      if (!kmPopup) kmPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 10 });
+      kmPopup.setLngLat(event.lngLat).setDOMContent(content).addTo(map);
+    });
+    map.on('mouseleave', 'rail-hit', () => kmPopup?.remove());
+    fitRailway(); renderMap(); renderEquipmentMarkers();
+  });
+}
+
+function operationalFeatures(items, type) {
+  return items.filter((item) => type === 'ldl' ? item.lines?.includes('line01') : item.line_id === 'line01').map((item) => ({
+    type: 'Feature', properties: { code: displayCode(item, type === 'ldl' ? 'LDL' : type === 'circulation' ? 'CIRC' : 'PERM') },
+    geometry: { type: 'LineString', coordinates: sliceAxis(Number(item.km_start), Number(item.km_end)) }
+  }));
+}
+function renderMap() {
+  if (!map?.getSource('ldl')) return;
+  map.getSource('ldl').setData({ type: 'FeatureCollection', features: operationalFeatures(operations.ldls, 'ldl') });
+  map.getSource('circulation').setData({ type: 'FeatureCollection', features: operationalFeatures(operations.circulations, 'circulation') });
+  map.getSource('permissive').setData({ type: 'FeatureCollection', features: operationalFeatures(operations.permissives, 'permissive') });
+}
+function fitRailway() { if (!map || !axis.length) return; const bounds = new maplibregl.LngLatBounds(); axis.forEach((point) => bounds.extend(point.coordinate)); map.fitBounds(bounds, { padding: { top: 100, right: 70, bottom: 60, left: 70 }, maxZoom: 9, duration: 700 }); }
+function renderEquipmentMarkers() {
+  if (!map) return;
+  for (const item of equipment) {
+    if (!item.receivedAt) { markers.get(item.equipmentId)?.remove(); markers.delete(item.equipmentId); continue; }
+    const projection = projectToAxis(item.longitude, item.latitude); if (!projection) continue;
+    let marker = markers.get(item.equipmentId);
+    if (!marker) { const element = document.createElement('div'); element.className = 'equipment-marker'; element.dataset.label = item.equipmentId; marker = new maplibregl.Marker({ element }).setLngLat(projection.coordinate).addTo(map); markers.set(item.equipmentId, marker); }
+    marker.setLngLat(projection.coordinate); marker.getElement().className = `equipment-marker ${equipmentStatus(item)}`; marker.getElement().title = `${item.equipmentId} · KM ${formatKm(projection.stationM)}`;
+  }
+}
+
+function operationRows() {
+  const rows = [];
+  for (const item of operations.ldls) rows.push({ type: 'ldl', code: displayCode(item, 'LDL'), title: `${item.workforce_count} pessoas protegidas`, line: item.lines.map(lineLabel).join(' + '), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, end: item.requested_end });
+  for (const item of operations.permissives) rows.push({ type: 'permissive', code: displayCode(item, 'PERM'), title: `${item.equipment_id} · máximo 15 km/h`, line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, end: item.planned_end });
+  for (const item of operations.circulations) rows.push({ type: 'circulation', code: displayCode(item, 'CIRC'), title: `${item.equipment_id} · ${item.direction || 'circulação'}`, line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, end: item.planned_end });
+  const priority = { ldl: 0, permissive: 1, circulation: 2 };
+  return rows.sort((a, b) => priority[a.type] - priority[b.type] || Number(a.km.split('+')[0]) - Number(b.km.split('+')[0]));
+}
+function renderOperations() {
+  const rows = operationRows(); els.operationTotal.textContent = rows.length; els.operations.replaceChildren();
+  if (!rows.length) { const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = 'Via livre · nenhum registro operacional aberto.'; els.operations.append(empty); return; }
+  for (const item of rows.slice(0, 8)) {
+    const row = document.createElement('article'); row.className = `operation ${item.type}`; row.innerHTML = '<span class="code"></span><div><strong></strong><small></small></div><span class="km"></span>';
+    row.querySelector('.code').textContent = item.code; row.querySelector('strong').textContent = item.title; row.querySelector('small').textContent = `${item.line} · até ${formatTime(item.end)}`; row.querySelector('.km').textContent = item.km; els.operations.append(row);
+  }
+}
+function buildAlerts() {
+  const alerts = [], now = Date.now();
+  for (const row of operationRows()) { const minutes = (Date.parse(row.end) - now) / 60000; if (minutes < 0) alerts.push({ high: true, title: `${row.code} com prazo vencido`, text: `${row.line} · ${row.km}` }); else if (minutes <= 15) alerts.push({ high: true, title: `${row.code} termina em ${Math.ceil(minutes)} min`, text: `${row.line} · ${row.km}` }); else if (minutes <= 30) alerts.push({ title: `${row.code} termina em ${Math.ceil(minutes)} min`, text: 'CCO deve confirmar encerramento ou prorrogação.' }); }
+  for (const item of equipment) { const status = equipmentStatus(item), projection = item.receivedAt ? projectToAxis(item.longitude, item.latitude) : null; if (status === 'offline') alerts.push({ high: true, title: `${item.equipmentId} offline`, text: `Sem sinal há ${age(item.receivedAt)}` }); else if (status === 'unstable') alerts.push({ title: `${item.equipmentId} instável`, text: `Último sinal há ${age(item.receivedAt)}` }); if (projection?.distanceM > 100) alerts.push({ high: true, title: `${item.equipmentId} fora da faixa`, text: `${Math.round(projection.distanceM)} m do eixo ferroviário` }); }
+  return alerts;
+}
+function renderAlerts() {
+  const alerts = buildAlerts(); els.alertTotal.textContent = alerts.length; els.asideAlertCount.textContent = alerts.length; els.alertList.replaceChildren();
+  if (!alerts.length) { const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = 'Nenhum alerta imediato.'; els.alertList.append(empty); return; }
+  for (const item of alerts.slice(0, 5)) { const row = document.createElement('article'); row.className = `alert-item ${item.high ? 'high' : ''}`; row.innerHTML = '<strong></strong><span></span>'; row.querySelector('strong').textContent = item.title; row.querySelector('span').textContent = item.text; els.alertList.append(row); }
+}
+function renderFleet() {
+  els.fleet.replaceChildren();
+  for (const item of equipment) {
+    const status = equipmentStatus(item), projection = item.receivedAt ? projectToAxis(item.longitude, item.latitude) : null, card = document.createElement('button');
+    card.className = `unit ${status}`; card.innerHTML = '<strong></strong><span></span><small></small>';
+    card.querySelector('strong').textContent = item.equipmentId; card.querySelector('span').textContent = projection ? `KM ${formatKm(projection.stationM)}` : 'SEM SINAL'; card.querySelector('small').textContent = item.receivedAt ? `${Number(item.speed || 0).toFixed(1).replace('.', ',')} km/h · ${age(item.receivedAt)}` : (item.name || item.type);
+    if (projection) card.onclick = () => map.easeTo({ center: projection.coordinate, zoom: 14, duration: 700 }); els.fleet.append(card);
+  }
+}
+function render() {
+  els.ldl.textContent = operations.ldls.length; els.people.textContent = operations.ldls.reduce((sum, item) => sum + Number(item.workforce_count || 0), 0); els.circulations.textContent = operations.circulations.length; els.permissives.textContent = operations.permissives.length; els.online.textContent = equipment.filter((item) => equipmentStatus(item) === 'online').length;
+  renderOperations(); renderAlerts(); renderFleet(); renderMap(); renderEquipmentMarkers();
+}
+async function load() {
+  try {
+    const [equipmentResponse, operationsResponse] = await Promise.all([fetch(`${API}/api/v1/equipment/latest`, { cache: 'no-store' }), fetch(`${API}/api/v1/cco/public/operations`, { cache: 'no-store' })]);
+    if (!equipmentResponse.ok || !operationsResponse.ok) throw new Error(`HTTP ${equipmentResponse.status}/${operationsResponse.status}`);
+    const equipmentData = await equipmentResponse.json(), operationsData = await operationsResponse.json();
+    equipment = (equipmentData.equipment || []).sort((a, b) => a.equipmentId.localeCompare(b.equipmentId));
+    operations = { ldls: operationsData.ldls || [], circulations: operationsData.circulations || [], permissives: operationsData.permissives || [] };
+    lastSuccess = Date.now(); els.connection.textContent = 'MONITORAMENTO AO VIVO'; els.updated.textContent = `Dados renovados às ${new Date(lastSuccess).toLocaleTimeString('pt-BR')} · ciclo de 5 s`; document.querySelector('.live').classList.remove('stale'); render();
+  } catch (error) { els.connection.textContent = 'CONEXÃO INTERROMPIDA'; els.updated.textContent = `Mantendo última leitura · ${error.message}`; document.querySelector('.live').classList.add('stale'); }
+}
+
+document.querySelectorAll('[data-basemap]').forEach((button) => button.onclick = () => { const satellite = button.dataset.basemap === 'satellite'; if (!map) return; map.setLayoutProperty('osm', 'visibility', satellite ? 'none' : 'visible'); map.setLayoutProperty('satellite', 'visibility', satellite ? 'visible' : 'none'); document.querySelectorAll('[data-basemap]').forEach((item) => item.classList.toggle('active', item === button)); });
+els.fit.onclick = fitRailway;
+els.fullscreen.onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+document.addEventListener('fullscreenchange', () => els.fullscreen.textContent = document.fullscreenElement ? 'SAIR DA TELA CHEIA' : 'TELA CHEIA');
+setInterval(() => { const now = new Date(); els.clock.textContent = now.toLocaleTimeString('pt-BR'); els.today.textContent = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }).format(now); if (lastSuccess && Date.now() - lastSuccess > 15000) document.querySelector('.live').classList.add('stale'); }, 1000);
+fetch(AXIS_URL).then((response) => response.json()).then((data) => { prepareAxis(data.points); initMap(); load(); setInterval(load, 5000); setTimeout(() => location.reload(), 6 * 60 * 60 * 1000); }).catch((error) => { els.connection.textContent = 'TRAÇADO INDISPONÍVEL'; els.updated.textContent = error.message; document.querySelector('.live').classList.add('stale'); });

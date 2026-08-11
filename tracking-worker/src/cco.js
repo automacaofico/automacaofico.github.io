@@ -137,11 +137,14 @@ async function state(request, env, controller) {
 }
 
 async function publicOperations(request, env) {
-  const [ldls, ldlLines, permissives, permissiveLinks] = await env.DB.batch([
+  const [ldls, ldlLines, circulations, permissives, permissiveLinks] = await env.DB.batch([
     env.DB.prepare(`SELECT l.id,l.sequence_number,l.permanent_code,l.requester_code,r.name AS requester_name,r.company,
       l.km_start,l.km_end,l.workforce_count,l.work_description,l.requested_start,l.requested_end,l.created_at
       FROM ldl l JOIN requesters r ON r.code=l.requester_code WHERE l.status='active' ORDER BY l.km_start,l.created_at`),
     env.DB.prepare(`SELECT ll.ldl_id,ll.line_id FROM ldl_lines ll JOIN ldl l ON l.id=ll.ldl_id WHERE l.status='active'`),
+    env.DB.prepare(`SELECT c.id,c.sequence_number,c.permanent_code,c.equipment_id,e.name AS equipment_name,c.line_id,
+      c.km_start,c.km_end,c.planned_start,c.planned_end,c.direction,c.authorized_at
+      FROM circulations c JOIN equipment e ON e.id=c.equipment_id WHERE c.status='authorized' ORDER BY c.km_start,c.authorized_at`),
     env.DB.prepare(`SELECT p.id,p.sequence_number,p.permanent_code,p.equipment_id,e.name AS equipment_name,p.line_id,p.km_start,p.km_end,
       p.planned_start,p.planned_end,p.speed_limit_kmh,p.work_description,p.justification,p.authorized_at
       FROM permissive_authorizations p JOIN equipment e ON e.id=p.equipment_id WHERE p.status='active' ORDER BY p.km_start,p.authorized_at`),
@@ -158,6 +161,7 @@ async function publicOperations(request, env) {
     serverTime: new Date().toISOString(),
     refreshSeconds: 5,
     ldls: (ldls.results || []).map((row) => ({ ...row, lines: linesByLdl[row.id] || [] })),
+    circulations: circulations.results || [],
     permissives: (permissives.results || []).map((row) => ({ ...row, links: linksByPermission[row.id] || [] }))
   }, 200, { 'cache-control': 'public, max-age=3' });
 }
