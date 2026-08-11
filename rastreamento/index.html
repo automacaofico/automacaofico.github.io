@@ -13,7 +13,8 @@
   <meta property="og:type" content="website">
   <meta name="theme-color" content="#092b4d">
   <link rel="stylesheet" href="../mapa-pendencias/assets/vendor/maplibre/maplibre-gl.css">
-  <link rel="stylesheet" href="styles.css?v=20260810-2">
+  <link rel="stylesheet" href="styles.css?v=20260811-4">
+  <link rel="stylesheet" href="operational-blocks.css?v=20260811-4">
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"WebApplication","name":"Rastreamento Ferroviário FICO","url":"https://automacaofico.github.io/rastreamento/","applicationCategory":"BusinessApplication","operatingSystem":"Web"}
   </script>
@@ -59,6 +60,14 @@
         <span id="fleet-count">14 equipamentos cadastrados</span>
       </div>
       <div id="fleet-list" class="fleet-list" aria-label="Selecionar equipamento"></div>
+    </section>
+
+    <section id="rail-operations" class="rail-operations clear" aria-live="polite">
+      <div class="rail-operation-icon" aria-hidden="true">✓</div>
+      <div class="rail-operation-copy"><p>SITUAÇÃO OPERACIONAL DA VIA</p><strong id="rail-operation-status">SEM LDL ATIVA</strong><span id="rail-operation-detail">Consultando o Controle CCO…</span></div>
+      <div class="rail-operation-legend"><span><i class="ldl"></i>LDL · trecho bloqueado</span><span><i class="permissive"></i>Permissivo · máximo 15 km/h</span></div>
+      <button id="fit-blocks" type="button" hidden>VER TRECHOS NO MAPA</button>
+      <div id="rail-operation-items" class="rail-operation-items" aria-label="Trechos com restrições operacionais"></div>
     </section>
 
     <section class="command-grid" aria-label="Painel de rastreamento">
@@ -143,6 +152,6 @@
 
   <footer><span>Automação FICO · 2026</span><span><a href="cco/">Controle CCO</a> · <a href="sala/">Sala de controle</a> · <a href="operacao/">Inteligência operacional</a> · <a href="admin/">Administração</a> · <a href="qrcodes/">Imprimir QR Codes</a> · <a href="../">Central FICO</a></span></footer>
   <script src="../mapa-pendencias/assets/vendor/maplibre/maplibre-gl.js"></script>
-  <script type="module" src="app.js?v=20260810-2"></script>
+  <script type="module" src="app.js?v=20260811-4"></script>
 </body>
 </html>

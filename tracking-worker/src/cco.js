@@ -6,8 +6,8 @@ function cors(request) {
   return { 'access-control-allow-origin': allowed && origin ? origin : 'https://automacaofico.github.io', 'access-control-allow-methods': 'GET,POST,OPTIONS', 'access-control-allow-headers': 'authorization,content-type', vary: 'Origin' };
 }
 
-function reply(request, body, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { ...JSON_HEADERS, ...cors(request), 'cache-control': 'no-store' } });
+function reply(request, body, status = 200, extraHeaders = {}) {
+  return new Response(JSON.stringify(body), { status, headers: { ...JSON_HEADERS, ...cors(request), 'cache-control': 'no-store', ...extraHeaders } });
 }
 
 async function sha256(value) {
@@ -134,6 +134,32 @@ async function baseState(env, from = null, to = null) {
 async function state(request, env, controller) {
   const url = new URL(request.url), from = iso(url.searchParams.get('from')), to = iso(url.searchParams.get('to'));
   return reply(request, { ok: true, serverTime: new Date().toISOString(), controller, ...(await baseState(env, from, to)) });
+}
+
+async function publicOperations(request, env) {
+  const [ldls, ldlLines, permissives, permissiveLinks] = await env.DB.batch([
+    env.DB.prepare(`SELECT l.id,l.sequence_number,l.permanent_code,l.requester_code,r.name AS requester_name,r.company,
+      l.km_start,l.km_end,l.workforce_count,l.work_description,l.requested_start,l.requested_end,l.created_at
+      FROM ldl l JOIN requesters r ON r.code=l.requester_code WHERE l.status='active' ORDER BY l.km_start,l.created_at`),
+    env.DB.prepare(`SELECT ll.ldl_id,ll.line_id FROM ldl_lines ll JOIN ldl l ON l.id=ll.ldl_id WHERE l.status='active'`),
+    env.DB.prepare(`SELECT p.id,p.sequence_number,p.permanent_code,p.equipment_id,e.name AS equipment_name,p.line_id,p.km_start,p.km_end,
+      p.planned_start,p.planned_end,p.speed_limit_kmh,p.work_description,p.justification,p.authorized_at
+      FROM permissive_authorizations p JOIN equipment e ON e.id=p.equipment_id WHERE p.status='active' ORDER BY p.km_start,p.authorized_at`),
+    env.DB.prepare(`SELECT pl.permission_id,pl.record_kind,COALESCE(l.permanent_code,c.permanent_code) AS record_code
+      FROM permissive_links pl JOIN permissive_authorizations p ON p.id=pl.permission_id
+      LEFT JOIN ldl l ON pl.record_kind='LDL' AND l.id=pl.record_id
+      LEFT JOIN circulations c ON pl.record_kind='CIRC' AND c.id=pl.record_id WHERE p.status='active'`)
+  ]);
+  const linesByLdl = {}, linksByPermission = {};
+  for (const row of ldlLines.results || []) (linesByLdl[row.ldl_id] ||= []).push(row.line_id);
+  for (const row of permissiveLinks.results || []) (linksByPermission[row.permission_id] ||= []).push({ kind: row.record_kind, code: row.record_code });
+  return reply(request, {
+    ok: true,
+    serverTime: new Date().toISOString(),
+    refreshSeconds: 5,
+    ldls: (ldls.results || []).map((row) => ({ ...row, lines: linesByLdl[row.id] || [] })),
+    permissives: (permissives.results || []).map((row) => ({ ...row, links: linksByPermission[row.id] || [] }))
+  }, 200, { 'cache-control': 'public, max-age=3' });
 }
 
 async function createLdl(request, env, controller) {
@@ -278,6 +304,7 @@ export async function routeCco(request, env) {
   if (request.method === 'POST' && path === '/api/v1/cco/login') return login(request, env);
   if (request.method === 'POST' && path.startsWith('/api/v2/admin/cco/requesters/')) return adminRequesters(request, env, path.endsWith('/list') ? 'list' : path.endsWith('/save') ? 'save' : 'status');
   if (request.method === 'POST' && path.startsWith('/api/v2/admin/cco/controllers/')) return adminControllers(request, env, path.endsWith('/list') ? 'list' : path.endsWith('/save') ? 'save' : 'status');
+  if (request.method === 'GET' && path === '/api/v1/cco/public/operations') return publicOperations(request, env);
   if (!path.startsWith('/api/v1/cco/')) return null;
   const controller = await controllerAuth(request, env);
   if (!controller) return reply(request, { ok: false, error: 'Sessão do CCO inválida ou expirada.' }, 401);
