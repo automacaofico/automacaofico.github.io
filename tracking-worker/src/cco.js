@@ -112,15 +112,18 @@ async function findConflicts(env, { lines, kmStart, kmEnd, start, end, ignoreLdl
 
 async function baseState(env, from = null, to = null) {
   const start = from || new Date(Date.now() - 31 * 86400000).toISOString(), end = to || new Date(Date.now() + 31 * 86400000).toISOString();
-  const [requesters, lines, equipment, operators, ldls, ldlLines, circulations, permissives, permissiveLinks, latest, safetyEvents] = await env.DB.batch([
+  const [requesters, lines, equipment, operators, ldls, ldlLines, ldlEvents, circulations, permissives, permissiveLinks, latest, safetyEvents] = await env.DB.batch([
     env.DB.prepare('SELECT code,name,role,company,supervisor,active FROM requesters ORDER BY active DESC,name'),
     env.DB.prepare('SELECT id,name,geometry_status,active FROM track_lines WHERE active=1 ORDER BY id'),
     env.DB.prepare('SELECT id,name,type,description FROM equipment WHERE active=1 ORDER BY id'),
     env.DB.prepare('SELECT registration,name FROM operators WHERE active=1 ORDER BY name'),
-    env.DB.prepare(`SELECT l.*,r.name AS requester_name,r.company,c.name AS controller_name FROM ldl l
-      JOIN requesters r ON r.code=l.requester_code JOIN cco_controllers c ON c.code=l.created_by_controller
+    env.DB.prepare(`SELECT l.*,r.name AS requester_name,r.company,c.name AS controller_name,uc.name AS updated_by_name FROM ldl l
+      JOIN requesters r ON r.code=l.requester_code JOIN cco_controllers c ON c.code=l.created_by_controller LEFT JOIN cco_controllers uc ON uc.code=l.updated_by_controller
       WHERE l.status='active' OR (l.created_at>=? AND l.created_at<=?) ORDER BY l.created_at DESC`).bind(start, end),
     env.DB.prepare('SELECT ldl_id,line_id FROM ldl_lines'),
+    env.DB.prepare(`SELECT e.id,e.ldl_id,e.event_type,e.controller_code,c.name AS controller_name,e.occurred_at,e.payload_json,l.permanent_code
+      FROM ldl_events e JOIN cco_controllers c ON c.code=e.controller_code JOIN ldl l ON l.id=e.ldl_id
+      ORDER BY e.occurred_at DESC LIMIT 5000`),
     env.DB.prepare(`SELECT c.*,e.name AS equipment_name,o.name AS operator_name,cc.name AS controller_name FROM circulations c
       JOIN equipment e ON e.id=c.equipment_id LEFT JOIN operators o ON o.registration=c.operator_registration
       JOIN cco_controllers cc ON cc.code=c.authorized_by_controller
@@ -140,6 +143,7 @@ async function baseState(env, from = null, to = null) {
   for (const row of permissiveLinks.results || []) (linksByPermission[row.permission_id] ||= []).push({ kind: row.record_kind, id: row.record_id });
   return { requesters: requesters.results, lines: lines.results, equipment: equipment.results, operators: operators.results,
     ldls: (ldls.results || []).map((row) => ({ ...row, lines: linesByLdl[row.id] || [] })), circulations: circulations.results,
+    ldlEvents: (ldlEvents.results || []).map((row) => ({ ...row, payload: (() => { try { return JSON.parse(row.payload_json || '{}'); } catch { return {}; } })() })),
     permissives: (permissives.results || []).map((row) => ({ ...row, links: linksByPermission[row.id] || [] })), latest: latest.results,
     safetyEvents: safetyEvents.results || [] };
 }
@@ -210,7 +214,7 @@ async function syncSafetyEvents(request, env, controller) {
 async function createLdl(request, env, controller) {
   const body = await request.json().catch(() => ({})), requesterCode = code(body.requesterCode);
   const kmStart = numeric(body.kmStart), kmEnd = numeric(body.kmEnd), start = iso(body.start), end = iso(body.end);
-  const lines = [...new Set(Array.isArray(body.lines) ? body.lines.map((line) => clean(line)) : [])].filter((line) => OPERATIONAL_LINES.includes(line));
+  const lines = [...new Set(Array.isArray(body.lines) ? body.lines.map((line) => clean(line)) : [])].filter((line) => OPERATIONAL_LINES.includes(line)).sort();
   const workforce = Math.round(numeric(body.workforceCount) || 0), description = clean(body.description, 500), channel = body.channel;
   if (!requesterCode || kmStart === null || kmEnd === null || kmStart < 0 || kmEnd <= kmStart || !start || !end || end <= start || !lines.length || workforce < 1 || workforce > 2000 || description.length < 3 || !['radio', 'whatsapp'].includes(channel)) return reply(request, { ok: false, error: 'Revise solicitante, linhas, KM, horários, efetivo, serviço e canal.' }, 400);
   if (lines.some((line) => !lineRangeAvailable(line, kmStart, kmEnd))) return reply(request, { ok: false, error: 'Uma das linhas selecionadas não existe em todo o trecho informado. Divida a LDL conforme os limites do pátio, DTO ou linha especial.' }, 400);
@@ -223,7 +227,7 @@ async function createLdl(request, env, controller) {
     env.DB.prepare(`INSERT INTO ldl (id,sequence_number,sequence_month,permanent_code,requester_code,km_start,km_end,workforce_count,work_description,requested_start,requested_end,request_channel,created_by_controller,created_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id, sequence, month, permanentCode, requesterCode, kmStart, kmEnd, workforce, description, start, end, channel, controller.code, now),
     ...lines.map((line) => env.DB.prepare('INSERT INTO ldl_lines (ldl_id,line_id) VALUES (?,?)').bind(id, line)),
-    env.DB.prepare('INSERT INTO ldl_events (id,ldl_id,event_type,controller_code,occurred_at,payload_json) VALUES (?,?,?,?,?,?)').bind(crypto.randomUUID(), id, 'created', controller.code, now, JSON.stringify({ lines, channel }))
+    env.DB.prepare('INSERT INTO ldl_events (id,ldl_id,event_type,controller_code,occurred_at,payload_json) VALUES (?,?,?,?,?,?)').bind(crypto.randomUUID(), id, 'created', controller.code, now, JSON.stringify({ after: { requesterCode, kmStart, kmEnd, lines, workforceCount: workforce, start, end, description, channel, revision: 0 } }))
   ]);
   return reply(request, { ok: true, ldl: { id, displayCode: `LDL ${String(sequence).padStart(3, '0')}`, permanentCode, lines } }, 201);
 }
@@ -240,6 +244,42 @@ async function closeLdl(request, env, controller) {
   else return reply(request, { ok: false, error: 'Ação inválida ou justificativa ausente.' }, 400);
   await env.DB.prepare('INSERT INTO ldl_events (id,ldl_id,event_type,controller_code,occurred_at,payload_json) VALUES (?,?,?,?,?,?)').bind(crypto.randomUUID(), id, action === 'return' ? 'returned' : 'cancelled', controller.code, now, JSON.stringify({ note })).run();
   return reply(request, { ok: true });
+}
+
+async function updateLdl(request, env, controller) {
+  const body = await request.json().catch(() => ({})), id = clean(body.id, 80), requesterCode = code(body.requesterCode);
+  const kmStart = numeric(body.kmStart), kmEnd = numeric(body.kmEnd), start = iso(body.start), end = iso(body.end), expectedRevision = Math.round(numeric(body.expectedRevision) ?? -1);
+  const lines = [...new Set(Array.isArray(body.lines) ? body.lines.map((line) => clean(line)) : [])].filter((line) => OPERATIONAL_LINES.includes(line)).sort();
+  const workforce = Math.round(numeric(body.workforceCount) || 0), description = clean(body.description, 500), reason = clean(body.reason, 500), channel = body.channel;
+  if (!id || !requesterCode || kmStart === null || kmEnd === null || kmStart < 0 || kmEnd <= kmStart || !start || !end || end <= start || !lines.length || workforce < 1 || workforce > 2000 || description.length < 3 || reason.length < 8 || !['radio', 'whatsapp'].includes(channel) || expectedRevision < 0) return reply(request, { ok: false, error: 'Revise responsável, linhas, KM, horários, efetivo, serviço, canal e justificativa da alteração.' }, 400);
+  if (lines.some((line) => !lineRangeAvailable(line, kmStart, kmEnd))) return reply(request, { ok: false, error: 'Uma das linhas selecionadas não existe em todo o novo trecho. Divida a LDL conforme os limites da infraestrutura.' }, 400);
+  const current = await env.DB.prepare('SELECT * FROM ldl WHERE id=?').bind(id).first();
+  if (!current || current.status !== 'active') return reply(request, { ok: false, error: 'Somente uma LDL ativa pode ser alterada.' }, 404);
+  if (Number(current.revision || 0) !== expectedRevision) return reply(request, { ok: false, error: 'Esta LDL foi alterada por outro controlador. Atualize o painel antes de editar novamente.' }, 409);
+  if (!await env.DB.prepare('SELECT code FROM requesters WHERE code=? AND active=1').bind(requesterCode).first()) return reply(request, { ok: false, error: 'Novo responsável inativo ou não cadastrado.' }, 400);
+  const linkedPermission = await env.DB.prepare(`SELECT p.permanent_code FROM permissive_authorizations p JOIN permissive_links pl ON pl.permission_id=p.id
+    WHERE p.status='active' AND pl.record_kind='LDL' AND pl.record_id=? LIMIT 1`).bind(id).first();
+  if (linkedPermission) return reply(request, { ok: false, error: `Encerre primeiro a operação permissiva ${linkedPermission.permanent_code} antes de alterar a LDL.` }, 409);
+  const conflicts = await findConflicts(env, { lines, kmStart, kmEnd, start, end, ignoreLdl: id });
+  if (conflicts.length) return reply(request, { ok: false, error: 'Alteração não autorizada. O novo trecho ou período possui conflito operacional.', conflicts }, 409);
+  const oldLines = (await env.DB.prepare('SELECT line_id FROM ldl_lines WHERE ldl_id=? ORDER BY line_id').bind(id).all()).results.map((row) => row.line_id);
+  const before = { requesterCode: current.requester_code, kmStart: current.km_start, kmEnd: current.km_end, lines: oldLines, workforceCount: current.workforce_count, start: current.requested_start, end: current.requested_end, description: current.work_description, channel: current.request_channel, revision: Number(current.revision || 0) };
+  const revision = before.revision + 1, now = new Date().toISOString(), revisionToken = token(16), eventId = crypto.randomUUID();
+  const after = { requesterCode, kmStart, kmEnd, lines, workforceCount: workforce, start, end, description, channel, revision };
+  const changed = Object.keys(after).some((key) => key !== 'revision' && JSON.stringify(before[key]) !== JSON.stringify(after[key]));
+  if (!changed) return reply(request, { ok: false, error: 'Nenhum dado operacional foi alterado.' }, 400);
+  const payload = JSON.stringify({ reason, before, after });
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE ldl SET requester_code=?,km_start=?,km_end=?,workforce_count=?,work_description=?,requested_start=?,requested_end=?,request_channel=?,revision=?,revision_token=?,updated_at=?,updated_by_controller=? WHERE id=? AND revision=?`)
+      .bind(requesterCode, kmStart, kmEnd, workforce, description, start, end, channel, revision, revisionToken, now, controller.code, id, expectedRevision),
+    env.DB.prepare('DELETE FROM ldl_lines WHERE ldl_id=? AND EXISTS (SELECT 1 FROM ldl WHERE id=? AND revision_token=?)').bind(id, id, revisionToken),
+    ...lines.map((line) => env.DB.prepare('INSERT INTO ldl_lines (ldl_id,line_id) SELECT ?,? WHERE EXISTS (SELECT 1 FROM ldl WHERE id=? AND revision_token=?)').bind(id, line, id, revisionToken)),
+    env.DB.prepare(`INSERT INTO ldl_events (id,ldl_id,event_type,controller_code,occurred_at,payload_json)
+      SELECT ?,?,'updated',?,?,? WHERE EXISTS (SELECT 1 FROM ldl WHERE id=? AND revision_token=?)`).bind(eventId, id, controller.code, now, payload, id, revisionToken)
+  ]);
+  const saved = await env.DB.prepare('SELECT revision_token FROM ldl WHERE id=?').bind(id).first();
+  if (saved?.revision_token !== revisionToken) return reply(request, { ok: false, error: 'Esta LDL foi alterada por outro controlador. Atualize o painel antes de editar novamente.' }, 409);
+  return reply(request, { ok: true, ldl: { id, displayCode: `LDL ${String(current.sequence_number).padStart(3, '0')}`, revision, updatedAt: now, updatedBy: controller } });
 }
 
 async function createCirculation(request, env, controller) {
@@ -360,6 +400,7 @@ export async function routeCco(request, env) {
   if (request.method === 'GET' && path === '/api/v1/cco/state') return state(request, env, controller);
   if (request.method === 'POST' && path === '/api/v1/cco/safety/sync') return syncSafetyEvents(request, env, controller);
   if (request.method === 'POST' && path === '/api/v1/cco/ldl/create') return createLdl(request, env, controller);
+  if (request.method === 'POST' && path === '/api/v1/cco/ldl/update') return updateLdl(request, env, controller);
   if (request.method === 'POST' && path === '/api/v1/cco/ldl/close') return closeLdl(request, env, controller);
   if (request.method === 'POST' && path === '/api/v1/cco/circulation/create') return createCirculation(request, env, controller);
   if (request.method === 'POST' && path === '/api/v1/cco/circulation/close') return closeCirculation(request, env, controller);

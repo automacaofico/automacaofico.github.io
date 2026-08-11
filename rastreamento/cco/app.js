@@ -13,17 +13,19 @@ const elements = {
   loginMessage: $('login-message'), controller: $('controller-name'), logout: $('logout'), refresh: $('refresh'), message: $('message'),
   sound: $('sound'), criticalBanner: $('critical-safety-banner'), criticalText: $('critical-safety-text'), safetyCount: $('safety-count'), safetyBody: $('safety-body'),
   freshness: $('freshness'), alerts: $('alerts'), alertCount: $('alert-count'), ldlList: $('ldl-list'), circulationList: $('circulation-list'), permissiveList: $('permissive-list'),
-  historyBody: $('history-body'), historyFilter: $('history-filter'), pdf: $('pdf'), excel: $('excel'),
+  historyBody: $('history-body'), historyFilter: $('history-filter'), pdf: $('pdf'), excel: $('excel'), ldlAuditExport: $('ldl-audit-export'),
   kpiLdl: $('kpi-ldl'), kpiPeople: $('kpi-people'), kpiDeadline: $('kpi-deadline'), kpiCirculation: $('kpi-circulation'), kpiPermissive: $('kpi-permissive'), kpiApproach: $('kpi-approach'),
   ldlForm: $('ldl-form'), ldlRequester: $('ldl-requester'), ldlChannel: $('ldl-channel'), ldlKmStart: $('ldl-km-start'), ldlKmEnd: $('ldl-km-end'), ldlTrackContext: $('ldl-track-context'),
   ldlWorkforce: $('ldl-workforce'), ldlStart: $('ldl-start'), ldlEnd: $('ldl-end'), ldlDescription: $('ldl-description'), ldlMessage: $('ldl-message'),
+  ldlEditDialog: $('ldl-edit-dialog'), ldlEditForm: $('ldl-edit-form'), ldlEditCode: $('ldl-edit-code'), ldlEditRequester: $('ldl-edit-requester'), ldlEditChannel: $('ldl-edit-channel'), ldlEditKmStart: $('ldl-edit-km-start'), ldlEditKmEnd: $('ldl-edit-km-end'), ldlEditTrackContext: $('ldl-edit-track-context'), ldlEditWorkforce: $('ldl-edit-workforce'), ldlEditStart: $('ldl-edit-start'), ldlEditEnd: $('ldl-edit-end'), ldlEditDescription: $('ldl-edit-description'), ldlEditReason: $('ldl-edit-reason'), ldlEditMessage: $('ldl-edit-message'),
+  ldlAuditDialog: $('ldl-audit-dialog'), ldlAuditTitle: $('ldl-audit-title'), ldlAuditSummary: $('ldl-audit-summary'), ldlAuditEvents: $('ldl-audit-events'),
   circulationForm: $('circulation-form'), circEquipment: $('circ-equipment'), circOperator: $('circ-operator'), circLine: $('circ-line'), circDirection: $('circ-direction'), circTrackContext: $('circ-track-context'),
   circKmStart: $('circ-km-start'), circKmEnd: $('circ-km-end'), circStart: $('circ-start'), circEnd: $('circ-end'), circRestrictions: $('circ-restrictions'), circMessage: $('circ-message'),
   permissiveForm: $('permissive-form'), permEquipment: $('perm-equipment'), permOperator: $('perm-operator'), permLine: $('perm-line'), permKmStart: $('perm-km-start'), permKmEnd: $('perm-km-end'), permTrackContext: $('perm-track-context'),
   permStart: $('perm-start'), permEnd: $('perm-end'), permChannel: $('perm-channel'), permDescription: $('perm-description'), permJustification: $('perm-justification'), permConflicts: $('perm-conflicts'), permConfirmed: $('perm-confirmed'), permMessage: $('perm-message')
 };
 let sessionToken = sessionStorage.getItem('ficoCcoToken') || '', state = null, axis = [], map, kmPopup, operationPopup, equipmentPopup, basemap = 'street', equipmentMarkers = new Map(), packageMarkers = [];
-let loading = false, lastCriticalSignature = '', lastWarningSignature = '', lastCriticalSoundAt = 0;
+let loading = false, editingLdl = null, lastCriticalSignature = '', lastWarningSignature = '', lastCriticalSoundAt = 0;
 const safetyAudio = createSafetyAudio(elements.sound, 'ficoCcoSafetySound');
 
 function notify(element, text, success = false) {
@@ -45,7 +47,9 @@ function intervalsOverlap(aStart, aEnd, bStart, bEnd) { return aStart <= bEnd &&
 
 function updateTrackContext(kind) {
   const config = kind === 'ldl'
-    ? { start: elements.ldlKmStart, end: elements.ldlKmEnd, context: elements.ldlTrackContext, select: null }
+    ? { start: elements.ldlKmStart, end: elements.ldlKmEnd, context: elements.ldlTrackContext, select: null, checkboxes: '[name="ldl-line"]' }
+    : kind === 'edit-ldl'
+      ? { start: elements.ldlEditKmStart, end: elements.ldlEditKmEnd, context: elements.ldlEditTrackContext, select: null, checkboxes: '[name="edit-ldl-line"]' }
     : kind === 'circulation'
       ? { start: elements.circKmStart, end: elements.circKmEnd, context: elements.circTrackContext, select: elements.circLine }
       : { start: elements.permKmStart, end: elements.permKmEnd, context: elements.permTrackContext, select: elements.permLine };
@@ -57,8 +61,8 @@ function updateTrackContext(kind) {
   else if (availability.partialStructures.length) config.context.textContent = `O trecho atravessa o limite de ${availability.partialStructures.map((item) => item.name).join(' + ')}. Divida a autorização para selecionar outras linhas.`;
   else config.context.textContent = 'Trecho em linha singela · somente Linha 01 disponível.';
   config.context.classList.toggle('warning', validInterval && availability.partialStructures.length > 0);
-  if (kind === 'ldl') {
-    for (const checkbox of document.querySelectorAll('[name="ldl-line"]')) {
+  if (config.checkboxes) {
+    for (const checkbox of document.querySelectorAll(config.checkboxes)) {
       if (checkbox.value === 'line01') continue;
       checkbox.disabled = !availability.lines.includes(checkbox.value);
       if (checkbox.disabled) checkbox.checked = false;
@@ -310,9 +314,11 @@ function renderSafetyEvents() {
 }
 
 function populateSelects() {
-  const currentRequester = elements.ldlRequester.value, currentEquipment = elements.circEquipment.value, currentPermEquipment = elements.permEquipment.value;
+  const currentRequester = elements.ldlRequester.value, currentEditRequester = elements.ldlEditRequester.value, currentEquipment = elements.circEquipment.value, currentPermEquipment = elements.permEquipment.value;
   elements.ldlRequester.replaceChildren();
   for (const item of state.requesters.filter((r) => r.active)) elements.ldlRequester.add(new Option(`${item.code} · ${item.name}`, item.code));
+  elements.ldlEditRequester.replaceChildren();
+  for (const item of state.requesters.filter((r) => r.active)) elements.ldlEditRequester.add(new Option(`${item.code} · ${item.name}`, item.code));
   elements.circEquipment.replaceChildren();
   for (const item of state.equipment) elements.circEquipment.add(new Option(`${item.id} · ${item.name}`, item.id));
   elements.permEquipment.replaceChildren();
@@ -322,6 +328,7 @@ function populateSelects() {
   for (const item of state.operators) elements.circOperator.add(new Option(`${item.name} · ${item.registration}`, item.registration));
   for (const item of state.operators) elements.permOperator.add(new Option(`${item.name} · ${item.registration}`, item.registration));
   if ([...elements.ldlRequester.options].some((o) => o.value === currentRequester)) elements.ldlRequester.value = currentRequester;
+  if ([...elements.ldlEditRequester.options].some((o) => o.value === currentEditRequester)) elements.ldlEditRequester.value = currentEditRequester;
   if ([...elements.circEquipment.options].some((o) => o.value === currentEquipment)) elements.circEquipment.value = currentEquipment;
   if ([...elements.permEquipment.options].some((o) => o.value === currentPermEquipment)) elements.permEquipment.value = currentPermEquipment;
 }
@@ -347,12 +354,54 @@ function renderPermissiveConflicts() {
   for (const item of records) { const label = document.createElement('label'); const input = document.createElement('input'); input.type = 'checkbox'; input.name = 'perm-record'; input.value = item.id; input.dataset.kind = item.kind; input.checked = true; label.append(input, document.createTextNode(`${item.code} · ${item.detail}`)); elements.permConflicts.append(label); }
 }
 
+const AUDIT_FIELD_LABELS = { requesterCode: 'Responsável', kmStart: 'KM inicial', kmEnd: 'KM final', lines: 'Linhas', workforceCount: 'Quantidade de pessoas', start: 'Início', end: 'Fim previsto', description: 'Serviço', channel: 'Canal', revision: 'Revisão' };
+function auditValue(key, value) {
+  if (value === undefined || value === null || value === '') return '—';
+  if (key === 'kmStart' || key === 'kmEnd') return formatKm(value);
+  if (key === 'lines') return value.length ? value.map(lineLabel).join(' + ') : '—';
+  if (key === 'start' || key === 'end') return date(value);
+  if (key === 'channel') return value === 'whatsapp' ? 'WhatsApp' : 'Rádio';
+  return String(value ?? '—');
+}
+function hasActiveLinkedPermissive(ldl) { return activePermissives().some((permission) => permission.links?.some((link) => link.kind === 'LDL' && link.id === ldl.id)); }
+
+function openEditLdl(item) {
+  editingLdl = item; notify(elements.ldlEditMessage, ''); elements.ldlEditCode.textContent = displayCode(item, 'LDL');
+  elements.ldlEditRequester.value = item.requester_code; elements.ldlEditChannel.value = item.request_channel; elements.ldlEditKmStart.value = formatKm(item.km_start); elements.ldlEditKmEnd.value = formatKm(item.km_end);
+  elements.ldlEditWorkforce.value = item.workforce_count; elements.ldlEditStart.value = isoLocal(Date.parse(item.requested_start)); elements.ldlEditEnd.value = isoLocal(Date.parse(item.requested_end)); elements.ldlEditDescription.value = item.work_description; elements.ldlEditReason.value = '';
+  updateTrackContext('edit-ldl');
+  for (const checkbox of document.querySelectorAll('[name="edit-ldl-line"]')) checkbox.checked = item.lines.includes(checkbox.value);
+  elements.ldlEditDialog.showModal();
+}
+
+function showLdlAudit(item) {
+  elements.ldlAuditTitle.textContent = `${displayCode(item, 'LDL')} · histórico de revisões`;
+  elements.ldlAuditSummary.textContent = `Revisão atual ${Number(item.revision || 0)} · emitida por ${item.controller_name} em ${date(item.created_at)}${item.updated_at ? ` · última alteração por ${item.updated_by_name || item.updated_by_controller} em ${date(item.updated_at)}` : ''}`;
+  elements.ldlAuditEvents.replaceChildren();
+  const events = (state.ldlEvents || []).filter((event) => event.ldl_id === item.id).sort((a, b) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at));
+  for (const event of events) {
+    const card = document.createElement('article'), head = document.createElement('header'), title = document.createElement('strong'), meta = document.createElement('span');
+    title.textContent = event.event_type === 'created' ? 'LDL emitida' : event.event_type === 'updated' ? `Revisão ${event.payload?.after?.revision ?? '—'}` : event.event_type === 'returned' ? 'Linha devolvida' : 'LDL cancelada';
+    meta.textContent = `${event.controller_code} · ${event.controller_name} · ${date(event.occurred_at)}`; head.append(title, meta); card.append(head);
+    if (event.payload?.reason) { const reason = document.createElement('p'); reason.className = 'audit-reason'; reason.textContent = `Justificativa: ${event.payload.reason}`; card.append(reason); }
+    const before = event.payload?.before || {}, after = event.payload?.after || {}, changed = Object.keys(AUDIT_FIELD_LABELS).filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]) && key in after);
+    if (changed.length) {
+      const list = document.createElement('dl');
+      for (const key of changed) { const row = document.createElement('div'), term = document.createElement('dt'), oldValue = document.createElement('dd'), arrow = document.createElement('i'), newValue = document.createElement('dd'); term.textContent = AUDIT_FIELD_LABELS[key]; oldValue.textContent = auditValue(key, before[key]); arrow.textContent = '→'; newValue.textContent = auditValue(key, after[key]); row.append(term, oldValue, arrow, newValue); list.append(row); }
+      card.append(list);
+    } else { const note = document.createElement('p'); note.textContent = event.payload?.note || (event.event_type === 'created' ? 'Registro original preservado.' : 'Evento operacional registrado.'); card.append(note); }
+    elements.ldlAuditEvents.append(card);
+  }
+  if (!events.length) elements.ldlAuditEvents.innerHTML = '<div class="empty">Nenhum evento encontrado para esta LDL.</div>';
+  elements.ldlAuditDialog.showModal();
+}
+
 function record(item, kind) {
   const isLdl = kind === 'ldl', isPermissive = kind === 'permissive', wrapper = document.createElement('article'); wrapper.className = `record ${isLdl ? '' : isPermissive ? 'permissive' : 'circulation'}`;
   const prefix = isLdl ? 'LDL' : isPermissive ? 'PERM' : 'CIRC';
   const codeText = displayCode(item, prefix), main = isLdl ? `${item.requester_name} · ${item.workforce_count} pessoas` : `${item.equipment_id} · ${item.operator_name || 'operador não informado'}`;
   const lines = isLdl ? item.lines.map(lineLabel).join(' + ') : lineLabel(item.line_id);
-  wrapper.innerHTML = `<div class="code"></div><div><strong></strong><span></span><small></small></div><div class="record-actions"><button data-complete></button><button class="danger" data-cancel>CANCELAR</button></div>`;
+  wrapper.innerHTML = `<div class="code"></div><div><strong></strong><span></span><small></small></div><div class="record-actions"><button class="secondary" data-edit>EDITAR</button><button class="secondary" data-audit>AUDITORIA</button><button data-complete></button><button class="danger" data-cancel>CANCELAR</button></div>`;
   wrapper.querySelector('.code').textContent = codeText; wrapper.querySelector('strong').textContent = main; wrapper.querySelector('span').textContent = `${lines} · KM ${formatKm(item.km_start)}–${formatKm(item.km_end)}${isPermissive ? ' · MÁX. 15 KM/H' : ''}`; wrapper.querySelector('small').textContent = `${date(isLdl ? item.requested_start : item.planned_start)} → ${date(isLdl ? item.requested_end : item.planned_end)}`;
   if (isPermissive) {
     const linkedLabels = (item.links || []).map((link) => { const source = link.kind === 'LDL' ? state.ldls.find((entry) => entry.id === link.id) : state.circulations.find((entry) => entry.id === link.id); return source ? displayCode(source, link.kind) : `${link.kind} vinculada`; });
@@ -360,6 +409,11 @@ function record(item, kind) {
     details.querySelector('p').textContent = `Vinculado a ${linkedLabels.join(' + ')} · ${item.communication_channel === 'whatsapp' ? 'WhatsApp' : 'Rádio'} confirmado · Serviço: ${item.work_description} · Justificativa: ${item.justification}`;
     wrapper.children[1].append(details);
   }
+  if (isLdl) {
+    const revision = document.createElement('small'); revision.className = 'revision-meta'; revision.textContent = `Revisão ${Number(item.revision || 0)}${item.updated_at ? ` · alterada em ${date(item.updated_at)} por ${item.updated_by_name || item.updated_by_controller}` : ' · registro original'}`; wrapper.children[1].append(revision);
+    const edit = wrapper.querySelector('[data-edit]'); edit.onclick = () => openEditLdl(item); edit.disabled = hasActiveLinkedPermissive(item); if (edit.disabled) edit.title = 'Encerre primeiro o permissivo vinculado.';
+    wrapper.querySelector('[data-audit]').onclick = () => showLdlAudit(item);
+  } else { wrapper.querySelector('[data-edit]').remove(); wrapper.querySelector('[data-audit]').remove(); }
   wrapper.querySelector('[data-complete]').textContent = isLdl ? 'REGISTRAR DEVOLUÇÃO' : isPermissive ? 'ENCERRAR PERMISSIVO' : 'CONCLUIR';
   wrapper.querySelector('[data-complete]').onclick = () => closeRecord(item.id, kind, isLdl ? 'return' : 'complete');
   wrapper.querySelector('[data-cancel]').onclick = () => closeRecord(item.id, kind, 'cancel');
@@ -421,18 +475,36 @@ elements.excel.onclick = () => {
   for (const item of state.safetyEvents || []) rows.push([item.id,'Invasão de LDL',item.status,item.equipment_id,'Linha 01',formatKm(item.station_m),formatKm(item.station_m),item.first_seen_at,item.last_seen_at,item.detected_by_controller]);
   const csv = '\ufeff' + rows.map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"','""')}"`).join(';')).join('\r\n'), url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })), link = document.createElement('a'); link.href = url; link.download = `controle-cco-${new Date().toISOString().slice(0,7)}.csv`; link.click(); URL.revokeObjectURL(url);
 };
+elements.ldlAuditExport.onclick = () => {
+  if (!state) return; const rows = [['LDL','Evento','Revisão','Data/hora','Controlador','Justificativa','Campo alterado','Valor anterior','Novo valor']];
+  for (const event of state.ldlEvents || []) {
+    const before = event.payload?.before || {}, after = event.payload?.after || {}, changed = Object.keys(AUDIT_FIELD_LABELS).filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]) && key in after);
+    if (changed.length) for (const key of changed) rows.push([event.permanent_code,event.event_type,after.revision ?? before.revision ?? '',event.occurred_at,`${event.controller_code} - ${event.controller_name}`,event.payload?.reason || '',AUDIT_FIELD_LABELS[key],auditValue(key,before[key]),auditValue(key,after[key])]);
+    else rows.push([event.permanent_code,event.event_type,after.revision ?? before.revision ?? '',event.occurred_at,`${event.controller_code} - ${event.controller_name}`,event.payload?.reason || event.payload?.note || '','Evento operacional','','']);
+  }
+  const csv = '\ufeff' + rows.map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"','""')}"`).join(';')).join('\r\n'), url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })), link = document.createElement('a'); link.href = url; link.download = `auditoria-ldl-${new Date().toISOString().slice(0,10)}.csv`; link.click(); URL.revokeObjectURL(url);
+};
 
 document.querySelectorAll('[data-open]').forEach((button) => button.onclick = () => { const dialog = $(button.dataset.open), now = Date.now(); if (dialog.id === 'ldl-dialog') { elements.ldlStart.value = isoLocal(now); elements.ldlEnd.value = isoLocal(now + 4 * 3600000); updateTrackContext('ldl'); } else if (dialog.id === 'circulation-dialog') { elements.circStart.value = isoLocal(now); elements.circEnd.value = isoLocal(now + 2 * 3600000); updateTrackContext('circulation'); } else { elements.permStart.value = isoLocal(now); elements.permEnd.value = isoLocal(now + 2 * 3600000); updateTrackContext('permissive'); renderPermissiveConflicts(); } dialog.showModal(); });
 document.querySelectorAll('[data-close]').forEach((button) => button.onclick = () => button.closest('dialog').close());
 document.querySelectorAll('[data-basemap]').forEach((button) => button.onclick = () => setBasemap(button.dataset.basemap));
 document.querySelectorAll('[data-package]').forEach((button) => button.onclick = () => focusPackage(button.dataset.package));
 for (const input of [elements.ldlKmStart, elements.ldlKmEnd]) input.addEventListener('input', () => updateTrackContext('ldl'));
+for (const input of [elements.ldlEditKmStart, elements.ldlEditKmEnd]) input.addEventListener('input', () => updateTrackContext('edit-ldl'));
 for (const input of [elements.circKmStart, elements.circKmEnd]) input.addEventListener('input', () => updateTrackContext('circulation'));
 for (const input of [elements.permKmStart, elements.permKmEnd]) input.addEventListener('input', () => updateTrackContext('permissive'));
 elements.ldlForm.addEventListener('submit', async (event) => {
   event.preventDefault(); notify(elements.ldlMessage, ''); const lines = [...document.querySelectorAll('[name="ldl-line"]:checked')].map((item) => item.value);
   try { const data = await api('/api/v1/cco/ldl/create', { method: 'POST', body: JSON.stringify({ requesterCode: elements.ldlRequester.value, channel: elements.ldlChannel.value, kmStart: parseKm(elements.ldlKmStart.value), kmEnd: parseKm(elements.ldlKmEnd.value), lines, workforceCount: elements.ldlWorkforce.value, start: elements.ldlStart.value, end: elements.ldlEnd.value, description: elements.ldlDescription.value }) }); elements.ldlForm.closest('dialog').close(); notify(elements.message, `${data.ldl.displayCode} emitida com sucesso.`, true); elements.ldlForm.reset(); await load(); }
   catch (error) { notify(elements.ldlMessage, `${error.message}${error.conflicts?.length ? ` Conflito: ${error.conflicts.map((x) => x.code).join(', ')}.` : ''}`); }
+});
+elements.ldlEditForm.addEventListener('submit', async (event) => {
+  event.preventDefault(); notify(elements.ldlEditMessage, ''); if (!editingLdl) return;
+  const lines = [...document.querySelectorAll('[name="edit-ldl-line"]:checked')].map((item) => item.value);
+  try {
+    const data = await api('/api/v1/cco/ldl/update', { method: 'POST', body: JSON.stringify({ id: editingLdl.id, expectedRevision: Number(editingLdl.revision || 0), requesterCode: elements.ldlEditRequester.value, channel: elements.ldlEditChannel.value, kmStart: parseKm(elements.ldlEditKmStart.value), kmEnd: parseKm(elements.ldlEditKmEnd.value), lines, workforceCount: elements.ldlEditWorkforce.value, start: elements.ldlEditStart.value, end: elements.ldlEditEnd.value, description: elements.ldlEditDescription.value, reason: elements.ldlEditReason.value }) });
+    elements.ldlEditDialog.close(); editingLdl = null; notify(elements.message, `${data.ldl.displayCode} atualizada para a revisão ${data.ldl.revision}. Auditoria registrada.`, true); await load();
+  } catch (error) { notify(elements.ldlEditMessage, `${error.message}${error.conflicts?.length ? ` Conflito: ${error.conflicts.map((x) => x.code).join(', ')}.` : ''}`); }
 });
 elements.circulationForm.addEventListener('submit', async (event) => {
   event.preventDefault(); notify(elements.circMessage, '');
