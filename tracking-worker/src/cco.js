@@ -112,7 +112,7 @@ async function findConflicts(env, { lines, kmStart, kmEnd, start, end, ignoreLdl
 
 async function baseState(env, from = null, to = null) {
   const start = from || new Date(Date.now() - 31 * 86400000).toISOString(), end = to || new Date(Date.now() + 31 * 86400000).toISOString();
-  const [requesters, lines, equipment, operators, ldls, ldlLines, ldlEvents, circulations, permissives, permissiveLinks, latest, safetyEvents] = await env.DB.batch([
+  const [requesters, lines, equipment, operators, ldls, ldlLines, ldlEvents, circulations, circulationEvents, permissives, permissiveLinks, latest, safetyEvents] = await env.DB.batch([
     env.DB.prepare('SELECT code,name,role,company,supervisor,active FROM requesters ORDER BY active DESC,name'),
     env.DB.prepare('SELECT id,name,geometry_status,active FROM track_lines WHERE active=1 ORDER BY id'),
     env.DB.prepare('SELECT id,name,type,description FROM equipment WHERE active=1 ORDER BY id'),
@@ -124,10 +124,13 @@ async function baseState(env, from = null, to = null) {
     env.DB.prepare(`SELECT e.id,e.ldl_id,e.event_type,e.controller_code,c.name AS controller_name,e.occurred_at,e.payload_json,l.permanent_code
       FROM ldl_events e JOIN cco_controllers c ON c.code=e.controller_code JOIN ldl l ON l.id=e.ldl_id
       ORDER BY e.occurred_at DESC LIMIT 5000`),
-    env.DB.prepare(`SELECT c.*,e.name AS equipment_name,o.name AS operator_name,cc.name AS controller_name FROM circulations c
+    env.DB.prepare(`SELECT c.*,e.name AS equipment_name,o.name AS operator_name,cc.name AS controller_name,uc.name AS updated_by_name FROM circulations c
       JOIN equipment e ON e.id=c.equipment_id LEFT JOIN operators o ON o.registration=c.operator_registration
-      JOIN cco_controllers cc ON cc.code=c.authorized_by_controller
+      JOIN cco_controllers cc ON cc.code=c.authorized_by_controller LEFT JOIN cco_controllers uc ON uc.code=c.updated_by_controller
       WHERE c.status='authorized' OR (c.authorized_at>=? AND c.authorized_at<=?) ORDER BY c.authorized_at DESC`).bind(start, end),
+    env.DB.prepare(`SELECT e.id,e.circulation_id,e.event_type,e.controller_code,c.name AS controller_name,e.occurred_at,e.payload_json,x.permanent_code
+      FROM circulation_events e JOIN cco_controllers c ON c.code=e.controller_code JOIN circulations x ON x.id=e.circulation_id
+      ORDER BY e.occurred_at DESC LIMIT 5000`),
     env.DB.prepare(`SELECT p.*,e.name AS equipment_name,o.name AS operator_name,cc.name AS controller_name FROM permissive_authorizations p
       JOIN equipment e ON e.id=p.equipment_id LEFT JOIN operators o ON o.registration=p.operator_registration
       JOIN cco_controllers cc ON cc.code=p.authorized_by_controller
@@ -144,6 +147,7 @@ async function baseState(env, from = null, to = null) {
   return { requesters: requesters.results, lines: lines.results, equipment: equipment.results, operators: operators.results,
     ldls: (ldls.results || []).map((row) => ({ ...row, lines: linesByLdl[row.id] || [] })), circulations: circulations.results,
     ldlEvents: (ldlEvents.results || []).map((row) => ({ ...row, payload: (() => { try { return JSON.parse(row.payload_json || '{}'); } catch { return {}; } })() })),
+    circulationEvents: (circulationEvents.results || []).map((row) => ({ ...row, payload: (() => { try { return JSON.parse(row.payload_json || '{}'); } catch { return {}; } })() })),
     permissives: (permissives.results || []).map((row) => ({ ...row, links: linksByPermission[row.id] || [] })), latest: latest.results,
     safetyEvents: safetyEvents.results || [] };
 }
@@ -296,9 +300,43 @@ async function createCirculation(request, env, controller) {
   await env.DB.batch([
     env.DB.prepare(`INSERT INTO circulations (id,sequence_number,sequence_month,permanent_code,equipment_id,operator_registration,line_id,km_start,km_end,planned_start,planned_end,direction,restrictions,authorized_by_controller,authorized_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id, sequence, month, permanentCode, equipmentId, operatorRegistration || null, line, kmStart, kmEnd, start, end, direction, restrictions || null, controller.code, now),
-    env.DB.prepare('INSERT INTO circulation_events (id,circulation_id,event_type,controller_code,occurred_at,payload_json) VALUES (?,?,?,?,?,?)').bind(crypto.randomUUID(), id, 'authorized', controller.code, now, JSON.stringify({ line }))
+    env.DB.prepare('INSERT INTO circulation_events (id,circulation_id,event_type,controller_code,occurred_at,payload_json) VALUES (?,?,?,?,?,?)').bind(crypto.randomUUID(), id, 'authorized', controller.code, now, JSON.stringify({ after: { equipmentId, operatorRegistration: operatorRegistration || null, line, kmStart, kmEnd, start, end, direction, restrictions: restrictions || '', revision: 0 } }))
   ]);
   return reply(request, { ok: true, circulation: { id, displayCode: `CIRC ${String(sequence).padStart(3, '0')}`, permanentCode } }, 201);
+}
+
+async function updateCirculation(request, env, controller) {
+  const body = await request.json().catch(() => ({})), id = clean(body.id, 80), equipmentId = code(body.equipmentId), operatorRegistration = code(body.operatorRegistration), line = clean(body.line);
+  const kmStart = numeric(body.kmStart), kmEnd = numeric(body.kmEnd), start = iso(body.start), end = iso(body.end), direction = body.direction;
+  const restrictions = clean(body.restrictions, 500), reason = clean(body.reason, 500), expectedRevision = Math.round(numeric(body.expectedRevision) ?? -1);
+  if (!id || !equipmentId || !OPERATIONAL_LINES.includes(line) || kmStart === null || kmEnd === null || kmStart < 0 || kmEnd <= kmStart || !start || !end || end <= start || !['crescente', 'decrescente', 'manobra'].includes(direction) || reason.length < 8 || expectedRevision < 0) return reply(request, { ok: false, error: 'Revise equipamento, operador, linha, KM, horÃ¡rios, sentido e justificativa da alteraÃ§Ã£o.' }, 400);
+  const current = await env.DB.prepare('SELECT * FROM circulations WHERE id=?').bind(id).first();
+  if (!current || current.status !== 'authorized') return reply(request, { ok: false, error: 'Somente uma circulaÃ§Ã£o autorizada pode ser alterada.' }, 404);
+  if (Number(current.revision || 0) !== expectedRevision) return reply(request, { ok: false, error: 'Esta circulaÃ§Ã£o foi alterada por outro controlador. Atualize o painel antes de editar novamente.' }, 409);
+  const changedTrack = line !== current.line_id || kmStart !== Number(current.km_start) || kmEnd !== Number(current.km_end);
+  if (changedTrack && !lineRangeAvailable(line, kmStart, kmEnd)) return reply(request, { ok: false, error: 'A linha selecionada nÃ£o existe em todo o novo trecho. Divida a circulaÃ§Ã£o conforme os limites da infraestrutura.' }, 400);
+  if (!await env.DB.prepare('SELECT id FROM equipment WHERE id=? AND active=1').bind(equipmentId).first()) return reply(request, { ok: false, error: 'Equipamento inativo ou nÃ£o cadastrado.' }, 400);
+  if (operatorRegistration && !await env.DB.prepare('SELECT registration FROM operators WHERE registration=? AND active=1').bind(operatorRegistration).first()) return reply(request, { ok: false, error: 'Operador inativo ou nÃ£o cadastrado.' }, 400);
+  const linkedPermission = await env.DB.prepare(`SELECT p.permanent_code FROM permissive_authorizations p JOIN permissive_links pl ON pl.permission_id=p.id
+    WHERE p.status='active' AND pl.record_kind='CIRC' AND pl.record_id=? LIMIT 1`).bind(id).first();
+  if (linkedPermission) return reply(request, { ok: false, error: `Encerre primeiro a operaÃ§Ã£o permissiva ${linkedPermission.permanent_code} antes de alterar a circulaÃ§Ã£o.` }, 409);
+  const conflicts = await findConflicts(env, { lines: [line], kmStart, kmEnd, start, end, ignoreCirculation: id });
+  if (conflicts.length) return reply(request, { ok: false, error: 'AlteraÃ§Ã£o nÃ£o autorizada. O novo trecho ou perÃ­odo possui conflito operacional.', conflicts }, 409);
+  const before = { equipmentId: current.equipment_id, operatorRegistration: current.operator_registration || null, line: current.line_id, kmStart: current.km_start, kmEnd: current.km_end, start: current.planned_start, end: current.planned_end, direction: current.direction, restrictions: current.restrictions || '', revision: Number(current.revision || 0) };
+  const revision = before.revision + 1, now = new Date().toISOString(), revisionToken = token(16), eventId = crypto.randomUUID();
+  const after = { equipmentId, operatorRegistration: operatorRegistration || null, line, kmStart, kmEnd, start, end, direction, restrictions, revision };
+  const changed = Object.keys(after).some((key) => key !== 'revision' && JSON.stringify(before[key]) !== JSON.stringify(after[key]));
+  if (!changed) return reply(request, { ok: false, error: 'Nenhum dado operacional foi alterado.' }, 400);
+  const payload = JSON.stringify({ reason, before, after });
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE circulations SET equipment_id=?,operator_registration=?,line_id=?,km_start=?,km_end=?,planned_start=?,planned_end=?,direction=?,restrictions=?,revision=?,revision_token=?,updated_at=?,updated_by_controller=? WHERE id=? AND revision=?`)
+      .bind(equipmentId, operatorRegistration || null, line, kmStart, kmEnd, start, end, direction, restrictions || null, revision, revisionToken, now, controller.code, id, expectedRevision),
+    env.DB.prepare(`INSERT INTO circulation_events (id,circulation_id,event_type,controller_code,occurred_at,payload_json)
+      SELECT ?,?,'updated',?,?,? WHERE EXISTS (SELECT 1 FROM circulations WHERE id=? AND revision_token=?)`).bind(eventId, id, controller.code, now, payload, id, revisionToken)
+  ]);
+  const saved = await env.DB.prepare('SELECT revision_token FROM circulations WHERE id=?').bind(id).first();
+  if (saved?.revision_token !== revisionToken) return reply(request, { ok: false, error: 'Esta circulaÃ§Ã£o foi alterada por outro controlador. Atualize o painel antes de editar novamente.' }, 409);
+  return reply(request, { ok: true, circulation: { id, displayCode: `CIRC ${String(current.sequence_number).padStart(3, '0')}`, revision, updatedAt: now, updatedBy: controller } });
 }
 
 async function closeCirculation(request, env, controller) {
@@ -403,6 +441,7 @@ export async function routeCco(request, env) {
   if (request.method === 'POST' && path === '/api/v1/cco/ldl/update') return updateLdl(request, env, controller);
   if (request.method === 'POST' && path === '/api/v1/cco/ldl/close') return closeLdl(request, env, controller);
   if (request.method === 'POST' && path === '/api/v1/cco/circulation/create') return createCirculation(request, env, controller);
+  if (request.method === 'POST' && path === '/api/v1/cco/circulation/update') return updateCirculation(request, env, controller);
   if (request.method === 'POST' && path === '/api/v1/cco/circulation/close') return closeCirculation(request, env, controller);
   if (request.method === 'POST' && path === '/api/v1/cco/permissive/create') return createPermissive(request, env, controller);
   if (request.method === 'POST' && path === '/api/v1/cco/permissive/close') return closePermissive(request, env, controller);
