@@ -27,6 +27,19 @@ function iso(value) { const date = new Date(value); return Number.isFinite(date.
 function numeric(value) { const number = Number(value); return Number.isFinite(number) ? number : null; }
 function activeAuthorized(env, value) { return Boolean(env.OPERATOR_ADMIN_PASSWORD) && String(value || '') === env.OPERATOR_ADMIN_PASSWORD; }
 
+export function permissiveLinksMatch(conflicts, suppliedLinks) {
+  const required = conflicts.map((item) => `${item.kind}:${item.id}`).sort();
+  const supplied = suppliedLinks.filter((item) => /^(LDL|CIRC):/.test(item)).sort();
+  return required.length === supplied.length && required.every((item, index) => item === supplied[index]);
+}
+
+export function permissionContainedByConflicts({ kmStart, kmEnd, start, end }, conflicts, now = Date.now()) {
+  return conflicts.every((item) => {
+    const effectiveEnd = Date.parse(item.end) < now ? Infinity : Date.parse(item.end);
+    return kmStart >= Number(item.km_start) && kmEnd <= Number(item.km_end) && Date.parse(start) >= Date.parse(item.start) && Date.parse(end) <= effectiveEnd;
+  });
+}
+
 async function controllerAuth(request, env) {
   const bearer = request.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
   if (!bearer) return null;
@@ -58,28 +71,38 @@ async function monthlySequence(env, kind, month) {
   return Number(row.last_value);
 }
 
+async function permissiveMonthlySequence(env, month) {
+  const row = await env.DB.prepare(`INSERT INTO permissive_monthly_sequences (month,last_value) VALUES (?,1)
+    ON CONFLICT(month) DO UPDATE SET last_value=last_value+1 RETURNING last_value`).bind(month).first();
+  return Number(row.last_value);
+}
+
 function effectiveOverlapSql(alias, endColumn) {
   return `${alias}.planned_start<=? AND (CASE WHEN ${alias}.status='authorized' AND ${alias}.${endColumn}<CURRENT_TIMESTAMP THEN '9999-12-31T23:59:59.999Z' ELSE ${alias}.${endColumn} END)>=?`;
 }
 
-async function findConflicts(env, { lines, kmStart, kmEnd, start, end, ignoreLdl = null, ignoreCirculation = null }) {
+async function findConflicts(env, { lines, kmStart, kmEnd, start, end, ignoreLdl = null, ignoreCirculation = null, includePermissives = true }) {
   const placeholders = lines.map(() => '?').join(','), ldlBindings = [...lines, kmEnd, kmStart, end, start], circBindings = [...lines, kmEnd, kmStart, end, start];
   let ldlSql = `SELECT DISTINCT l.id,l.permanent_code AS code,l.km_start,l.km_end,l.requested_start AS start,l.requested_end AS end,'LDL' AS kind
     FROM ldl l JOIN ldl_lines ll ON ll.ldl_id=l.id WHERE l.status='active' AND ll.line_id IN (${placeholders})
     AND l.km_start<=? AND l.km_end>=? AND l.requested_start<=?
     AND (CASE WHEN l.requested_end<CURRENT_TIMESTAMP THEN '9999-12-31T23:59:59.999Z' ELSE l.requested_end END)>=?`;
   if (ignoreLdl) { ldlSql += ' AND l.id<>?'; ldlBindings.push(ignoreLdl); }
-  let circSql = `SELECT c.id,c.permanent_code AS code,c.km_start,c.km_end,c.planned_start AS start,c.planned_end AS end,'CIRC' AS kind
+  let circSql = `SELECT c.id,c.permanent_code AS code,c.equipment_id,c.km_start,c.km_end,c.planned_start AS start,c.planned_end AS end,'CIRC' AS kind
     FROM circulations c WHERE c.status='authorized' AND c.line_id IN (${placeholders}) AND c.km_start<=? AND c.km_end>=?
     AND ${effectiveOverlapSql('c', 'planned_end')}`;
   if (ignoreCirculation) { circSql += ' AND c.id<>?'; circBindings.push(ignoreCirculation); }
-  const [ldls, circs] = await env.DB.batch([env.DB.prepare(ldlSql).bind(...ldlBindings), env.DB.prepare(circSql).bind(...circBindings)]);
-  return [...(ldls.results || []), ...(circs.results || [])];
+  const statements = [env.DB.prepare(ldlSql).bind(...ldlBindings), env.DB.prepare(circSql).bind(...circBindings)];
+  if (includePermissives) statements.push(env.DB.prepare(`SELECT p.id,p.permanent_code AS code,p.km_start,p.km_end,p.planned_start AS start,p.planned_end AS end,'PERM' AS kind
+    FROM permissive_authorizations p WHERE p.status='active' AND p.line_id IN (${placeholders}) AND p.km_start<=? AND p.km_end>=?
+    AND p.planned_start<=? AND (CASE WHEN p.planned_end<CURRENT_TIMESTAMP THEN '9999-12-31T23:59:59.999Z' ELSE p.planned_end END)>=?`).bind(...lines, kmEnd, kmStart, end, start));
+  const results = await env.DB.batch(statements);
+  return results.flatMap((result) => result.results || []);
 }
 
 async function baseState(env, from = null, to = null) {
   const start = from || new Date(Date.now() - 31 * 86400000).toISOString(), end = to || new Date(Date.now() + 31 * 86400000).toISOString();
-  const [requesters, lines, equipment, operators, ldls, ldlLines, circulations, latest] = await env.DB.batch([
+  const [requesters, lines, equipment, operators, ldls, ldlLines, circulations, permissives, permissiveLinks, latest] = await env.DB.batch([
     env.DB.prepare('SELECT code,name,role,company,supervisor,active FROM requesters ORDER BY active DESC,name'),
     env.DB.prepare('SELECT id,name,geometry_status,active FROM track_lines WHERE active=1 ORDER BY id'),
     env.DB.prepare('SELECT id,name,type,description FROM equipment WHERE active=1 ORDER BY id'),
@@ -92,12 +115,20 @@ async function baseState(env, from = null, to = null) {
       JOIN equipment e ON e.id=c.equipment_id LEFT JOIN operators o ON o.registration=c.operator_registration
       JOIN cco_controllers cc ON cc.code=c.authorized_by_controller
       WHERE c.status='authorized' OR (c.authorized_at>=? AND c.authorized_at<=?) ORDER BY c.authorized_at DESC`).bind(start, end),
+    env.DB.prepare(`SELECT p.*,e.name AS equipment_name,o.name AS operator_name,cc.name AS controller_name FROM permissive_authorizations p
+      JOIN equipment e ON e.id=p.equipment_id LEFT JOIN operators o ON o.registration=p.operator_registration
+      JOIN cco_controllers cc ON cc.code=p.authorized_by_controller
+      WHERE p.status='active' OR (p.authorized_at>=? AND p.authorized_at<=?) ORDER BY p.authorized_at DESC`).bind(start, end),
+    env.DB.prepare('SELECT permission_id,record_kind,record_id FROM permissive_links'),
     env.DB.prepare('SELECT equipment_id,captured_at,latitude,longitude,accuracy_m,speed_mps,battery_pct FROM latest_positions')
   ]);
   const linesByLdl = {};
   for (const row of ldlLines.results || []) (linesByLdl[row.ldl_id] ||= []).push(row.line_id);
+  const linksByPermission = {};
+  for (const row of permissiveLinks.results || []) (linksByPermission[row.permission_id] ||= []).push({ kind: row.record_kind, id: row.record_id });
   return { requesters: requesters.results, lines: lines.results, equipment: equipment.results, operators: operators.results,
-    ldls: (ldls.results || []).map((row) => ({ ...row, lines: linesByLdl[row.id] || [] })), circulations: circulations.results, latest: latest.results };
+    ldls: (ldls.results || []).map((row) => ({ ...row, lines: linesByLdl[row.id] || [] })), circulations: circulations.results,
+    permissives: (permissives.results || []).map((row) => ({ ...row, links: linksByPermission[row.id] || [] })), latest: latest.results };
 }
 
 async function state(request, env, controller) {
@@ -128,6 +159,9 @@ async function createLdl(request, env, controller) {
 async function closeLdl(request, env, controller) {
   const body = await request.json().catch(() => ({})), id = clean(body.id, 80), action = body.action, note = clean(body.note, 500), now = new Date().toISOString();
   const current = await env.DB.prepare('SELECT id,status FROM ldl WHERE id=?').bind(id).first();
+  const linkedPermission = await env.DB.prepare(`SELECT p.permanent_code FROM permissive_authorizations p JOIN permissive_links pl ON pl.permission_id=p.id
+    WHERE p.status='active' AND pl.record_kind='LDL' AND pl.record_id=? LIMIT 1`).bind(id).first();
+  if (linkedPermission) return reply(request, { ok: false, error: `Encerre primeiro a operação permissiva ${linkedPermission.permanent_code}.` }, 409);
   if (!current || current.status !== 'active') return reply(request, { ok: false, error: 'LDL ativa não encontrada.' }, 404);
   if (action === 'return') await env.DB.prepare(`UPDATE ldl SET status='returned',returned_at=?,returned_by_controller=?,return_note=? WHERE id=?`).bind(now, controller.code, note || null, id).run();
   else if (action === 'cancel' && note.length >= 3) await env.DB.prepare(`UPDATE ldl SET status='cancelled',cancelled_at=?,cancelled_by_controller=?,cancel_reason=? WHERE id=?`).bind(now, controller.code, note, id).run();
@@ -157,11 +191,57 @@ async function createCirculation(request, env, controller) {
 async function closeCirculation(request, env, controller) {
   const body = await request.json().catch(() => ({})), id = clean(body.id, 80), action = body.action, note = clean(body.note, 500), now = new Date().toISOString();
   const current = await env.DB.prepare("SELECT id,status FROM circulations WHERE id=?").bind(id).first();
+  const linkedPermission = await env.DB.prepare(`SELECT p.permanent_code FROM permissive_authorizations p JOIN permissive_links pl ON pl.permission_id=p.id
+    WHERE p.status='active' AND pl.record_kind='CIRC' AND pl.record_id=? LIMIT 1`).bind(id).first();
+  if (linkedPermission) return reply(request, { ok: false, error: `Encerre primeiro a operação permissiva ${linkedPermission.permanent_code}.` }, 409);
   if (!current || current.status !== 'authorized') return reply(request, { ok: false, error: 'Circulação ativa não encontrada.' }, 404);
   if (action === 'complete') await env.DB.prepare(`UPDATE circulations SET status='completed',completed_at=?,completed_by_controller=? WHERE id=?`).bind(now, controller.code, id).run();
   else if (action === 'cancel' && note.length >= 3) await env.DB.prepare(`UPDATE circulations SET status='cancelled',cancelled_at=?,cancelled_by_controller=?,cancel_reason=? WHERE id=?`).bind(now, controller.code, note, id).run();
   else return reply(request, { ok: false, error: 'Ação inválida ou justificativa ausente.' }, 400);
   await env.DB.prepare('INSERT INTO circulation_events (id,circulation_id,event_type,controller_code,occurred_at,payload_json) VALUES (?,?,?,?,?,?)').bind(crypto.randomUUID(), id, action === 'complete' ? 'completed' : 'cancelled', controller.code, now, JSON.stringify({ note })).run();
+  return reply(request, { ok: true });
+}
+
+async function createPermissive(request, env, controller) {
+  const body = await request.json().catch(() => ({})), equipmentId = code(body.equipmentId), operatorRegistration = code(body.operatorRegistration), line = clean(body.line);
+  const kmStart = numeric(body.kmStart), kmEnd = numeric(body.kmEnd), start = iso(body.start), end = iso(body.end);
+  const description = clean(body.description, 500), justification = clean(body.justification, 500), channel = body.channel;
+  const selectedLinks = [...new Set((Array.isArray(body.linkedRecords) ? body.linkedRecords : []).map((item) => `${clean(item?.kind, 8).toUpperCase()}:${clean(item?.id, 80)}`))];
+  if (!equipmentId || !['line01', 'line02'].includes(line) || kmStart === null || kmEnd === null || kmStart < 0 || kmEnd <= kmStart || !start || !end || end <= start || description.length < 3 || justification.length < 5 || !['radio', 'whatsapp'].includes(channel) || body.communicationConfirmed !== true) return reply(request, { ok: false, error: 'Revise equipamento, linha, KM, horários, serviço, justificativa e confirmação da comunicação.' }, 400);
+  const equipment = await env.DB.prepare('SELECT id FROM equipment WHERE id=? AND active=1').bind(equipmentId).first();
+  if (!equipment) return reply(request, { ok: false, error: 'Equipamento não cadastrado.' }, 400);
+  if (operatorRegistration && !await env.DB.prepare('SELECT registration FROM operators WHERE registration=? AND active=1').bind(operatorRegistration).first()) return reply(request, { ok: false, error: 'Operador não cadastrado.' }, 400);
+  const equipmentBusy = await env.DB.prepare(`SELECT permanent_code FROM permissive_authorizations WHERE equipment_id=? AND status='active'
+    AND planned_start<=? AND (CASE WHEN planned_end<CURRENT_TIMESTAMP THEN '9999-12-31T23:59:59.999Z' ELSE planned_end END)>=?`).bind(equipmentId, end, start).first();
+  if (equipmentBusy) return reply(request, { ok: false, error: `Equipamento já vinculado ao permissivo ${equipmentBusy.permanent_code}.` }, 409);
+  const conflicts = await findConflicts(env, { lines: [line], kmStart, kmEnd, start, end });
+  const permissiveConflict = conflicts.find((item) => item.kind === 'PERM');
+  if (permissiveConflict) return reply(request, { ok: false, error: 'Já existe uma operação permissiva neste trecho e período.', conflicts: [permissiveConflict] }, 409);
+  const operationalConflicts = conflicts.filter((item) => item.kind === 'LDL' || item.kind === 'CIRC');
+  if (!operationalConflicts.length) return reply(request, { ok: false, error: 'Não existe conflito operacional para justificar uma autorização permissiva. Use a circulação normal.' }, 409);
+  if (!permissiveLinksMatch(operationalConflicts, selectedLinks)) return reply(request, { ok: false, error: 'Selecione todos e somente os registros conflitantes indicados pelo sistema.', conflicts: operationalConflicts }, 409);
+  if (!permissionContainedByConflicts({ kmStart, kmEnd, start, end }, operationalConflicts)) return reply(request, { ok: false, error: 'O trecho e o período permissivos devem estar totalmente contidos em todos os registros vinculados.', conflicts: operationalConflicts }, 409);
+  const linkedCirculation = operationalConflicts.find((item) => item.kind === 'CIRC' && item.id && item.equipment_id === equipmentId);
+  if (linkedCirculation) return reply(request, { ok: false, error: 'O equipamento já está representado pela circulação selecionada.' }, 400);
+  const month = monthFrom(start), sequence = await permissiveMonthlySequence(env, month), permanentCode = `PERM-${month}-${String(sequence).padStart(3, '0')}`, id = crypto.randomUUID(), now = new Date().toISOString();
+  const links = operationalConflicts.map((item) => ({ kind: item.kind, id: item.id }));
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO permissive_authorizations (id,sequence_number,sequence_month,permanent_code,equipment_id,operator_registration,line_id,km_start,km_end,planned_start,planned_end,speed_limit_kmh,work_description,justification,communication_channel,communication_confirmed,authorized_by_controller,authorized_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id, sequence, month, permanentCode, equipmentId, operatorRegistration || null, line, kmStart, kmEnd, start, end, 15, description, justification, channel, 1, controller.code, now),
+    ...links.map((item) => env.DB.prepare('INSERT INTO permissive_links (permission_id,record_kind,record_id) VALUES (?,?,?)').bind(id, item.kind, item.id)),
+    env.DB.prepare('INSERT INTO permissive_events (id,permission_id,event_type,controller_code,occurred_at,payload_json) VALUES (?,?,?,?,?,?)').bind(crypto.randomUUID(), id, 'authorized', controller.code, now, JSON.stringify({ speedLimitKmh: 15, line, links, channel, communicationConfirmed: true }))
+  ]);
+  return reply(request, { ok: true, permissive: { id, displayCode: `PERM ${String(sequence).padStart(3, '0')}`, permanentCode, speedLimitKmh: 15 } }, 201);
+}
+
+async function closePermissive(request, env, controller) {
+  const body = await request.json().catch(() => ({})), id = clean(body.id, 80), action = body.action, note = clean(body.note, 500), now = new Date().toISOString();
+  const current = await env.DB.prepare("SELECT id,status FROM permissive_authorizations WHERE id=?").bind(id).first();
+  if (!current || current.status !== 'active') return reply(request, { ok: false, error: 'Autorização permissiva ativa não encontrada.' }, 404);
+  if (action === 'complete') await env.DB.prepare(`UPDATE permissive_authorizations SET status='completed',completed_at=?,completed_by_controller=?,completion_note=? WHERE id=?`).bind(now, controller.code, note || null, id).run();
+  else if (action === 'cancel' && note.length >= 3) await env.DB.prepare(`UPDATE permissive_authorizations SET status='cancelled',cancelled_at=?,cancelled_by_controller=?,cancel_reason=? WHERE id=?`).bind(now, controller.code, note, id).run();
+  else return reply(request, { ok: false, error: 'Ação inválida ou justificativa ausente.' }, 400);
+  await env.DB.prepare('INSERT INTO permissive_events (id,permission_id,event_type,controller_code,occurred_at,payload_json) VALUES (?,?,?,?,?,?)').bind(crypto.randomUUID(), id, action === 'complete' ? 'completed' : 'cancelled', controller.code, now, JSON.stringify({ note })).run();
   return reply(request, { ok: true });
 }
 
@@ -207,5 +287,7 @@ export async function routeCco(request, env) {
   if (request.method === 'POST' && path === '/api/v1/cco/ldl/close') return closeLdl(request, env, controller);
   if (request.method === 'POST' && path === '/api/v1/cco/circulation/create') return createCirculation(request, env, controller);
   if (request.method === 'POST' && path === '/api/v1/cco/circulation/close') return closeCirculation(request, env, controller);
+  if (request.method === 'POST' && path === '/api/v1/cco/permissive/create') return createPermissive(request, env, controller);
+  if (request.method === 'POST' && path === '/api/v1/cco/permissive/close') return closePermissive(request, env, controller);
   return reply(request, { ok: false, error: 'Rota CCO não encontrada.' }, 404);
 }

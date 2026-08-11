@@ -77,5 +77,6 @@ test('history reset clears operational data and preserves registrations', async 
     'cco_controllers',
     'ldl',
     'circulations',
+    'permissive_authorizations',
   ]);
 });

@@ -795,7 +795,7 @@ async function resetOperationalHistoryAdmin(request, env) {
   return reply(request, {
     ok: true,
     deleted,
-    preserved: ['equipment', 'operators', 'personal_devices', 'activation_codes', 'requesters', 'cco_controllers', 'ldl', 'circulations'],
+    preserved: ['equipment', 'operators', 'personal_devices', 'activation_codes', 'requesters', 'cco_controllers', 'ldl', 'circulations', 'permissive_authorizations'],
     resetAt: new Date().toISOString(),
   });
 }

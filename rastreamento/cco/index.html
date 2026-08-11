@@ -6,7 +6,8 @@
   <meta name="robots" content="noindex,nofollow">
   <title>Controle Operacional CCO | FICO</title>
   <link rel="stylesheet" href="../../mapa-pendencias/assets/vendor/maplibre/maplibre-gl.css">
-  <link rel="stylesheet" href="styles.css?v=20260811-1">
+  <link rel="stylesheet" href="styles.css?v=20260811-2">
+  <link rel="stylesheet" href="permissive.css?v=20260811-2">
 </head>
 <body>
   <header>
@@ -30,6 +31,7 @@
       <nav class="actions">
         <button data-open="ldl-dialog">+ NOVA LDL</button>
         <button data-open="circulation-dialog">+ AUTORIZAR CIRCULAÇÃO</button>
+        <button data-open="permissive-dialog" class="permissive-action">+ OPERAÇÃO PERMISSIVA</button>
         <button id="refresh" class="secondary">ATUALIZAR</button>
         <button id="pdf" class="secondary">RELATÓRIO PDF</button>
         <button id="excel" class="secondary">EXPORTAR EXCEL</button>
@@ -41,6 +43,7 @@
         <article><span>PESSOAS NA VIA</span><strong id="kpi-people">0</strong><small>efetivo declarado</small></article>
         <article class="warning"><span>ALERTAS DE PRAZO</span><strong id="kpi-deadline">0</strong><small>30 min, 15 min ou vencidas</small></article>
         <article><span>CIRCULAÇÕES</span><strong id="kpi-circulation">0</strong><small>autorizações abertas</small></article>
+        <article class="permissive"><span>PERMISSIVOS</span><strong id="kpi-permissive">0</strong><small>operações conjuntas a 15 km/h</small></article>
         <article class="danger"><span>APROXIMAÇÕES</span><strong id="kpi-approach">0</strong><small>equipamentos a até 500 m</small></article>
       </section>
 
@@ -50,7 +53,7 @@
           <div class="card-head"><div><p>SITUAÇÃO DA VIA</p><h2>Bloqueios e circulações</h2></div><span id="freshness">Carregando…</span></div>
           <div class="map-note"><b>Linha 01</b> traçado ativo <span>·</span> <b>Linha 02</b> traçado geográfico pendente</div>
           <div id="map"></div>
-          <div class="legend"><span><i class="ldl"></i>LDL ativa</span><span><i class="expired"></i>LDL vencida</span><span><i class="circ"></i>Circulação</span><span><i class="equipment"></i>Equipamento</span></div>
+          <div class="legend"><span><i class="ldl"></i>LDL ativa</span><span><i class="expired"></i>LDL vencida</span><span><i class="circ"></i>Circulação</span><span><i class="perm"></i>Permissivo · 15 km/h</span><span><i class="equipment"></i>Equipamento</span></div>
         </article>
         <aside class="card">
           <div class="card-head"><div><p>ALERTAS</p><h2>Atenção imediata</h2></div><b id="alert-count">0</b></div>
@@ -61,10 +64,11 @@
       <section class="lists">
         <article class="card list-card"><div class="card-head"><div><p>BLOQUEIOS</p><h2>LDLs em aberto</h2></div></div><div id="ldl-list" class="records"></div></article>
         <article class="card list-card"><div class="card-head"><div><p>MOVIMENTAÇÃO</p><h2>Circulações autorizadas</h2></div></div><div id="circulation-list" class="records"></div></article>
+        <article class="card list-card permissive-card"><div class="card-head"><div><p>EXCEÇÃO CONTROLADA</p><h2>Operações permissivas</h2></div></div><div id="permissive-list" class="records"></div></article>
       </section>
 
       <section class="card history-card">
-        <div class="card-head"><div><p>AUDITORIA</p><h2>Histórico recente</h2></div><label>Mostrar<select id="history-filter"><option value="all">LDLs e circulações</option><option value="ldl">Somente LDLs</option><option value="circulation">Somente circulações</option></select></label></div>
+        <div class="card-head"><div><p>AUDITORIA</p><h2>Histórico recente</h2></div><label>Mostrar<select id="history-filter"><option value="all">Todos os registros</option><option value="ldl">Somente LDLs</option><option value="circulation">Somente circulações</option><option value="permissive">Somente permissivos</option></select></label></div>
         <div class="table-wrap"><table><thead><tr><th>Código</th><th>Situação</th><th>Responsável/equipamento</th><th>Linha</th><th>Trecho</th><th>Início</th><th>Fim</th><th>Controlador</th></tr></thead><tbody id="history-body"></tbody></table></div>
       </section>
       <p class="safety">Ferramenta de controle e evidência operacional. Não substitui intertravamento, sinalização, comunicação por rádio ou os procedimentos formais do CCO.</p>
@@ -77,6 +81,10 @@
   <dialog id="circulation-dialog"><form id="circulation-form" method="dialog"><div class="dialog-head"><div><p>NOVA AUTORIZAÇÃO</p><h2>Liberar circulação</h2></div><button type="button" data-close>×</button></div>
     <div class="form-grid"><label>Equipamento<select id="circ-equipment" required></select></label><label>Operador<select id="circ-operator"><option value="">Não informado</option></select></label><label>Linha<select id="circ-line"><option value="line01">Linha 01</option><option value="line02">Linha 02</option></select></label><label>Sentido<select id="circ-direction"><option value="crescente">KM crescente</option><option value="decrescente">KM decrescente</option><option value="manobra">Manobra</option></select></label><label>KM inicial<input id="circ-km-start" placeholder="0+000" required></label><label>KM final<input id="circ-km-end" placeholder="104+500" required></label><label>Início<input id="circ-start" type="datetime-local" required></label><label>Fim previsto<input id="circ-end" type="datetime-local" required></label><label class="wide">Restrições/observações<input id="circ-restrictions" maxlength="500"></label></div><div class="dialog-actions"><button type="button" data-close class="secondary">CANCELAR</button><button type="submit">VERIFICAR E AUTORIZAR</button></div><div id="circ-message" class="message" hidden></div></form></dialog>
 
+  <dialog id="permissive-dialog"><form id="permissive-form" method="dialog"><div class="dialog-head"><div><p>EXCEÇÃO OPERACIONAL CONTROLADA</p><h2>Autorizar operação permissiva</h2></div><button type="button" data-close>×</button></div>
+    <div class="permissive-warning"><strong>VELOCIDADE MÁXIMA FIXA: 15 KM/H</strong><span>O permissivo não remove o conflito. Ele registra a operação conjunta e todas as condições autorizadas pelo CCO.</span></div>
+    <div class="form-grid"><label>Equipamento que ingressará<select id="perm-equipment" required></select></label><label>Operador<select id="perm-operator"><option value="">Não informado</option></select></label><label>Linha<select id="perm-line"><option value="line01">Linha 01</option><option value="line02">Linha 02</option></select></label><label>Velocidade máxima<input value="15 km/h" readonly></label><label>KM inicial<input id="perm-km-start" placeholder="71+500" required></label><label>KM final<input id="perm-km-end" placeholder="74+500" required></label><label>Início<input id="perm-start" type="datetime-local" required></label><label>Fim previsto<input id="perm-end" type="datetime-local" required></label><label>Canal da confirmação<select id="perm-channel"><option value="radio">Rádio</option><option value="whatsapp">WhatsApp</option></select></label><label class="wide">Serviço conjunto<input id="perm-description" maxlength="500" placeholder="Ex.: regulagem trabalhando em conjunto com a circulação" required></label><label class="wide">Justificativa operacional<textarea id="perm-justification" maxlength="500" required></textarea></label><fieldset id="perm-conflicts"><legend>Registros conflitantes vinculados</legend><div class="empty">Informe linha, KM e horários para localizar os conflitos.</div></fieldset><label class="wide confirmation"><input id="perm-confirmed" type="checkbox" required> Confirmo que comuniquei a todos os envolvidos a operação conjunta, o trecho, o período e o limite obrigatório de 15 km/h.</label></div><div class="dialog-actions"><button type="button" data-close class="secondary">CANCELAR</button><button type="submit" class="permissive-action">EMITIR AUTORIZAÇÃO PERMISSIVA</button></div><div id="perm-message" class="message" hidden></div></form></dialog>
+
   <script src="../../mapa-pendencias/assets/vendor/maplibre/maplibre-gl.js"></script>
-  <script type="module" src="app.js?v=20260811-1"></script>
+  <script type="module" src="app.js?v=20260811-2"></script>
 </body></html>
