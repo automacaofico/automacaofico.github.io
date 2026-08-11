@@ -169,12 +169,38 @@ function operationPopupContent(item, kind) {
   body.append(km, line, main, detail, period); card.append(header, body); return card;
 }
 
+function showOperationPopup(item, kind, lngLat) {
+  if (!item || !map) return;
+  kmPopup?.remove(); map.getCanvas().style.cursor = 'pointer';
+  if (!operationPopup) operationPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 16, className: 'cco-operation-popup' });
+  operationPopup.setLngLat(lngLat).setDOMContent(operationPopupContent(item, kind)).addTo(map);
+}
+
 function showOperationHover(event) {
   const feature = event.features?.[0]; if (!feature) return;
   const item = findMapOperation(feature.properties.kind, feature.properties.id); if (!item) return;
-  kmPopup?.remove(); map.getCanvas().style.cursor = 'pointer';
-  if (!operationPopup) operationPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 16, className: 'cco-operation-popup' });
-  operationPopup.setLngLat(event.lngLat).setDOMContent(operationPopupContent(item, feature.properties.kind)).addTo(map);
+  showOperationPopup(item, feature.properties.kind, event.lngLat);
+}
+
+function focusMapOperation(item, kind) {
+  if (!map || !axis.length) return;
+  const start = Number(item.km_start), end = Number(item.km_end), helpers = { sliceAxis, pointAtStation };
+  const lineIds = kind === 'ldl' ? item.lines : [item.line_id];
+  const coordinateSets = lineIds.map((lineId) => lineCoordinates(lineId, start, end, helpers));
+  const bounds = new maplibregl.LngLatBounds();
+  coordinateSets.flat().forEach((coordinate) => bounds.extend(coordinate));
+  const centerCoordinates = coordinateSets[0] || [];
+  const center = centerCoordinates[Math.floor(centerCoordinates.length / 2)] || pointAtStation((start + end) / 2);
+  const mapCard = document.querySelector('.map-card');
+  mapCard?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  mapCard?.classList.remove('map-focus-pulse');
+  requestAnimationFrame(() => mapCard?.classList.add('map-focus-pulse'));
+  window.setTimeout(() => {
+    map.resize();
+    map.fitBounds(bounds, { padding: window.innerWidth < 700 ? 55 : 110, maxZoom: 14, duration: 850 });
+    window.setTimeout(() => showOperationPopup(item, kind, center), 880);
+  }, 260);
+  window.setTimeout(() => mapCard?.classList.remove('map-focus-pulse'), 1500);
 }
 
 function showEquipmentPopup(item, projection) {
@@ -417,6 +443,16 @@ function record(item, kind) {
   wrapper.querySelector('[data-complete]').textContent = isLdl ? 'REGISTRAR DEVOLUÇÃO' : isPermissive ? 'ENCERRAR PERMISSIVO' : 'CONCLUIR';
   wrapper.querySelector('[data-complete]').onclick = () => closeRecord(item.id, kind, isLdl ? 'return' : 'complete');
   wrapper.querySelector('[data-cancel]').onclick = () => closeRecord(item.id, kind, 'cancel');
+  const mapHint = document.createElement('small'); mapHint.className = 'map-link-hint'; mapHint.textContent = '↗ CLIQUE PARA LOCALIZAR NO MAPA'; wrapper.children[1].append(mapHint);
+  wrapper.classList.add('map-link'); wrapper.tabIndex = 0; wrapper.title = `${codeText}: localizar trecho no mapa`;
+  const focusRecord = (event) => {
+    if (event.target.closest('button, a, input, select, textarea, summary, details')) return;
+    focusMapOperation(item, kind);
+  };
+  wrapper.addEventListener('click', focusRecord);
+  wrapper.addEventListener('keydown', (event) => {
+    if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('button, a, input, select, textarea, summary, details')) { event.preventDefault(); focusMapOperation(item, kind); }
+  });
   return wrapper;
 }
 
