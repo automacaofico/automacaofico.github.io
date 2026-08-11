@@ -772,6 +772,7 @@ async function resetOperationalHistoryAdmin(request, env) {
     ['sessions', 'SELECT COUNT(*) AS total FROM operator_sessions'],
     ['sessionSummaries', 'SELECT COUNT(*) AS total FROM operation_session_summaries'],
     ['operationalEvents', 'SELECT COUNT(*) AS total FROM operational_events'],
+    ['safetyEvents', 'SELECT COUNT(*) AS total FROM safety_events'],
   ];
   const countResults = await env.DB.batch(
     countStatements.map(([, sql]) => env.DB.prepare(sql)),
@@ -784,6 +785,7 @@ async function resetOperationalHistoryAdmin(request, env) {
   );
 
   await env.DB.batch([
+    env.DB.prepare('DELETE FROM safety_events'),
     env.DB.prepare('DELETE FROM operational_events'),
     env.DB.prepare('DELETE FROM operation_session_summaries'),
     env.DB.prepare('DELETE FROM position_samples'),

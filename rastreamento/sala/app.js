@@ -1,3 +1,5 @@
+import { createSafetyAudio } from '../safety-audio.js?v=20260811-5';
+
 const API = /^(?:localhost|127\.0\.0\.1)$/.test(location.hostname)
   ? 'http://127.0.0.1:8791'
   : 'https://fico-tracking-api.automacaofico.workers.dev';
@@ -13,10 +15,12 @@ const els = {
   connection: $('connection'), updated: $('updated'), clock: $('clock'), today: $('today'), ldl: $('ldl'), people: $('people'),
   circulations: $('circulations'), permissives: $('permissives'), online: $('online'), alertTotal: $('alert-total'),
   operationTotal: $('operation-total'), operations: $('operations'), asideAlertCount: $('aside-alert-count'), alertList: $('alert-list'),
-  fleet: $('fleet'), fit: $('fit'), fullscreen: $('fullscreen')
+  fleet: $('fleet'), fit: $('fit'), fullscreen: $('fullscreen'), sound: $('sound'), criticalBanner: $('critical-banner'), criticalText: $('critical-text')
 };
-let axis = [], grid = new Map(), map, equipment = [], operations = { ldls: [], circulations: [], permissives: [] };
+let axis = [], grid = new Map(), map, equipment = [], operations = { ldls: [], circulations: [], permissives: [], safetyEvents: [] };
 let markers = new Map(), kmPopup, lastSuccess = 0;
+let lastCriticalSignature = '', lastCriticalSoundAt = 0, lastWarningSignature = '';
+const safetyAudio = createSafetyAudio(els.sound, 'ficoTvSafetySound');
 
 const formatKm = (meters) => { const value = Math.max(0, Math.round(Number(meters) || 0)); return `${Math.floor(value / 1000)}+${String(value % 1000).padStart(3, '0')}`; };
 const formatTime = (value) => new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(new Date(value));
@@ -125,14 +129,18 @@ function renderOperations() {
 }
 function buildAlerts() {
   const alerts = [], now = Date.now();
+  for (const event of operations.safetyEvents || []) if (event.status === 'active') alerts.push({ high: true, safety: true, title: `INVASÃO DE LDL · ${event.equipment_id}`, text: `${event.ldl_code} · KM ${formatKm(event.station_m)} · ${Number(event.speed_kmh || 0).toFixed(1).replace('.', ',')} km/h` });
   for (const row of operationRows()) { const minutes = (Date.parse(row.end) - now) / 60000; if (minutes < 0) alerts.push({ high: true, title: `${row.code} com prazo vencido`, text: `${row.line} · ${row.km}` }); else if (minutes <= 15) alerts.push({ high: true, title: `${row.code} termina em ${Math.ceil(minutes)} min`, text: `${row.line} · ${row.km}` }); else if (minutes <= 30) alerts.push({ title: `${row.code} termina em ${Math.ceil(minutes)} min`, text: 'CCO deve confirmar encerramento ou prorrogação.' }); }
   for (const item of equipment) { const status = equipmentStatus(item), projection = item.receivedAt ? projectToAxis(item.longitude, item.latitude) : null; if (status === 'offline') alerts.push({ high: true, title: `${item.equipmentId} offline`, text: `Sem sinal há ${age(item.receivedAt)}` }); else if (status === 'unstable') alerts.push({ title: `${item.equipmentId} instável`, text: `Último sinal há ${age(item.receivedAt)}` }); if (projection?.distanceM > 100) alerts.push({ high: true, title: `${item.equipmentId} fora da faixa`, text: `${Math.round(projection.distanceM)} m do eixo ferroviário` }); }
   return alerts;
 }
 function renderAlerts() {
   const alerts = buildAlerts(); els.alertTotal.textContent = alerts.length; els.asideAlertCount.textContent = alerts.length; els.alertList.replaceChildren();
-  if (!alerts.length) { const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = 'Nenhum alerta imediato.'; els.alertList.append(empty); return; }
-  for (const item of alerts.slice(0, 5)) { const row = document.createElement('article'); row.className = `alert-item ${item.high ? 'high' : ''}`; row.innerHTML = '<strong></strong><span></span>'; row.querySelector('strong').textContent = item.title; row.querySelector('span').textContent = item.text; els.alertList.append(row); }
+  if (!alerts.length) { const empty = document.createElement('div'); empty.className = 'empty'; empty.textContent = 'Nenhum alerta imediato.'; els.alertList.append(empty); }
+  else for (const item of alerts.slice(0, 5)) { const row = document.createElement('article'); row.className = `alert-item ${item.high ? 'high' : ''}`; row.innerHTML = '<strong></strong><span></span>'; row.querySelector('strong').textContent = item.title; row.querySelector('span').textContent = item.text; els.alertList.append(row); }
+  const critical = (operations.safetyEvents || []).filter((item) => item.status === 'active'); els.criticalBanner.hidden = !critical.length; els.criticalText.textContent = critical.map((item) => `${item.equipment_id} dentro de ${item.ldl_code} no KM ${formatKm(item.station_m)}`).join(' · ');
+  if (critical.length && safetyAudio.enabled) { const signature = critical.map((item) => item.id).sort().join('|'); if (signature !== lastCriticalSignature || Date.now() - lastCriticalSoundAt >= 30000) { safetyAudio.critical(); lastCriticalSignature = signature; lastCriticalSoundAt = Date.now(); } } else if (!critical.length) lastCriticalSignature = '';
+  if (safetyAudio.enabled) { const signature = alerts.filter((item) => !item.safety).map((item) => item.title).sort().join('|'); if (signature && signature !== lastWarningSignature) safetyAudio.warning(); lastWarningSignature = signature; }
 }
 function renderFleet() {
   els.fleet.replaceChildren();
@@ -153,7 +161,7 @@ async function load() {
     if (!equipmentResponse.ok || !operationsResponse.ok) throw new Error(`HTTP ${equipmentResponse.status}/${operationsResponse.status}`);
     const equipmentData = await equipmentResponse.json(), operationsData = await operationsResponse.json();
     equipment = (equipmentData.equipment || []).sort((a, b) => a.equipmentId.localeCompare(b.equipmentId));
-    operations = { ldls: operationsData.ldls || [], circulations: operationsData.circulations || [], permissives: operationsData.permissives || [] };
+    operations = { ldls: operationsData.ldls || [], circulations: operationsData.circulations || [], permissives: operationsData.permissives || [], safetyEvents: operationsData.safetyEvents || [] };
     lastSuccess = Date.now(); els.connection.textContent = 'MONITORAMENTO AO VIVO'; els.updated.textContent = `Dados renovados às ${new Date(lastSuccess).toLocaleTimeString('pt-BR')} · ciclo de 5 s`; document.querySelector('.live').classList.remove('stale'); render();
   } catch (error) { els.connection.textContent = 'CONEXÃO INTERROMPIDA'; els.updated.textContent = `Mantendo última leitura · ${error.message}`; document.querySelector('.live').classList.add('stale'); }
 }
@@ -163,4 +171,4 @@ els.fit.onclick = fitRailway;
 els.fullscreen.onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
 document.addEventListener('fullscreenchange', () => els.fullscreen.textContent = document.fullscreenElement ? 'SAIR DA TELA CHEIA' : 'TELA CHEIA');
 setInterval(() => { const now = new Date(); els.clock.textContent = now.toLocaleTimeString('pt-BR'); els.today.textContent = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }).format(now); if (lastSuccess && Date.now() - lastSuccess > 15000) document.querySelector('.live').classList.add('stale'); }, 1000);
-fetch(AXIS_URL).then((response) => response.json()).then((data) => { prepareAxis(data.points); initMap(); load(); setInterval(load, 5000); setTimeout(() => location.reload(), 6 * 60 * 60 * 1000); }).catch((error) => { els.connection.textContent = 'TRAÇADO INDISPONÍVEL'; els.updated.textContent = error.message; document.querySelector('.live').classList.add('stale'); });
+fetch(AXIS_URL).then((response) => response.json()).then((data) => { prepareAxis(data.points); initMap(); load(); setInterval(load, 5000); }).catch((error) => { els.connection.textContent = 'TRAÇADO INDISPONÍVEL'; els.updated.textContent = error.message; document.querySelector('.live').classList.add('stale'); });

@@ -102,7 +102,7 @@ async function findConflicts(env, { lines, kmStart, kmEnd, start, end, ignoreLdl
 
 async function baseState(env, from = null, to = null) {
   const start = from || new Date(Date.now() - 31 * 86400000).toISOString(), end = to || new Date(Date.now() + 31 * 86400000).toISOString();
-  const [requesters, lines, equipment, operators, ldls, ldlLines, circulations, permissives, permissiveLinks, latest] = await env.DB.batch([
+  const [requesters, lines, equipment, operators, ldls, ldlLines, circulations, permissives, permissiveLinks, latest, safetyEvents] = await env.DB.batch([
     env.DB.prepare('SELECT code,name,role,company,supervisor,active FROM requesters ORDER BY active DESC,name'),
     env.DB.prepare('SELECT id,name,geometry_status,active FROM track_lines WHERE active=1 ORDER BY id'),
     env.DB.prepare('SELECT id,name,type,description FROM equipment WHERE active=1 ORDER BY id'),
@@ -120,7 +120,9 @@ async function baseState(env, from = null, to = null) {
       JOIN cco_controllers cc ON cc.code=p.authorized_by_controller
       WHERE p.status='active' OR (p.authorized_at>=? AND p.authorized_at<=?) ORDER BY p.authorized_at DESC`).bind(start, end),
     env.DB.prepare('SELECT permission_id,record_kind,record_id FROM permissive_links'),
-    env.DB.prepare('SELECT equipment_id,captured_at,latitude,longitude,accuracy_m,speed_mps,battery_pct FROM latest_positions')
+    env.DB.prepare('SELECT equipment_id,captured_at,latitude,longitude,accuracy_m,speed_mps,battery_pct FROM latest_positions'),
+    env.DB.prepare(`SELECT s.*,l.permanent_code AS ldl_code FROM safety_events s JOIN ldl l ON l.id=s.ldl_id
+      WHERE s.status='active' OR s.first_seen_at>=? ORDER BY CASE s.status WHEN 'active' THEN 0 ELSE 1 END,s.last_seen_at DESC LIMIT 100`).bind(start)
   ]);
   const linesByLdl = {};
   for (const row of ldlLines.results || []) (linesByLdl[row.ldl_id] ||= []).push(row.line_id);
@@ -128,7 +130,8 @@ async function baseState(env, from = null, to = null) {
   for (const row of permissiveLinks.results || []) (linksByPermission[row.permission_id] ||= []).push({ kind: row.record_kind, id: row.record_id });
   return { requesters: requesters.results, lines: lines.results, equipment: equipment.results, operators: operators.results,
     ldls: (ldls.results || []).map((row) => ({ ...row, lines: linesByLdl[row.id] || [] })), circulations: circulations.results,
-    permissives: (permissives.results || []).map((row) => ({ ...row, links: linksByPermission[row.id] || [] })), latest: latest.results };
+    permissives: (permissives.results || []).map((row) => ({ ...row, links: linksByPermission[row.id] || [] })), latest: latest.results,
+    safetyEvents: safetyEvents.results || [] };
 }
 
 async function state(request, env, controller) {
@@ -137,7 +140,7 @@ async function state(request, env, controller) {
 }
 
 async function publicOperations(request, env) {
-  const [ldls, ldlLines, circulations, permissives, permissiveLinks] = await env.DB.batch([
+  const [ldls, ldlLines, circulations, permissives, permissiveLinks, safetyEvents] = await env.DB.batch([
     env.DB.prepare(`SELECT l.id,l.sequence_number,l.permanent_code,l.requester_code,r.name AS requester_name,r.company,
       l.km_start,l.km_end,l.workforce_count,l.work_description,l.requested_start,l.requested_end,l.created_at
       FROM ldl l JOIN requesters r ON r.code=l.requester_code WHERE l.status='active' ORDER BY l.km_start,l.created_at`),
@@ -151,7 +154,9 @@ async function publicOperations(request, env) {
     env.DB.prepare(`SELECT pl.permission_id,pl.record_kind,COALESCE(l.permanent_code,c.permanent_code) AS record_code
       FROM permissive_links pl JOIN permissive_authorizations p ON p.id=pl.permission_id
       LEFT JOIN ldl l ON pl.record_kind='LDL' AND l.id=pl.record_id
-      LEFT JOIN circulations c ON pl.record_kind='CIRC' AND c.id=pl.record_id WHERE p.status='active'`)
+      LEFT JOIN circulations c ON pl.record_kind='CIRC' AND c.id=pl.record_id WHERE p.status='active'`),
+    env.DB.prepare(`SELECT s.id,s.event_type,s.status,s.equipment_id,s.captured_at,s.station_m,s.speed_kmh,s.first_seen_at,s.last_seen_at,s.occurrences,
+      l.permanent_code AS ldl_code FROM safety_events s JOIN ldl l ON l.id=s.ldl_id WHERE s.status='active' ORDER BY s.last_seen_at DESC`)
   ]);
   const linesByLdl = {}, linksByPermission = {};
   for (const row of ldlLines.results || []) (linesByLdl[row.ldl_id] ||= []).push(row.line_id);
@@ -162,8 +167,34 @@ async function publicOperations(request, env) {
     refreshSeconds: 5,
     ldls: (ldls.results || []).map((row) => ({ ...row, lines: linesByLdl[row.id] || [] })),
     circulations: circulations.results || [],
+    safetyEvents: safetyEvents.results || [],
     permissives: (permissives.results || []).map((row) => ({ ...row, links: linksByPermission[row.id] || [] }))
   }, 200, { 'cache-control': 'public, max-age=3' });
+}
+
+async function syncSafetyEvents(request, env, controller) {
+  const body = await request.json().catch(() => ({})), supplied = Array.isArray(body.detections) ? body.detections.slice(0, 50) : [];
+  const now = new Date().toISOString(), activeKeys = [];
+  for (const item of supplied) {
+    const equipmentId = code(item.equipmentId), ldlId = clean(item.ldlId, 64), capturedAt = iso(item.capturedAt);
+    const stationM = numeric(item.stationM), distanceM = numeric(item.distanceM);
+    if (!equipmentId || !ldlId || !capturedAt || stationM === null || distanceM === null || distanceM < 0 || distanceM > 100) continue;
+    const context = await env.DB.prepare(`SELECT l.id,l.km_start,l.km_end,p.captured_at,p.accuracy_m,p.speed_mps
+      FROM ldl l JOIN ldl_lines ll ON ll.ldl_id=l.id AND ll.line_id='line01'
+      JOIN latest_positions p ON p.equipment_id=? WHERE l.id=? AND l.status='active'`).bind(equipmentId, ldlId).first();
+    if (!context || Math.abs(Date.parse(context.captured_at) - Date.parse(capturedAt)) > 10000 || Date.now() - Date.parse(context.captured_at) > 120000 || stationM < Number(context.km_start) || stationM > Number(context.km_end)) continue;
+    const eventKey = `LDL_INTRUSION:${equipmentId}:${ldlId}`, existing = await env.DB.prepare("SELECT id FROM safety_events WHERE event_key=? AND status='active'").bind(eventKey).first();
+    const speedKmh = Math.max(0, Number(context.speed_mps || 0) * 3.6), accuracyM = numeric(context.accuracy_m);
+    if (existing) await env.DB.prepare(`UPDATE safety_events SET captured_at=?,station_m=?,distance_to_axis_m=?,accuracy_m=?,speed_kmh=?,last_seen_at=?,occurrences=occurrences+1 WHERE id=?`).bind(context.captured_at, stationM, distanceM, accuracyM, speedKmh, now, existing.id).run();
+    else await env.DB.prepare(`INSERT INTO safety_events (id,event_key,event_type,severity,status,equipment_id,ldl_id,captured_at,station_m,distance_to_axis_m,accuracy_m,speed_kmh,first_seen_at,last_seen_at,detected_by_controller)
+      VALUES (?,?, 'LDL_INTRUSION','critical','active',?,?,?,?,?,?,?,?,?,?)`).bind(crypto.randomUUID(), eventKey, equipmentId, ldlId, context.captured_at, stationM, distanceM, accuracyM, speedKmh, now, now, controller.code).run();
+    activeKeys.push(eventKey);
+  }
+  const open = await env.DB.prepare("SELECT id,event_key FROM safety_events WHERE status='active'").all();
+  for (const event of open.results || []) if (!activeKeys.includes(event.event_key)) await env.DB.prepare("UPDATE safety_events SET status='resolved',resolved_at=?,last_seen_at=? WHERE id=?").bind(now, now, event.id).run();
+  const events = await env.DB.prepare(`SELECT s.*,l.permanent_code AS ldl_code FROM safety_events s JOIN ldl l ON l.id=s.ldl_id
+    WHERE s.status='active' OR s.first_seen_at>=datetime('now','-24 hours') ORDER BY CASE s.status WHEN 'active' THEN 0 ELSE 1 END,s.last_seen_at DESC LIMIT 100`).all();
+  return reply(request, { ok: true, events: events.results || [] });
 }
 
 async function createLdl(request, env, controller) {
@@ -314,6 +345,7 @@ export async function routeCco(request, env) {
   if (!controller) return reply(request, { ok: false, error: 'Sessão do CCO inválida ou expirada.' }, 401);
   if (request.method === 'POST' && path === '/api/v1/cco/logout') return logout(request, env);
   if (request.method === 'GET' && path === '/api/v1/cco/state') return state(request, env, controller);
+  if (request.method === 'POST' && path === '/api/v1/cco/safety/sync') return syncSafetyEvents(request, env, controller);
   if (request.method === 'POST' && path === '/api/v1/cco/ldl/create') return createLdl(request, env, controller);
   if (request.method === 'POST' && path === '/api/v1/cco/ldl/close') return closeLdl(request, env, controller);
   if (request.method === 'POST' && path === '/api/v1/cco/circulation/create') return createCirculation(request, env, controller);

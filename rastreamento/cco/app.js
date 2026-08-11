@@ -1,3 +1,5 @@
+import { createSafetyAudio } from '../safety-audio.js?v=20260811-5';
+
 const API = /^(?:localhost|127\.0\.0\.1)$/.test(location.hostname)
   ? 'http://127.0.0.1:8791'
   : 'https://fico-tracking-api.automacaofico.workers.dev';
@@ -6,6 +8,7 @@ const $ = (id) => document.getElementById(id);
 const elements = {
   login: $('login'), app: $('app'), loginForm: $('login-form'), code: $('controller-code'), pin: $('controller-pin'),
   loginMessage: $('login-message'), controller: $('controller-name'), logout: $('logout'), refresh: $('refresh'), message: $('message'),
+  sound: $('sound'), criticalBanner: $('critical-safety-banner'), criticalText: $('critical-safety-text'), safetyCount: $('safety-count'), safetyBody: $('safety-body'),
   freshness: $('freshness'), alerts: $('alerts'), alertCount: $('alert-count'), ldlList: $('ldl-list'), circulationList: $('circulation-list'), permissiveList: $('permissive-list'),
   historyBody: $('history-body'), historyFilter: $('history-filter'), pdf: $('pdf'), excel: $('excel'),
   kpiLdl: $('kpi-ldl'), kpiPeople: $('kpi-people'), kpiDeadline: $('kpi-deadline'), kpiCirculation: $('kpi-circulation'), kpiPermissive: $('kpi-permissive'), kpiApproach: $('kpi-approach'),
@@ -17,6 +20,8 @@ const elements = {
   permStart: $('perm-start'), permEnd: $('perm-end'), permChannel: $('perm-channel'), permDescription: $('perm-description'), permJustification: $('perm-justification'), permConflicts: $('perm-conflicts'), permConfirmed: $('perm-confirmed'), permMessage: $('perm-message')
 };
 let sessionToken = sessionStorage.getItem('ficoCcoToken') || '', state = null, axis = [], map, kmPopup, basemap = 'street', equipmentMarkers = new Map();
+let loading = false, lastCriticalSignature = '', lastWarningSignature = '', lastCriticalSoundAt = 0;
+const safetyAudio = createSafetyAudio(elements.sound, 'ficoCcoSafetySound');
 
 function notify(element, text, success = false) {
   element.textContent = text;
@@ -32,6 +37,7 @@ function lineLabel(id) { return id === 'line01' ? 'Linha 01' : 'Linha 02'; }
 function activeLdl() { return (state?.ldls || []).filter((item) => item.status === 'active'); }
 function activeCirculations() { return (state?.circulations || []).filter((item) => item.status === 'authorized'); }
 function activePermissives() { return (state?.permissives || []).filter((item) => item.status === 'active'); }
+function activeSafetyEvents() { return (state?.safetyEvents || []).filter((item) => item.status === 'active'); }
 function intervalsOverlap(aStart, aEnd, bStart, bEnd) { return aStart <= bEnd && aEnd >= bStart; }
 
 async function api(path, options = {}) {
@@ -126,6 +132,7 @@ function renderMap() {
 
 function operationalAlerts() {
   const now = Date.now(), alerts = [], approaches = [];
+  for (const event of activeSafetyEvents()) alerts.push({ danger: true, safety: true, title: `INVASÃO DE LDL · ${event.equipment_id}`, text: `${event.ldl_code} · KM ${formatKm(event.station_m)} · ${Number(event.speed_kmh || 0).toFixed(1).replace('.', ',')} km/h.` });
   for (const item of activeLdl()) {
     const remaining = (Date.parse(item.requested_end) - now) / 60000;
     if (remaining < 0) alerts.push({ danger: true, title: `${displayCode(item, 'LDL')} vencida`, text: `Devolução pendente desde ${date(item.requested_end)}. O trecho continua bloqueado.` });
@@ -150,11 +157,44 @@ function operationalAlerts() {
     for (const item of activeLdl().filter((ldl) => ldl.lines.includes('line01'))) {
       if (equipmentPermissives.some((permission) => permission.links?.some((link) => link.kind === 'LDL' && link.id === item.id))) continue;
       const distance = projection.stationM < item.km_start ? item.km_start - projection.stationM : projection.stationM > item.km_end ? projection.stationM - item.km_end : 0;
-      if (distance <= 500) { const alert = { danger: true, title: `${position.equipment_id} a ${Math.round(distance)} m de ${displayCode(item, 'LDL')}`, text: `Aproximação do trecho bloqueado na Linha 01.` }; alerts.push(alert); approaches.push(alert); }
+      if (distance <= 500 && distance > 0) { const alert = { danger: true, title: `${position.equipment_id} a ${Math.round(distance)} m de ${displayCode(item, 'LDL')}`, text: `Aproximação do trecho bloqueado na Linha 01.` }; alerts.push(alert); approaches.push(alert); }
     }
   }
   const deadlineCount = alerts.filter((item) => /termina|vencid[ao]/i.test(item.title)).length;
   return { alerts, approaches, deadlineCount };
+}
+
+function detectLdlIntrusions() {
+  const detections = [], now = Date.now();
+  for (const position of state?.latest || []) {
+    if (now - Date.parse(position.captured_at) > 120000) continue;
+    const projection = projectToAxis(Number(position.longitude), Number(position.latitude)); if (!projection || projection.distanceM > 100) continue;
+    const permissions = activePermissives().filter((item) => item.equipment_id === position.equipment_id && Date.parse(item.planned_start) <= now);
+    for (const ldl of activeLdl().filter((item) => item.lines.includes('line01'))) {
+      if (projection.stationM < Number(ldl.km_start) || projection.stationM > Number(ldl.km_end)) continue;
+      if (permissions.some((permission) => permission.links?.some((link) => link.kind === 'LDL' && link.id === ldl.id))) continue;
+      detections.push({ equipmentId: position.equipment_id, ldlId: ldl.id, capturedAt: position.captured_at, stationM: projection.stationM, distanceM: projection.distanceM });
+    }
+  }
+  return detections;
+}
+async function syncSafetyEvents() {
+  const result = await api('/api/v1/cco/safety/sync', { method: 'POST', body: JSON.stringify({ detections: detectLdlIntrusions() }) });
+  state.safetyEvents = result.events || [];
+}
+
+function renderSafetyEvents() {
+  const events = state?.safetyEvents || [], active = activeSafetyEvents(); elements.safetyCount.textContent = active.length; elements.safetyBody.replaceChildren();
+  for (const item of events) {
+    const row = elements.safetyBody.insertRow(); row.classList.toggle('active', item.status === 'active');
+    const status = row.insertCell(), badge = document.createElement('span'); badge.className = `safety-status ${item.status}`; badge.textContent = item.status === 'active' ? 'ATIVA' : 'ENCERRADA'; status.append(badge);
+    [item.equipment_id, item.ldl_code, formatKm(item.station_m), `${Number(item.speed_kmh || 0).toFixed(1).replace('.', ',')} km/h`, date(item.first_seen_at), date(item.last_seen_at), item.occurrences].forEach((value) => { const cell = row.insertCell(); cell.textContent = value; });
+  }
+  if (!events.length) { const row = elements.safetyBody.insertRow(), cell = row.insertCell(); cell.colSpan = 8; cell.textContent = 'Nenhuma invasão de LDL registrada.'; }
+  elements.criticalBanner.hidden = !active.length;
+  elements.criticalText.textContent = active.map((item) => `${item.equipment_id} dentro de ${item.ldl_code} no KM ${formatKm(item.station_m)}`).join(' · ');
+  if (active.length && safetyAudio.enabled) { const signature = active.map((item) => item.id).sort().join('|'); if (signature !== lastCriticalSignature || Date.now() - lastCriticalSoundAt >= 30000) { safetyAudio.critical(); lastCriticalSignature = signature; lastCriticalSoundAt = Date.now(); } }
+  else lastCriticalSignature = '';
 }
 
 function populateSelects() {
@@ -226,6 +266,7 @@ function renderHistory() {
 
 function render() {
   const ldls = activeLdl(), circulations = activeCirculations(), permissives = activePermissives(), { alerts, approaches, deadlineCount } = operationalAlerts();
+  if (safetyAudio.enabled) { const warningSignature = alerts.filter((item) => !item.safety).map((item) => item.title).sort().join('|'); if (warningSignature && warningSignature !== lastWarningSignature) safetyAudio.warning(); lastWarningSignature = warningSignature; }
   elements.kpiLdl.textContent = ldls.length; elements.kpiPeople.textContent = ldls.reduce((sum, item) => sum + Number(item.workforce_count), 0); elements.kpiDeadline.textContent = deadlineCount; elements.kpiCirculation.textContent = circulations.length; elements.kpiPermissive.textContent = permissives.length; elements.kpiApproach.textContent = approaches.length;
   elements.alertCount.textContent = alerts.length; elements.alerts.replaceChildren();
   if (!alerts.length) elements.alerts.innerHTML = '<div class="empty">Nenhum alerta imediato.</div>';
@@ -233,12 +274,14 @@ function render() {
   elements.ldlList.replaceChildren(); for (const item of ldls) elements.ldlList.append(record(item, 'ldl')); if (!ldls.length) elements.ldlList.innerHTML = '<div class="empty">Nenhuma LDL em aberto.</div>';
   elements.circulationList.replaceChildren(); for (const item of circulations) elements.circulationList.append(record(item, 'circulation')); if (!circulations.length) elements.circulationList.innerHTML = '<div class="empty">Nenhuma circulação autorizada.</div>';
   elements.permissiveList.replaceChildren(); for (const item of permissives) elements.permissiveList.append(record(item, 'permissive')); if (!permissives.length) elements.permissiveList.innerHTML = '<div class="empty">Nenhuma operação permissiva ativa.</div>';
-  elements.freshness.textContent = `Atualizado em ${date(state.serverTime)} · ciclo manual/30 s`; populateSelects(); renderHistory(); renderMap();
+  elements.freshness.textContent = `Atualizado em ${date(state.serverTime)} · ciclo automático/5 s`; populateSelects(); renderHistory(); renderSafetyEvents(); renderMap();
 }
 
 async function load() {
-  try { state = await api('/api/v1/cco/state'); elements.controller.textContent = `${state.controller.code} · ${state.controller.name}`; render(); }
+  if (loading) return; loading = true;
+  try { state = await api('/api/v1/cco/state'); await syncSafetyEvents(); elements.controller.textContent = `${state.controller.code} · ${state.controller.name}`; render(); }
   catch (error) { if (error.status === 401) return showLogin(); notify(elements.message, error.message); }
+  finally { loading = false; }
 }
 function showLogin() { sessionToken = ''; sessionStorage.removeItem('ficoCcoToken'); elements.login.hidden = false; elements.app.hidden = true; elements.logout.hidden = true; elements.controller.textContent = 'AGUARDANDO ACESSO'; }
 function showApp() { elements.login.hidden = true; elements.app.hidden = false; elements.logout.hidden = false; setTimeout(() => map?.resize(), 0); }
@@ -263,6 +306,7 @@ elements.excel.onclick = () => {
   for (const item of state.ldls) rows.push([item.permanent_code,'LDL',item.status,`${item.requester_code} - ${item.requester_name}`,item.lines.map(lineLabel).join(' + '),formatKm(item.km_start),formatKm(item.km_end),item.requested_start,item.requested_end,item.controller_name]);
   for (const item of state.circulations) rows.push([item.permanent_code,'Circulação',item.status,item.equipment_id,lineLabel(item.line_id),formatKm(item.km_start),formatKm(item.km_end),item.planned_start,item.planned_end,item.controller_name]);
   for (const item of state.permissives) rows.push([item.permanent_code,'Permissivo 15 km/h',item.status,item.equipment_id,lineLabel(item.line_id),formatKm(item.km_start),formatKm(item.km_end),item.planned_start,item.planned_end,item.controller_name]);
+  for (const item of state.safetyEvents || []) rows.push([item.id,'Invasão de LDL',item.status,item.equipment_id,'Linha 01',formatKm(item.station_m),formatKm(item.station_m),item.first_seen_at,item.last_seen_at,item.detected_by_controller]);
   const csv = '\ufeff' + rows.map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"','""')}"`).join(';')).join('\r\n'), url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })), link = document.createElement('a'); link.href = url; link.download = `controle-cco-${new Date().toISOString().slice(0,7)}.csv`; link.click(); URL.revokeObjectURL(url);
 };
 
@@ -292,4 +336,4 @@ elements.permissiveForm.addEventListener('submit', async (event) => {
 
 setInterval(() => $('clock').textContent = new Date().toLocaleTimeString('pt-BR'), 1000);
 fetch(AXIS_URL).then((response) => response.json()).then((data) => { axis = data.points; initMap(); if (sessionToken) { showApp(); load(); } }).catch((error) => notify(elements.loginMessage, `Traçado indisponível: ${error.message}`));
-setInterval(() => { if (sessionToken) load(); }, 30000);
+setInterval(() => { if (sessionToken) load(); }, 5000);

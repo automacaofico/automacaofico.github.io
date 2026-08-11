@@ -7,16 +7,18 @@
   <title>Gestão à vista CCO | FICO</title>
   <link rel="stylesheet" href="../../mapa-pendencias/assets/vendor/maplibre/maplibre-gl.css">
   <link rel="stylesheet" href="styles.css?v=20260811-2">
+  <link rel="stylesheet" href="safety.css?v=20260811-3">
 </head>
 <body>
   <header>
     <a class="brand" href="../"><img src="../../mapa-pendencias/assets/brand/fico-logo-color.png" alt="FICO"><span>GESTÃO À VISTA <b>· CCO</b></span></a>
     <div class="live"><i></i><div><b id="connection">MONITORAMENTO AO VIVO</b><small id="updated">Conectando…</small></div></div>
     <div class="clock"><time id="clock">--:--:--</time><span id="today">--</span></div>
-    <nav><a href="../cco/">CONTROLE CCO</a><button id="fullscreen">TELA CHEIA</button></nav>
+    <nav><a href="../cco/">CONTROLE CCO</a><button id="sound">ATIVAR SOM</button><button id="fullscreen">TELA CHEIA</button></nav>
   </header>
 
   <main>
+    <div id="critical-banner" class="critical-banner" role="alert" hidden><strong>INVASÃO DE LDL</strong><span id="critical-text"></span><small>Ocorrência crítica registrada pelo Controle Operacional CCO</small></div>
     <section class="status" aria-label="Indicadores operacionais">
       <article class="ldl"><span>LDLs ATIVAS</span><strong id="ldl">0</strong><small>trechos bloqueados</small></article>
       <article class="people"><span>PESSOAS NA VIA</span><strong id="people">0</strong><small>efetivo protegido</small></article>
@@ -53,6 +55,6 @@
   </main>
 
   <script src="../../mapa-pendencias/assets/vendor/maplibre/maplibre-gl.js"></script>
-  <script type="module" src="app.js?v=20260811-2"></script>
+  <script type="module" src="app.js?v=20260811-4"></script>
 </body>
 </html>

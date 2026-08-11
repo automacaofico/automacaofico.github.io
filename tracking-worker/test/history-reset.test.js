@@ -59,8 +59,10 @@ test('history reset clears operational data and preserves registrations', async 
     sessions: 3,
     sessionSummaries: 1,
     operationalEvents: 5,
+    safetyEvents: 0,
   });
   assert.deepEqual(DB.state.deletes, [
+    'DELETE FROM safety_events',
     'DELETE FROM operational_events',
     'DELETE FROM operation_session_summaries',
     'DELETE FROM position_samples',
