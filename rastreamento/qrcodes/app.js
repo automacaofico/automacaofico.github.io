@@ -1,4 +1,4 @@
-const EQUIPMENT = ['LOCO001','LOCO002','LOCO003','LOCO004','LOCO005','LOCO006','LOCO007','EGPS001','EGPS002','EGPS003','EGPR001','EGPR002','EGPR003','NTC001'];
+const EQUIPMENT = ['LOCO001','LOCO002','LOCO003','LOCO004','LOCO005','LOCO006','LOCO007','EGPS001','EGPS002','EGPS003','EGPR001','EGPR002','EGPR003','EGPR004','NTC001'];
 const grid = document.getElementById('qr-grid');
 EQUIPMENT.forEach((equipmentId) => {
   const url = `https://automacaofico.github.io/rastreamento/assumir/?equipamento=${equipmentId}`;

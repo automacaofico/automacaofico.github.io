@@ -1,4 +1,4 @@
-const EQUIPMENT_ID = /^(?:LOCO00[1-7]|EGPS00[1-3]|EGPR00[1-3]|NTC001)$/;
+const EQUIPMENT_ID = /^(?:LOCO00[1-7]|EGPS00[1-3]|EGPR00[1-4]|NTC001)$/;
 
 export function validatePosition(value) {
   if (!value || typeof value !== 'object') return 'Posição inválida.';

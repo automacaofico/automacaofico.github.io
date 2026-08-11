@@ -15,6 +15,7 @@ const EQUIPMENT = [
   "EGPR001",
   "EGPR002",
   "EGPR003",
+  "EGPR004",
   "NTC001",
 ];
 const $ = (id) => document.getElementById(id);

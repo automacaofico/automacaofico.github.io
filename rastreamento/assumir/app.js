@@ -1,5 +1,5 @@
 const API_BASE = /^(?:localhost|127\.0\.0\.1)$/.test(location.hostname) ? 'http://127.0.0.1:8791' : 'https://fico-tracking-api.automacaofico.workers.dev';
-const EQUIPMENT = ['LOCO001','LOCO002','LOCO003','LOCO004','LOCO005','LOCO006','LOCO007','EGPS001','EGPS002','EGPS003','EGPR001','EGPR002','EGPR003','NTC001'];
+const EQUIPMENT = ['LOCO001','LOCO002','LOCO003','LOCO004','LOCO005','LOCO006','LOCO007','EGPS001','EGPS002','EGPS003','EGPR001','EGPR002','EGPR003','EGPR004','NTC001'];
 const $ = (id) => document.getElementById(id);
 const els = {
   equipment: $('equipment'), equipmentTitle: $('equipment-title'), current: $('current-session'), sessionForm: $('session-form'),

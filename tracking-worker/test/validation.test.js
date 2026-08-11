@@ -5,6 +5,7 @@ import { normalizeOperatorName, normalizeOperatorPin, normalizeOwnTracksLocation
 const valid = () => ({ equipmentId: 'NTC001', capturedAt: new Date().toISOString(), latitude: -14.01, longitude: -49.19, accuracyM: 6, batteryPct: 84 });
 
 test('accepts the NTC001 pilot position', () => assert.equal(validatePosition(valid()), null));
+test('accepts the EGPR004 regulator position', () => assert.equal(validatePosition({ ...valid(), equipmentId: 'EGPR004' }), null));
 test('rejects identifiers outside the registered fleet', () => assert.match(validatePosition({ ...valid(), equipmentId: 'NTC002' }), /Equipamento/));
 test('rejects invalid coordinates', () => assert.match(validatePosition({ ...valid(), latitude: 100 }), /Latitude/));
 test('publishes only registered identifiers', () => {
