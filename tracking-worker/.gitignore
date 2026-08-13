@@ -3,3 +3,5 @@ dist/
 .wrangler/
 .dev.vars
 .wrangler-history.log
+wrangler-radar*.log
+wrangler-radar*.err

@@ -1,6 +1,7 @@
 import { normalizeOperatorName, normalizeOperatorPin, normalizeOwnTracksLocation, normalizePosition, normalizeRegistration, ownTracksEquipmentId, publicEquipmentId, validatePosition } from './validation.js';
 import { summarizeGpsMovement } from './motion.js';
 import { routeCco } from './cco.js';
+import { routeRadar } from './radar.js';
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
 
@@ -846,6 +847,8 @@ async function updateEquipmentAdmin(request, env) {
 async function route(request, env) {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(request) });
   const url = new URL(request.url);
+  const radarResponse = await routeRadar(request, env);
+  if (radarResponse) return radarResponse;
   const ccoResponse = await routeCco(request, env);
   if (ccoResponse) return ccoResponse;
   if (request.method === 'GET' && url.pathname === '/health') return reply(request, { ok: true, service: 'fico-tracking-api', time: new Date().toISOString() });
@@ -886,6 +889,9 @@ export default {
       env.DB.prepare("DELETE FROM positions WHERE captured_at < datetime('now','-7 days')"),
       env.DB.prepare("DELETE FROM position_samples WHERE captured_at < datetime('now','-90 days')"),
       env.DB.prepare("DELETE FROM cco_sessions WHERE expires_at < CURRENT_TIMESTAMP")
+      ,env.DB.prepare("DELETE FROM radar_sessions WHERE expires_at < CURRENT_TIMESTAMP")
+      ,env.DB.prepare("DELETE FROM radar_front_events WHERE occurred_at < datetime('now','-90 days')")
+      ,env.DB.prepare("DELETE FROM radar_checkins WHERE captured_at < datetime('now','-90 days')")
     ]));
   }
 };
