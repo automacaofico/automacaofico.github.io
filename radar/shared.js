@@ -1,4 +1,5 @@
-export const API = /^(?:localhost|127\.0\.0\.1)$/.test(location.hostname) ? 'http://127.0.0.1:8791' : 'https://fico-tracking-api.automacaofico.workers.dev';
+const localApiPort = new URLSearchParams(location.search).get('apiPort') || '8791';
+export const API = /^(?:localhost|127\.0\.0\.1)$/.test(location.hostname) ? `http://127.0.0.1:${localApiPort}` : 'https://fico-tracking-api.automacaofico.workers.dev';
 export const AXIS_URL = '/mapa-superestrutura/assets/data/fico-axis-full.json';
 export const RISK = { low:{label:'Baixo',color:'#2f8f68'},moderate:{label:'Moderado',color:'#e0b02f'},high:{label:'Alto',color:'#ed7b28'},critical:{label:'Crítico',color:'#d63c32'} };
 export const STATUS = { scheduled:'Programada',active:'Em andamento',paused:'Pausada',awaiting_definition:'Aguardando definição',closed:'Encerrada',cancelled:'Cancelada',not_located:'Não localizada',stopped:'Paralisada pela FICO' };

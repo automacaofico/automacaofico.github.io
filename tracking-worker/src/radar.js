@@ -10,7 +10,7 @@ function cors(request) {
   return { 'access-control-allow-origin': allowed && origin ? origin : 'https://automacaofico.github.io', 'access-control-allow-methods': 'GET,POST,OPTIONS', 'access-control-allow-headers': 'authorization,content-type', vary: 'Origin' };
 }
 
-export const radarTestables = { effectiveStatus, normalizeSegments, normalizeEquipment };
+export const radarTestables = { effectiveStatus, normalizeSegments, normalizeEquipment, normalizeActivities, normalizeLdlRequirement, validUserCompany };
 function reply(request, body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { ...HEADERS, ...cors(request), 'cache-control': 'no-store' } }); }
 function clean(value, max = 200) { return String(value ?? '').trim().replace(/\s+/g, ' ').slice(0, max); }
 function code(value, max = 30) { const v = clean(value, max).toUpperCase(); return /^[A-Z0-9][A-Z0-9-]{1,29}$/.test(v) ? v : null; }
@@ -23,6 +23,7 @@ function random(bytes = 24) { const data = crypto.getRandomValues(new Uint8Array
 function safeJson(value, fallback = null) { try { return JSON.parse(value || ''); } catch { return fallback; } }
 
 function publicUser(row) { return { id: row.id, companyId: row.company_id, companyName: row.company_name, login: row.login, name: row.name, role: row.role, phone: row.phone }; }
+function validUserCompany(role, companyId) { return FICO_ROLES.has(role) ? !companyId : Boolean(companyId); }
 async function authenticate(request, env) {
   const bearer = request.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
   if (!bearer) return null;
@@ -53,13 +54,15 @@ function effectiveStatus(row, at = Date.now()) {
 function group(rows, key, mapper) { const out = {}; for (const row of rows || []) (out[row[key]] ||= []).push(mapper(row)); return out; }
 async function frontData(env, { from, to, companyId = null, includeAudit = false, limit = 5000 }) {
   const companyClause = companyId ? ' AND f.company_id=?' : '', bindings = [to, from, ...(companyId ? [companyId] : [])];
-  const [fronts, segments, equipment, risks, checkins, events] = await env.DB.batch([
+  const [fronts, activities, segments, equipment, risks, checkins, events] = await env.DB.batch([
     env.DB.prepare(`SELECT f.*,c.name AS company_name,c.icon_code,d.name AS discipline_name,a.name AS catalog_activity,
       i.name AS inspector_name,cu.name AS created_by_name,uu.name AS updated_by_name
       FROM radar_fronts f JOIN radar_companies c ON c.id=f.company_id JOIN radar_disciplines d ON d.id=f.discipline_id
       LEFT JOIN radar_activities a ON a.id=f.activity_id LEFT JOIN radar_users i ON i.id=f.inspector_user_id
       JOIN radar_users cu ON cu.id=f.created_by_user LEFT JOIN radar_users uu ON uu.id=f.updated_by_user
       WHERE f.planned_start<=? AND f.planned_end>=?${companyClause} ORDER BY f.planned_start DESC LIMIT ${Math.max(1, Math.min(10000, limit))}`).bind(to, from, ...(companyId ? [companyId] : [])),
+    env.DB.prepare(`SELECT fa.* FROM radar_front_activities fa JOIN radar_fronts f ON f.id=fa.front_id
+      WHERE f.planned_start<=? AND f.planned_end>=?${companyClause} ORDER BY fa.front_id,fa.sequence_order`).bind(...bindings),
     env.DB.prepare(`SELECT s.* FROM radar_front_segments s JOIN radar_fronts f ON f.id=s.front_id
       WHERE f.planned_start<=? AND f.planned_end>=?${companyClause} ORDER BY s.front_id,s.sequence_order`).bind(...bindings),
     env.DB.prepare(`SELECT e.* FROM radar_front_equipment e JOIN radar_fronts f ON f.id=e.front_id
@@ -71,12 +74,13 @@ async function frontData(env, { from, to, companyId = null, includeAudit = false
     includeAudit ? env.DB.prepare(`SELECT e.*,u.name AS user_name FROM radar_front_events e JOIN radar_users u ON u.id=e.user_id JOIN radar_fronts f ON f.id=e.front_id
       WHERE f.planned_start<=? AND f.planned_end>=?${companyClause} ORDER BY e.occurred_at DESC LIMIT 10000`).bind(...bindings) : env.DB.prepare('SELECT NULL AS id WHERE 0')
   ]);
+  const byActivity = group(activities.results, 'front_id', (r) => ({ id: r.activity_id || null, name: r.activity_name }));
   const bySegment = group(segments.results, 'front_id', (r) => ({ id: r.id, kmStart: Number(r.km_start), kmEnd: Number(r.km_end) }));
   const byEquipment = group(equipment.results, 'front_id', (r) => ({ id: r.id, type: r.equipment_type, quantity: Number(r.quantity) }));
   const byRisk = group(risks.results, 'front_id', (r) => ({ id: r.risk_id, name: r.name }));
   const byCheckin = group(checkins.results, 'front_id', (r) => ({ ...r, foundEquipment: safeJson(r.found_equipment_json, []), foundRisks: safeJson(r.found_risks_json, []), corrections: safeJson(r.corrections_json, {}) }));
   const byEvent = group(events.results, 'front_id', (r) => ({ ...r, payload: safeJson(r.payload_json, {}) }));
-  return (fronts.results || []).map((r) => ({ ...r, effectiveStatus: effectiveStatus(r), segments: bySegment[r.id] || [], equipment: byEquipment[r.id] || [], risks: byRisk[r.id] || [], checkins: byCheckin[r.id] || [], events: byEvent[r.id] || [] }));
+  return (fronts.results || []).map((r) => { const frontActivities = byActivity[r.id] || [{ id: r.activity_id || null, name: r.activity_name }]; return { ...r, activity_name: frontActivities.map((x) => x.name).join(' + '), activities: frontActivities, effectiveStatus: effectiveStatus(r), segments: bySegment[r.id] || [], equipment: byEquipment[r.id] || [], risks: byRisk[r.id] || [], checkins: byCheckin[r.id] || [], events: byEvent[r.id] || [] }; });
 }
 
 async function catalogs(env, user = null) {
@@ -93,7 +97,7 @@ async function catalogs(env, user = null) {
 async function publicState(request, env) {
   const url = new URL(request.url), from = iso(url.searchParams.get('from')) || new Date(Date.now() - 86400000).toISOString(), to = iso(url.searchParams.get('to')) || new Date(Date.now() + 86400000).toISOString();
   const fronts = await frontData(env, { from, to, limit: 2000 });
-  return reply(request, { ok: true, serverTime: now(), fronts: fronts.map((f) => ({ id: f.id, permanent_code: f.permanent_code, company_id: f.company_id, company_name: f.company_name, icon_code: f.icon_code, manager_name: f.manager_name, discipline_name: f.discipline_name, activity_name: f.activity_name, workforce_count: f.workforce_count, risk_level: f.risk_level, planned_start: f.planned_start, planned_end: f.planned_end, status: f.status, effectiveStatus: f.effectiveStatus, verified: f.checkins.length > 0, segments: f.segments, equipment: f.equipment, risks: f.risks })) });
+  return reply(request, { ok: true, serverTime: now(), fronts: fronts.map((f) => ({ id: f.id, permanent_code: f.permanent_code, company_id: f.company_id, company_name: f.company_name, icon_code: f.icon_code, manager_name: f.manager_name, discipline_name: f.discipline_name, activity_name: f.activity_name, activities: f.activities, ldl_requirement: f.ldl_requirement, workforce_count: f.workforce_count, risk_level: f.risk_level, planned_start: f.planned_start, planned_end: f.planned_end, status: f.status, effectiveStatus: f.effectiveStatus, verified: f.checkins.length > 0, segments: f.segments, equipment: f.equipment, risks: f.risks })) });
 }
 async function state(request, env, user) {
   const url = new URL(request.url), from = iso(url.searchParams.get('from')) || new Date(Date.now() - 31 * 86400000).toISOString(), to = iso(url.searchParams.get('to')) || new Date(Date.now() + 31 * 86400000).toISOString();
@@ -113,15 +117,32 @@ function normalizeEquipment(value) {
   if (items.some((x) => x.type.length < 2 || x.quantity < 1 || x.quantity > 999)) return { error: 'Revise tipo e quantidade dos equipamentos.' };
   return { items };
 }
+function normalizeActivities(value, legacyName = '') {
+  const source = Array.isArray(value) && value.length ? value : (legacyName ? [{ name: legacyName }] : []);
+  if (!source.length || source.length > 12) return { error: 'Informe de 1 a 12 atividades.' };
+  const seen = new Set(), items = [];
+  for (const entry of source) {
+    const name = clean(typeof entry === 'string' ? entry : entry?.name, 120), id = code(typeof entry === 'object' ? entry?.id || '' : '');
+    const key = name.toLocaleLowerCase('pt-BR');
+    if (name.length < 3) return { error: 'Revise as atividades. Cada atividade deve ter ao menos 3 caracteres.' };
+    if (!seen.has(key)) { seen.add(key); items.push({ id, name }); }
+  }
+  return { items };
+}
+function normalizeLdlRequirement(value) {
+  const normalized = clean(value, 20);
+  return ['required', 'not_required'].includes(normalized) ? normalized : null;
+}
 async function validateFrontBody(env, body, user, existing = null) {
   const companyId = FICO_ROLES.has(user.role) ? code(body.companyId || existing?.company_id) : user.company_id;
-  const segments = normalizeSegments(body.segments), equipment = normalizeEquipment(body.equipment);
+  const segments = normalizeSegments(body.segments), equipment = normalizeEquipment(body.equipment), activities = normalizeActivities(body.activities, body.activityName);
   const riskIds = [...new Set((Array.isArray(body.riskIds) ? body.riskIds : []).map((x) => code(x)).filter(Boolean))];
-  const start = iso(body.start), end = iso(body.end), workforce = Math.round(num(body.workforceCount) || 0), riskLevel = clean(body.riskLevel, 12);
-  const activityName = clean(body.activityName, 120), disciplineId = code(body.disciplineId), managerName = clean(body.managerName, 100), managerPhone = clean(body.managerPhone, 30);
-  if (!companyId || !disciplineId || activityName.length < 3 || managerName.length < 3 || managerPhone.length < 8) return { error: 'Preencha empresa, disciplina, atividade, responsável e telefone.' };
+  const start = iso(body.start), end = iso(body.end), workforce = Math.round(num(body.workforceCount) || 0), riskLevel = clean(body.riskLevel, 12), ldlRequirement = normalizeLdlRequirement(body.ldlRequirement);
+  const disciplineId = code(body.disciplineId), managerName = clean(body.managerName, 100), managerPhone = clean(body.managerPhone, 30);
+  if (!companyId || !disciplineId || activities.error || managerName.length < 3 || managerPhone.length < 8) return { error: activities.error || 'Preencha empresa, disciplina, atividade, responsável e telefone.' };
   if (!start || !end || Date.parse(start) >= Date.parse(end)) return { error: 'O período da atividade é inválido.' };
   if (workforce < 1 || workforce > 5000 || !['low', 'moderate', 'high', 'critical'].includes(riskLevel)) return { error: 'Revise efetivo e nível de risco.' };
+  if (!ldlRequirement) return { error: 'Informe obrigatoriamente se a frente necessita ou não de LDL.' };
   if (segments.error || equipment.error) return { error: segments.error || equipment.error };
   if (!riskIds.length) return { error: 'Selecione ao menos um risco crítico aplicável.' };
   const [company, discipline, riskCount] = await Promise.all([
@@ -130,10 +151,16 @@ async function validateFrontBody(env, body, user, existing = null) {
     env.DB.prepare(`SELECT COUNT(*) AS total FROM radar_risks WHERE active=1 AND id IN (${riskIds.map(() => '?').join(',')})`).bind(...riskIds).first()
   ]);
   if (!company || !discipline || Number(riskCount?.total) !== riskIds.length) return { error: 'Empresa, disciplina ou riscos inválidos.' };
-  return { data: { companyId, disciplineId, activityId: code(body.activityId || ''), activityName, description: clean(body.description, 500), subcontractor: clean(body.subcontractor, 100), managerName, managerPhone, safetyTechnician: clean(body.safetyTechnician, 100), inspectorUserId: clean(body.inspectorUserId, 80) || null, workforce, riskLevel, start, end, segments: segments.items, equipment: equipment.items, riskIds } };
+  const catalogRows = (await env.DB.prepare('SELECT id,name FROM radar_activities WHERE active=1').all()).results || [];
+  const catalogById = new Map(catalogRows.map((x) => [x.id, x])), catalogByName = new Map(catalogRows.map((x) => [x.name.toLocaleLowerCase('pt-BR'), x]));
+  const resolvedActivities = activities.items.map((x) => { const match = (x.id && catalogById.get(x.id)) || catalogByName.get(x.name.toLocaleLowerCase('pt-BR')); return { id: match?.id || null, name: match?.name || x.name }; });
+  if (activities.items.some((x) => x.id && !catalogById.has(x.id))) return { error: 'Uma das atividades selecionadas não existe mais no catálogo.' };
+  const activityName = resolvedActivities.map((x) => x.name).join(' + ');
+  return { data: { companyId, disciplineId, activityId: resolvedActivities[0].id, activityName, activities: resolvedActivities, ldlRequirement, description: clean(body.description, 500), subcontractor: clean(body.subcontractor, 100), managerName, managerPhone, safetyTechnician: clean(body.safetyTechnician, 100), inspectorUserId: clean(body.inspectorUserId, 80) || null, workforce, riskLevel, start, end, segments: segments.items, equipment: equipment.items, riskIds } };
 }
 async function replaceChildren(env, frontId, data) {
-  const statements = [env.DB.prepare('DELETE FROM radar_front_segments WHERE front_id=?').bind(frontId), env.DB.prepare('DELETE FROM radar_front_equipment WHERE front_id=?').bind(frontId), env.DB.prepare('DELETE FROM radar_front_risks WHERE front_id=?').bind(frontId)];
+  const statements = [env.DB.prepare('DELETE FROM radar_front_activities WHERE front_id=?').bind(frontId), env.DB.prepare('DELETE FROM radar_front_segments WHERE front_id=?').bind(frontId), env.DB.prepare('DELETE FROM radar_front_equipment WHERE front_id=?').bind(frontId), env.DB.prepare('DELETE FROM radar_front_risks WHERE front_id=?').bind(frontId)];
+  data.activities.forEach((x, i) => statements.push(env.DB.prepare('INSERT INTO radar_front_activities (front_id,activity_id,activity_name,sequence_order) VALUES (?,?,?,?)').bind(frontId, x.id, x.name, i)));
   data.segments.forEach((x, i) => statements.push(env.DB.prepare('INSERT INTO radar_front_segments (id,front_id,sequence_order,km_start,km_end) VALUES (?,?,?,?,?)').bind(uuid(), frontId, i, x.kmStart, x.kmEnd)));
   data.equipment.forEach((x) => statements.push(env.DB.prepare('INSERT INTO radar_front_equipment (id,front_id,equipment_type,quantity) VALUES (?,?,?,?)').bind(uuid(), frontId, x.type, x.quantity)));
   data.riskIds.forEach((id) => statements.push(env.DB.prepare('INSERT INTO radar_front_risks (front_id,risk_id) VALUES (?,?)').bind(frontId, id)));
@@ -144,8 +171,8 @@ async function createFront(request, env, user) {
   const body = await request.json().catch(() => ({})), valid = await validateFrontBody(env, body, user);
   if (valid.error) return reply(request, { ok: false, error: valid.error }, 400);
   const d = valid.data, id = uuid(), sequence = Number((await env.DB.prepare('SELECT COALESCE(MAX(sequence_number),0)+1 AS next FROM radar_fronts').first()).next), permanentCode = `RAD-${String(sequence).padStart(5, '0')}`, time = now(), revisionToken = random(12);
-  await env.DB.prepare(`INSERT INTO radar_fronts (id,sequence_number,permanent_code,company_id,subcontractor,manager_name,manager_phone,safety_technician,inspector_user_id,discipline_id,activity_id,activity_name,description,workforce_count,risk_level,planned_start,planned_end,status,created_by_user,created_at,revision_token)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'scheduled',?,?,?)`).bind(id, sequence, permanentCode, d.companyId, d.subcontractor || null, d.managerName, d.managerPhone, d.safetyTechnician || null, d.inspectorUserId, d.disciplineId, d.activityId, d.activityName, d.description || null, d.workforce, d.riskLevel, d.start, d.end, user.id, time, revisionToken).run();
+  await env.DB.prepare(`INSERT INTO radar_fronts (id,sequence_number,permanent_code,company_id,subcontractor,manager_name,manager_phone,safety_technician,inspector_user_id,discipline_id,activity_id,activity_name,ldl_requirement,description,workforce_count,risk_level,planned_start,planned_end,status,created_by_user,created_at,revision_token)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'scheduled',?,?,?)`).bind(id, sequence, permanentCode, d.companyId, d.subcontractor || null, d.managerName, d.managerPhone, d.safetyTechnician || null, d.inspectorUserId, d.disciplineId, d.activityId, d.activityName, d.ldlRequirement, d.description || null, d.workforce, d.riskLevel, d.start, d.end, user.id, time, revisionToken).run();
   await replaceChildren(env, id, d);
   await env.DB.prepare('INSERT INTO radar_front_events (id,front_id,event_type,user_id,occurred_at,payload_json) VALUES (?,?,?,?,?,?)').bind(uuid(), id, 'created', user.id, time, JSON.stringify({ after: d })).run();
   return reply(request, { ok: true, front: { id, permanentCode } });
@@ -161,8 +188,8 @@ async function updateFront(request, env, user) {
   const valid = await validateFrontBody(env, body, user, current); if (valid.error) return reply(request, { ok: false, error: valid.error }, 400);
   const beforeData = await frontData(env, { from: current.planned_start, to: current.planned_end, companyId: current.company_id, includeAudit: false });
   const d = valid.data, revision = Number(current.revision) + 1, time = now(), revisionToken = random(12);
-  await env.DB.prepare(`UPDATE radar_fronts SET company_id=?,subcontractor=?,manager_name=?,manager_phone=?,safety_technician=?,inspector_user_id=?,discipline_id=?,activity_id=?,activity_name=?,description=?,workforce_count=?,risk_level=?,planned_start=?,planned_end=?,updated_by_user=?,updated_at=?,revision=?,revision_token=? WHERE id=? AND revision=?`)
-    .bind(d.companyId, d.subcontractor || null, d.managerName, d.managerPhone, d.safetyTechnician || null, d.inspectorUserId, d.disciplineId, d.activityId, d.activityName, d.description || null, d.workforce, d.riskLevel, d.start, d.end, user.id, time, revision, revisionToken, id, current.revision).run();
+  await env.DB.prepare(`UPDATE radar_fronts SET company_id=?,subcontractor=?,manager_name=?,manager_phone=?,safety_technician=?,inspector_user_id=?,discipline_id=?,activity_id=?,activity_name=?,ldl_requirement=?,description=?,workforce_count=?,risk_level=?,planned_start=?,planned_end=?,updated_by_user=?,updated_at=?,revision=?,revision_token=? WHERE id=? AND revision=?`)
+    .bind(d.companyId, d.subcontractor || null, d.managerName, d.managerPhone, d.safetyTechnician || null, d.inspectorUserId, d.disciplineId, d.activityId, d.activityName, d.ldlRequirement, d.description || null, d.workforce, d.riskLevel, d.start, d.end, user.id, time, revision, revisionToken, id, current.revision).run();
   await replaceChildren(env, id, d);
   await env.DB.prepare('INSERT INTO radar_front_events (id,front_id,event_type,user_id,occurred_at,payload_json) VALUES (?,?,?,?,?,?)').bind(uuid(), id, FICO_ROLES.has(user.role) ? 'corrected_by_fico' : 'updated', user.id, time, JSON.stringify({ reason, before: beforeData.find((x) => x.id === id), after: d, revision })).run();
   return reply(request, { ok: true, front: { id, revision } });
@@ -204,7 +231,8 @@ async function adminSaveUser(request, env, user) {
   if (!['fico_admin', 'company_admin'].includes(user.role)) return reply(request, { ok: false, error: 'Acesso administrativo necessário.' }, 403);
   const body = await request.json().catch(() => ({})), id = clean(body.id, 80) || uuid(), loginCode = code(body.login), name = clean(body.name, 100), role = clean(body.role, 30), phone = clean(body.phone, 30), password = String(body.password || ''), companyId = user.role === 'company_admin' ? user.company_id : (code(body.companyId || '') || null);
   const allowedRoles = user.role === 'company_admin' ? ['company_admin', 'front_manager', 'viewer'] : ['fico_admin', 'fico_inspector', 'company_admin', 'front_manager', 'viewer'];
-  if (!loginCode || name.length < 3 || !allowedRoles.includes(role) || (FICO_ROLES.has(role) && companyId) || (!FICO_ROLES.has(role) && !companyId)) return reply(request, { ok: false, error: 'Revise empresa, login, nome e perfil.' }, 400);
+  if (!loginCode || name.length < 3 || !allowedRoles.includes(role) || !validUserCompany(role, companyId)) return reply(request, { ok: false, error: 'Selecione obrigatoriamente a contratada para perfis da empresa. Perfis FICO não podem ser vinculados a contratadas.' }, 400);
+  if (companyId && !await env.DB.prepare('SELECT id FROM radar_companies WHERE id=? AND active=1').bind(companyId).first()) return reply(request, { ok: false, error: 'A contratada selecionada não existe ou está inativa.' }, 400);
   const existing = await env.DB.prepare('SELECT id,company_id FROM radar_users WHERE id=?').bind(id).first();
   if (existing && user.role === 'company_admin' && existing.company_id !== user.company_id) return reply(request, { ok: false, error: 'Você não pode editar este usuário.' }, 403);
   if (!existing && password.length < 8) return reply(request, { ok: false, error: 'A senha inicial deve ter pelo menos 8 caracteres.' }, 400);
