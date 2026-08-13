@@ -19,9 +19,9 @@ const elements = {
   ldlWorkforce: $('ldl-workforce'), ldlStart: $('ldl-start'), ldlEnd: $('ldl-end'), ldlDescription: $('ldl-description'), ldlMessage: $('ldl-message'),
   ldlEditDialog: $('ldl-edit-dialog'), ldlEditForm: $('ldl-edit-form'), ldlEditCode: $('ldl-edit-code'), ldlEditRequester: $('ldl-edit-requester'), ldlEditChannel: $('ldl-edit-channel'), ldlEditKmStart: $('ldl-edit-km-start'), ldlEditKmEnd: $('ldl-edit-km-end'), ldlEditTrackContext: $('ldl-edit-track-context'), ldlEditWorkforce: $('ldl-edit-workforce'), ldlEditStart: $('ldl-edit-start'), ldlEditEnd: $('ldl-edit-end'), ldlEditDescription: $('ldl-edit-description'), ldlEditReason: $('ldl-edit-reason'), ldlEditMessage: $('ldl-edit-message'),
   ldlAuditDialog: $('ldl-audit-dialog'), ldlAuditTitle: $('ldl-audit-title'), ldlAuditSummary: $('ldl-audit-summary'), ldlAuditEvents: $('ldl-audit-events'),
-  circulationForm: $('circulation-form'), circEquipment: $('circ-equipment'), circOperator: $('circ-operator'), circLine: $('circ-line'), circDirection: $('circ-direction'), circTrackContext: $('circ-track-context'),
-  circKmStart: $('circ-km-start'), circKmEnd: $('circ-km-end'), circStart: $('circ-start'), circEnd: $('circ-end'), circRestrictions: $('circ-restrictions'), circMessage: $('circ-message'),
-  circEditDialog: $('circ-edit-dialog'), circEditForm: $('circ-edit-form'), circEditCode: $('circ-edit-code'), circEditEquipment: $('circ-edit-equipment'), circEditOperator: $('circ-edit-operator'), circEditLine: $('circ-edit-line'), circEditDirection: $('circ-edit-direction'), circEditTrackContext: $('circ-edit-track-context'), circEditKmStart: $('circ-edit-km-start'), circEditKmEnd: $('circ-edit-km-end'), circEditStart: $('circ-edit-start'), circEditEnd: $('circ-edit-end'), circEditRestrictions: $('circ-edit-restrictions'), circEditReason: $('circ-edit-reason'), circEditMessage: $('circ-edit-message'),
+  circulationForm: $('circulation-form'), circEquipment: $('circ-equipment'), circHelper: $('circ-helper'), circOperator: $('circ-operator'), circLine: $('circ-line'), circDirection: $('circ-direction'), circTrackContext: $('circ-track-context'),
+  circKmStart: $('circ-km-start'), circKmEnd: $('circ-km-end'), circStart: $('circ-start'), circEnd: $('circ-end'), circWagonType: $('circ-wagon-type'), circWagonCount: $('circ-wagon-count'), circLoadStatus: $('circ-load-status'), circCargo: $('circ-cargo'), circRestrictions: $('circ-restrictions'), circMessage: $('circ-message'),
+  circEditDialog: $('circ-edit-dialog'), circEditForm: $('circ-edit-form'), circEditCode: $('circ-edit-code'), circEditEquipment: $('circ-edit-equipment'), circEditHelper: $('circ-edit-helper'), circEditOperator: $('circ-edit-operator'), circEditLine: $('circ-edit-line'), circEditDirection: $('circ-edit-direction'), circEditTrackContext: $('circ-edit-track-context'), circEditKmStart: $('circ-edit-km-start'), circEditKmEnd: $('circ-edit-km-end'), circEditStart: $('circ-edit-start'), circEditEnd: $('circ-edit-end'), circEditWagonType: $('circ-edit-wagon-type'), circEditWagonCount: $('circ-edit-wagon-count'), circEditLoadStatus: $('circ-edit-load-status'), circEditCargo: $('circ-edit-cargo'), circEditRestrictions: $('circ-edit-restrictions'), circEditReason: $('circ-edit-reason'), circEditMessage: $('circ-edit-message'),
   circAuditDialog: $('circ-audit-dialog'), circAuditTitle: $('circ-audit-title'), circAuditSummary: $('circ-audit-summary'), circAuditEvents: $('circ-audit-events'),
   permissiveForm: $('permissive-form'), permEquipment: $('perm-equipment'), permOperator: $('perm-operator'), permLine: $('perm-line'), permKmStart: $('perm-km-start'), permKmEnd: $('perm-km-end'), permTrackContext: $('perm-track-context'),
   permStart: $('perm-start'), permEnd: $('perm-end'), permChannel: $('perm-channel'), permDescription: $('perm-description'), permJustification: $('perm-justification'), permConflicts: $('perm-conflicts'), permConfirmed: $('perm-confirmed'), permMessage: $('perm-message')
@@ -46,6 +46,12 @@ function activeCirculations() { return (state?.circulations || []).filter((item)
 function activePermissives() { return (state?.permissives || []).filter((item) => item.status === 'active'); }
 function activeSafetyEvents() { return (state?.safetyEvents || []).filter((item) => item.status === 'active'); }
 function intervalsOverlap(aStart, aEnd, bStart, bEnd) { return aStart <= bEnd && aEnd >= bStart; }
+function tractionLabel(item) { return `${item.equipment_id}${item.helper_equipment_id ? ` + ${item.helper_equipment_id}` : ''}`; }
+function compositionLabel(item) {
+  if (!item.wagon_type || !Number(item.wagon_count)) return 'Sem vagões / escoteira';
+  const condition = item.load_status === 'loaded' ? 'carregados' : 'vazios';
+  return `${item.wagon_count} vagões ${item.wagon_type} · ${condition}${item.load_status === 'loaded' && item.cargo_description ? ` · ${item.cargo_description}` : ''}`;
+}
 
 function updateTrackContext(kind) {
   const config = kind === 'ldl'
@@ -62,9 +68,10 @@ function updateTrackContext(kind) {
   const validInterval = start !== null && end !== null && end > start;
   if (!validInterval) config.context.textContent = 'Informe o trecho para verificar as linhas disponíveis.';
   else if (availability.structures.length) config.context.textContent = `Disponíveis neste trecho: ${availability.lines.map(lineLabel).join(' · ')}. Estrutura: ${availability.structures.map((item) => `${item.name}${item.provisional ? ' (provisória)' : ''}`).join(' + ')}.`;
-  else if (availability.partialStructures.length) config.context.textContent = `O trecho atravessa o limite de ${availability.partialStructures.map((item) => item.name).join(' + ')}. Divida a autorização para selecionar outras linhas.`;
+  else if (availability.partialStructures.length && config.select?.value === 'line01') config.context.textContent = `Linha 01 disponível em todo o trecho. O percurso cruza ${availability.partialStructures.map((item) => item.name).join(' + ')}; Linha 02 e linhas especiais só podem ser usadas dentro de seus limites.`;
+  else if (availability.partialStructures.length) config.context.textContent = `O trecho atravessa o limite de ${availability.partialStructures.map((item) => item.name).join(' + ')}. Divida a autorização para usar Linha 02 ou linha especial.`;
   else config.context.textContent = 'Trecho em linha singela · somente Linha 01 disponível.';
-  config.context.classList.toggle('warning', validInterval && availability.partialStructures.length > 0);
+  config.context.classList.toggle('warning', validInterval && availability.partialStructures.length > 0 && (!config.select || config.select.value !== 'line01'));
   if (config.checkboxes) {
     for (const checkbox of document.querySelectorAll(config.checkboxes)) {
       if (checkbox.value === 'line01') continue;
@@ -162,12 +169,12 @@ function operationPopupContent(item, kind) {
   const km = document.createElement('b'); km.textContent = `KM ${formatKm(item.km_start)}–${formatKm(item.km_end)}`;
   const line = document.createElement('span'); line.textContent = kind === 'ldl' ? item.lines.map(lineLabel).join(' + ') : lineLabel(item.line_id);
   const main = document.createElement('strong');
-  main.textContent = kind === 'ldl' ? `${item.requester_code} · ${item.requester_name}` : `${item.equipment_id} · ${item.equipment_name}`;
+  main.textContent = kind === 'ldl' ? `${item.requester_code} · ${item.requester_name}` : kind === 'circulation' ? `${tractionLabel(item)} · ${item.equipment_name}` : `${item.equipment_id} · ${item.equipment_name}`;
   const detail = document.createElement('small');
   detail.textContent = kind === 'ldl'
     ? `${item.workforce_count} pessoas · Serviço: ${item.work_description}`
     : kind === 'circulation'
-      ? `Sentido: ${item.direction} · Operador: ${item.operator_name || 'não informado'}${item.restrictions ? ` · Restrições: ${item.restrictions}` : ''}`
+      ? `Sentido: ${item.direction} · Operador: ${item.operator_name || 'não informado'} · ${compositionLabel(item)}${item.restrictions ? ` · Restrições: ${item.restrictions}` : ''}`
       : `Operador: ${item.operator_name || 'não informado'} · Serviço: ${item.work_description} · ${item.justification}`;
   const period = document.createElement('small'); period.textContent = `${date(kind === 'ldl' ? item.requested_start : item.planned_start)} → ${date(kind === 'ldl' ? item.requested_end : item.planned_end)}`;
   body.append(km, line, main, detail, period); card.append(header, body); return card;
@@ -208,7 +215,7 @@ function focusMapOperation(item, kind) {
 }
 
 function showEquipmentPopup(item, projection) {
-  const equipment = state.equipment.find((entry) => entry.id === item.equipment_id), circulation = activeCirculations().find((entry) => entry.equipment_id === item.equipment_id);
+  const equipment = state.equipment.find((entry) => entry.id === item.equipment_id), circulation = activeCirculations().find((entry) => entry.equipment_id === item.equipment_id || entry.helper_equipment_id === item.equipment_id);
   const card = document.createElement('article'); card.className = 'cco-equipment-popup-card';
   const header = document.createElement('header'), name = document.createElement('strong'), badge = document.createElement('span'); name.textContent = item.equipment_id; badge.textContent = 'POSIÇÃO GPS'; header.append(name, badge);
   const body = document.createElement('div'); body.className = 'cco-operation-popup-body';
@@ -216,7 +223,8 @@ function showEquipmentPopup(item, projection) {
   const alias = document.createElement('strong'); alias.textContent = equipment?.name || item.equipment_id;
   const detail = document.createElement('small'); detail.textContent = `${equipment?.description || equipment?.type || 'Equipamento ferroviário'} · ${Number(item.speed_mps || 0) * 3.6 < .5 ? 'parado' : `${(Number(item.speed_mps) * 3.6).toFixed(1).replace('.', ',')} km/h`}`;
   const operator = document.createElement('small'); operator.textContent = `Operador: ${circulation?.operator_name || 'não informado'} · Sinal: ${date(item.captured_at)}`;
-  body.append(km, alias, detail, operator); card.append(header, body);
+  const consist = document.createElement('small'); consist.textContent = circulation ? `${item.equipment_id === circulation.equipment_id ? 'Tração' : 'Auxiliar'} · ${compositionLabel(circulation)}` : 'Sem circulação vinculada';
+  body.append(km, alias, detail, operator, consist); card.append(header, body);
   if (!equipmentPopup) equipmentPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 20, className: 'cco-equipment-popup' });
   equipmentPopup.setLngLat(projection.coordinate).setDOMContent(card).addTo(map);
 }
@@ -344,7 +352,7 @@ function renderSafetyEvents() {
 }
 
 function populateSelects() {
-  const currentRequester = elements.ldlRequester.value, currentEditRequester = elements.ldlEditRequester.value, currentEquipment = elements.circEquipment.value, currentEditEquipment = elements.circEditEquipment.value, currentPermEquipment = elements.permEquipment.value;
+  const currentRequester = elements.ldlRequester.value, currentEditRequester = elements.ldlEditRequester.value, currentEquipment = elements.circEquipment.value, currentHelper = elements.circHelper.value, currentEditEquipment = elements.circEditEquipment.value, currentEditHelper = elements.circEditHelper.value, currentPermEquipment = elements.permEquipment.value;
   elements.ldlRequester.replaceChildren();
   for (const item of state.requesters.filter((r) => r.active)) elements.ldlRequester.add(new Option(`${item.code} · ${item.name}`, item.code));
   elements.ldlEditRequester.replaceChildren();
@@ -353,6 +361,10 @@ function populateSelects() {
   elements.circEditEquipment.replaceChildren();
   for (const item of state.equipment) elements.circEquipment.add(new Option(`${item.id} · ${item.name}`, item.id));
   for (const item of state.equipment) elements.circEditEquipment.add(new Option(`${item.id} · ${item.name}`, item.id));
+  elements.circHelper.replaceChildren(new Option('Sem locomotiva auxiliar', ''));
+  elements.circEditHelper.replaceChildren(new Option('Sem locomotiva auxiliar', ''));
+  for (const item of state.equipment.filter((entry) => entry.type === 'locomotiva')) elements.circHelper.add(new Option(`${item.id} · ${item.name}`, item.id));
+  for (const item of state.equipment.filter((entry) => entry.type === 'locomotiva')) elements.circEditHelper.add(new Option(`${item.id} · ${item.name}`, item.id));
   elements.permEquipment.replaceChildren();
   for (const item of state.equipment) elements.permEquipment.add(new Option(`${item.id} · ${item.name}`, item.id));
   elements.circOperator.replaceChildren(new Option('Não informado', ''));
@@ -364,7 +376,9 @@ function populateSelects() {
   if ([...elements.ldlRequester.options].some((o) => o.value === currentRequester)) elements.ldlRequester.value = currentRequester;
   if ([...elements.ldlEditRequester.options].some((o) => o.value === currentEditRequester)) elements.ldlEditRequester.value = currentEditRequester;
   if ([...elements.circEquipment.options].some((o) => o.value === currentEquipment)) elements.circEquipment.value = currentEquipment;
+  if ([...elements.circHelper.options].some((o) => o.value === currentHelper)) elements.circHelper.value = currentHelper;
   if ([...elements.circEditEquipment.options].some((o) => o.value === currentEditEquipment)) elements.circEditEquipment.value = currentEditEquipment;
+  if ([...elements.circEditHelper.options].some((o) => o.value === currentEditHelper)) elements.circEditHelper.value = currentEditHelper;
   if ([...elements.permEquipment.options].some((o) => o.value === currentPermEquipment)) elements.permEquipment.value = currentPermEquipment;
 }
 
@@ -390,7 +404,7 @@ function renderPermissiveConflicts() {
 }
 
 const AUDIT_FIELD_LABELS = { requesterCode: 'Responsável', kmStart: 'KM inicial', kmEnd: 'KM final', lines: 'Linhas', workforceCount: 'Quantidade de pessoas', start: 'Início', end: 'Fim previsto', description: 'Serviço', channel: 'Canal', revision: 'Revisão' };
-const CIRC_AUDIT_FIELD_LABELS = { equipmentId: 'Equipamento', operatorRegistration: 'Operador', line: 'Linha', kmStart: 'KM inicial', kmEnd: 'KM final', start: 'Início', end: 'Fim previsto', direction: 'Sentido', restrictions: 'Restrições/observações', revision: 'Revisão' };
+const CIRC_AUDIT_FIELD_LABELS = { equipmentId: 'Tração/equipamento principal', helperEquipmentId: 'Locomotiva auxiliar', operatorRegistration: 'Operador', line: 'Linha', kmStart: 'KM inicial', kmEnd: 'KM final', start: 'Início', end: 'Fim previsto', direction: 'Sentido', restrictions: 'Restrições/observações', wagonType: 'Tipo de vagão', wagonCount: 'Quantidade de vagões', loadStatus: 'Condição da composição', cargoDescription: 'Material transportado', revision: 'Revisão' };
 function auditValue(key, value) {
   if (value === undefined || value === null || value === '') return '—';
   if (key === 'kmStart' || key === 'kmEnd') return formatKm(value);
@@ -400,6 +414,8 @@ function auditValue(key, value) {
   if (key === 'line') return lineLabel(value);
   if (key === 'operatorRegistration') return value ? (state?.operators.find((item) => item.registration === value)?.name || value) : 'Não informado';
   if (key === 'direction') return value === 'crescente' ? 'KM crescente' : value === 'decrescente' ? 'KM decrescente' : 'Manobra';
+  if (key === 'loadStatus') return value === 'loaded' ? 'Carregado' : value === 'empty' ? 'Vazio' : 'Não se aplica';
+  if (key === 'helperEquipmentId') return value || 'Sem locomotiva auxiliar';
   return String(value ?? '—');
 }
 function hasActiveLinkedPermissive(item, kind) { return activePermissives().some((permission) => permission.links?.some((link) => link.kind === kind && link.id === item.id)); }
@@ -437,8 +453,8 @@ function showLdlAudit(item) {
 
 function openEditCirculation(item) {
   editingCirculation = item; notify(elements.circEditMessage, ''); elements.circEditCode.textContent = displayCode(item, 'CIRC');
-  elements.circEditEquipment.value = item.equipment_id; elements.circEditOperator.value = item.operator_registration || ''; elements.circEditLine.value = item.line_id; elements.circEditDirection.value = item.direction;
-  elements.circEditKmStart.value = formatKm(item.km_start); elements.circEditKmEnd.value = formatKm(item.km_end); elements.circEditStart.value = isoLocal(Date.parse(item.planned_start)); elements.circEditEnd.value = isoLocal(Date.parse(item.planned_end)); elements.circEditRestrictions.value = item.restrictions || ''; elements.circEditReason.value = '';
+  elements.circEditEquipment.value = item.equipment_id; elements.circEditHelper.value = item.helper_equipment_id || ''; elements.circEditOperator.value = item.operator_registration || ''; elements.circEditLine.value = item.line_id; elements.circEditDirection.value = item.direction;
+  elements.circEditKmStart.value = formatKm(item.km_start); elements.circEditKmEnd.value = formatKm(item.km_end); elements.circEditStart.value = isoLocal(Date.parse(item.planned_start)); elements.circEditEnd.value = isoLocal(Date.parse(item.planned_end)); elements.circEditWagonType.value = item.wagon_type || ''; elements.circEditWagonCount.value = Number(item.wagon_count || 0); elements.circEditLoadStatus.value = item.load_status || ''; elements.circEditCargo.value = item.cargo_description || ''; elements.circEditRestrictions.value = item.restrictions || ''; elements.circEditReason.value = '';
   updateTrackContext('edit-circulation'); elements.circEditLine.value = item.line_id; elements.circEditDialog.showModal();
 }
 
@@ -467,7 +483,7 @@ function showCirculationAudit(item) {
 function record(item, kind) {
   const isLdl = kind === 'ldl', isPermissive = kind === 'permissive', isCirculation = kind === 'circulation', wrapper = document.createElement('article'); wrapper.className = `record ${isLdl ? '' : isPermissive ? 'permissive' : 'circulation'}`;
   const prefix = isLdl ? 'LDL' : isPermissive ? 'PERM' : 'CIRC';
-  const codeText = displayCode(item, prefix), main = isLdl ? `${item.requester_name} · ${item.workforce_count} pessoas` : `${item.equipment_id} · ${item.operator_name || 'operador não informado'}`;
+  const codeText = displayCode(item, prefix), main = isLdl ? `${item.requester_name} · ${item.workforce_count} pessoas` : isCirculation ? `${tractionLabel(item)} · ${item.operator_name || 'operador não informado'}` : `${item.equipment_id} · ${item.operator_name || 'operador não informado'}`;
   const lines = isLdl ? item.lines.map(lineLabel).join(' + ') : lineLabel(item.line_id);
   wrapper.innerHTML = `<div class="code"></div><div><strong></strong><span></span><small></small></div><div class="record-actions"><button class="secondary" data-edit>EDITAR</button><button class="secondary" data-audit>AUDITORIA</button><button data-complete></button><button class="danger" data-cancel>CANCELAR</button></div>`;
   wrapper.querySelector('.code').textContent = codeText; wrapper.querySelector('strong').textContent = main; wrapper.querySelector('span').textContent = `${lines} · KM ${formatKm(item.km_start)}–${formatKm(item.km_end)}${isPermissive ? ' · MÁX. 15 KM/H' : ''}`; wrapper.querySelector('small').textContent = `${date(isLdl ? item.requested_start : item.planned_start)} → ${date(isLdl ? item.requested_end : item.planned_end)}`;
@@ -482,6 +498,7 @@ function record(item, kind) {
     const edit = wrapper.querySelector('[data-edit]'); edit.onclick = () => openEditLdl(item); edit.disabled = hasActiveLinkedPermissive(item, 'LDL'); if (edit.disabled) edit.title = 'Encerre primeiro o permissivo vinculado.';
     wrapper.querySelector('[data-audit]').onclick = () => showLdlAudit(item);
   } else if (isCirculation) {
+    const consist = document.createElement('small'); consist.className = 'circulation-consist'; consist.textContent = compositionLabel(item); wrapper.children[1].append(consist);
     const revision = document.createElement('small'); revision.className = 'revision-meta'; revision.textContent = `Revisão ${Number(item.revision || 0)}${item.updated_at ? ` · alterada em ${date(item.updated_at)} por ${item.updated_by_name || item.updated_by_controller}` : ' · registro original'}`; wrapper.children[1].append(revision);
     const edit = wrapper.querySelector('[data-edit]'); edit.onclick = () => openEditCirculation(item); edit.disabled = hasActiveLinkedPermissive(item, 'CIRC'); if (edit.disabled) edit.title = 'Encerre primeiro o permissivo vinculado.';
     wrapper.querySelector('[data-audit]').onclick = () => showCirculationAudit(item);
@@ -505,7 +522,7 @@ function record(item, kind) {
 function renderHistory() {
   const filter = elements.historyFilter.value, rows = [];
   if (filter === 'all' || filter === 'ldl') for (const item of state.ldls) rows.push({ code: displayCode(item, 'LDL'), status: item.status, owner: `${item.requester_name} · ${item.workforce_count} pessoas`, line: item.lines.map(lineLabel).join(' + '), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, start: item.requested_start, end: item.requested_end, controller: item.controller_name, time: item.created_at });
-  if (filter === 'all' || filter === 'circulation') for (const item of state.circulations) rows.push({ code: displayCode(item, 'CIRC'), status: item.status, owner: `${item.equipment_id} · ${item.operator_name || '—'}`, line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, start: item.planned_start, end: item.planned_end, controller: item.controller_name, time: item.authorized_at });
+  if (filter === 'all' || filter === 'circulation') for (const item of state.circulations) rows.push({ code: displayCode(item, 'CIRC'), status: item.status, owner: `${tractionLabel(item)} · ${compositionLabel(item)} · ${item.operator_name || '—'}`, line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, start: item.planned_start, end: item.planned_end, controller: item.controller_name, time: item.authorized_at });
   if (filter === 'all' || filter === 'permissive') for (const item of state.permissives) rows.push({ code: displayCode(item, 'PERM'), status: item.status, owner: `${item.equipment_id} · 15 km/h · ${item.operator_name || '—'}`, line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, start: item.planned_start, end: item.planned_end, controller: item.controller_name, time: item.authorized_at });
   rows.sort((a, b) => Date.parse(b.time) - Date.parse(a.time)); elements.historyBody.replaceChildren();
   for (const item of rows) { const row = elements.historyBody.insertRow(); [item.code, item.status, item.owner, item.line, item.km, date(item.start), date(item.end), item.controller].forEach((value) => { const cell = row.insertCell(); cell.textContent = value; }); }
@@ -552,7 +569,7 @@ elements.refresh.onclick = load; elements.historyFilter.onchange = renderHistory
 elements.excel.onclick = () => {
   if (!state) return; const rows = [['Código','Tipo','Situação','Responsável/Equipamento','Linha','KM inicial','KM final','Início','Fim','Controlador']];
   for (const item of state.ldls) rows.push([item.permanent_code,'LDL',item.status,`${item.requester_code} - ${item.requester_name}`,item.lines.map(lineLabel).join(' + '),formatKm(item.km_start),formatKm(item.km_end),item.requested_start,item.requested_end,item.controller_name]);
-  for (const item of state.circulations) rows.push([item.permanent_code,'Circulação',item.status,item.equipment_id,lineLabel(item.line_id),formatKm(item.km_start),formatKm(item.km_end),item.planned_start,item.planned_end,item.controller_name]);
+  for (const item of state.circulations) rows.push([item.permanent_code,'Circulação',item.status,`${tractionLabel(item)} · ${compositionLabel(item)}`,lineLabel(item.line_id),formatKm(item.km_start),formatKm(item.km_end),item.planned_start,item.planned_end,item.controller_name]);
   for (const item of state.permissives) rows.push([item.permanent_code,'Permissivo 15 km/h',item.status,item.equipment_id,lineLabel(item.line_id),formatKm(item.km_start),formatKm(item.km_end),item.planned_start,item.planned_end,item.controller_name]);
   for (const item of state.safetyEvents || []) rows.push([item.id,'Invasão de LDL',item.status,item.equipment_id,'Linha 01',formatKm(item.station_m),formatKm(item.station_m),item.first_seen_at,item.last_seen_at,item.detected_by_controller]);
   const csv = '\ufeff' + rows.map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"','""')}"`).join(';')).join('\r\n'), url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })), link = document.createElement('a'); link.href = url; link.download = `controle-cco-${new Date().toISOString().slice(0,7)}.csv`; link.click(); URL.revokeObjectURL(url);
@@ -584,6 +601,8 @@ for (const input of [elements.ldlKmStart, elements.ldlKmEnd]) input.addEventList
 for (const input of [elements.ldlEditKmStart, elements.ldlEditKmEnd]) input.addEventListener('input', () => updateTrackContext('edit-ldl'));
 for (const input of [elements.circKmStart, elements.circKmEnd]) input.addEventListener('input', () => updateTrackContext('circulation'));
 for (const input of [elements.circEditKmStart, elements.circEditKmEnd]) input.addEventListener('input', () => updateTrackContext('edit-circulation'));
+elements.circLine.addEventListener('change', () => updateTrackContext('circulation'));
+elements.circEditLine.addEventListener('change', () => updateTrackContext('edit-circulation'));
 for (const input of [elements.permKmStart, elements.permKmEnd]) input.addEventListener('input', () => updateTrackContext('permissive'));
 elements.ldlForm.addEventListener('submit', async (event) => {
   event.preventDefault(); notify(elements.ldlMessage, ''); const lines = [...document.querySelectorAll('[name="ldl-line"]:checked')].map((item) => item.value);
@@ -600,13 +619,13 @@ elements.ldlEditForm.addEventListener('submit', async (event) => {
 });
 elements.circulationForm.addEventListener('submit', async (event) => {
   event.preventDefault(); notify(elements.circMessage, '');
-  try { const data = await api('/api/v1/cco/circulation/create', { method: 'POST', body: JSON.stringify({ equipmentId: elements.circEquipment.value, operatorRegistration: elements.circOperator.value, line: elements.circLine.value, direction: elements.circDirection.value, kmStart: parseKm(elements.circKmStart.value), kmEnd: parseKm(elements.circKmEnd.value), start: elements.circStart.value, end: elements.circEnd.value, restrictions: elements.circRestrictions.value }) }); elements.circulationForm.closest('dialog').close(); notify(elements.message, `${data.circulation.displayCode} autorizada com sucesso.`, true); elements.circulationForm.reset(); await load(); }
+  try { const data = await api('/api/v1/cco/circulation/create', { method: 'POST', body: JSON.stringify({ equipmentId: elements.circEquipment.value, helperEquipmentId: elements.circHelper.value, operatorRegistration: elements.circOperator.value, line: elements.circLine.value, direction: elements.circDirection.value, kmStart: parseKm(elements.circKmStart.value), kmEnd: parseKm(elements.circKmEnd.value), start: elements.circStart.value, end: elements.circEnd.value, wagonType: elements.circWagonType.value, wagonCount: elements.circWagonCount.value, loadStatus: elements.circLoadStatus.value, cargoDescription: elements.circCargo.value, restrictions: elements.circRestrictions.value }) }); elements.circulationForm.closest('dialog').close(); notify(elements.message, `${data.circulation.displayCode} autorizada com sucesso.`, true); elements.circulationForm.reset(); await load(); }
   catch (error) { notify(elements.circMessage, `${error.message}${error.conflicts?.length ? ` Conflito: ${error.conflicts.map((x) => x.code).join(', ')}.` : ''}`); }
 });
 elements.circEditForm.addEventListener('submit', async (event) => {
   event.preventDefault(); notify(elements.circEditMessage, ''); if (!editingCirculation) return;
   try {
-    const data = await api('/api/v1/cco/circulation/update', { method: 'POST', body: JSON.stringify({ id: editingCirculation.id, expectedRevision: Number(editingCirculation.revision || 0), equipmentId: elements.circEditEquipment.value, operatorRegistration: elements.circEditOperator.value, line: elements.circEditLine.value, direction: elements.circEditDirection.value, kmStart: parseKm(elements.circEditKmStart.value), kmEnd: parseKm(elements.circEditKmEnd.value), start: elements.circEditStart.value, end: elements.circEditEnd.value, restrictions: elements.circEditRestrictions.value, reason: elements.circEditReason.value }) });
+    const data = await api('/api/v1/cco/circulation/update', { method: 'POST', body: JSON.stringify({ id: editingCirculation.id, expectedRevision: Number(editingCirculation.revision || 0), equipmentId: elements.circEditEquipment.value, helperEquipmentId: elements.circEditHelper.value, operatorRegistration: elements.circEditOperator.value, line: elements.circEditLine.value, direction: elements.circEditDirection.value, kmStart: parseKm(elements.circEditKmStart.value), kmEnd: parseKm(elements.circEditKmEnd.value), start: elements.circEditStart.value, end: elements.circEditEnd.value, wagonType: elements.circEditWagonType.value, wagonCount: elements.circEditWagonCount.value, loadStatus: elements.circEditLoadStatus.value, cargoDescription: elements.circEditCargo.value, restrictions: elements.circEditRestrictions.value, reason: elements.circEditReason.value }) });
     elements.circEditDialog.close(); editingCirculation = null; notify(elements.message, `${data.circulation.displayCode} atualizada para a revisão ${data.circulation.revision}. Auditoria registrada.`, true); await load();
   } catch (error) { notify(elements.circEditMessage, `${error.message}${error.conflicts?.length ? ` Conflito: ${error.conflicts.map((x) => x.code).join(', ')}.` : ''}`); }
 });

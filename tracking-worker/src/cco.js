@@ -26,6 +26,7 @@ function monthFrom(iso) { return new Date(iso).toISOString().slice(0, 7); }
 function iso(value) { const date = new Date(value); return Number.isFinite(date.valueOf()) ? date.toISOString() : null; }
 function numeric(value) { const number = Number(value); return Number.isFinite(number) ? number : null; }
 function activeAuthorized(env, value) { return Boolean(env.OPERATOR_ADMIN_PASSWORD) && String(value || '') === env.OPERATOR_ADMIN_PASSWORD; }
+const WAGON_TYPES = ['HNS', 'HNT', 'PET', 'PNT', 'PES'];
 
 const DOUBLE_TRACK_RANGES = [[3880,6929],[19699,20299],[32182,34217],[47902,48502],[59878,61914],[72242,72842],[84222,86207],[101202,101802],[110662,112737],[120192,120792]];
 const SPECIAL_TRACK_RANGES = { south_loop: [0,2734], line_egp: [5520,6084], welding_yard: [6099,6538] };
@@ -110,6 +111,16 @@ async function findConflicts(env, { lines, kmStart, kmEnd, start, end, ignoreLdl
   return results.flatMap((result) => result.results || []);
 }
 
+async function findEquipmentAssignmentConflict(env, equipmentIds, start, end, ignoreCirculation = null) {
+  if (!equipmentIds.length) return [];
+  const placeholders = equipmentIds.map(() => '?').join(','), bindings = [...equipmentIds, ...equipmentIds, end, start];
+  let sql = `SELECT id,permanent_code AS code,equipment_id,helper_equipment_id,planned_start AS start,planned_end AS end,'EQUIPMENT' AS kind
+    FROM circulations WHERE status='authorized' AND (equipment_id IN (${placeholders}) OR helper_equipment_id IN (${placeholders}))
+    AND planned_start<=? AND (CASE WHEN planned_end<CURRENT_TIMESTAMP THEN '9999-12-31T23:59:59.999Z' ELSE planned_end END)>=?`;
+  if (ignoreCirculation) { sql += ' AND id<>?'; bindings.push(ignoreCirculation); }
+  return (await env.DB.prepare(sql).bind(...bindings).all()).results || [];
+}
+
 async function baseState(env, from = null, to = null) {
   const start = from || new Date(Date.now() - 31 * 86400000).toISOString(), end = to || new Date(Date.now() + 31 * 86400000).toISOString();
   const [requesters, lines, equipment, operators, ldls, ldlLines, ldlEvents, circulations, circulationEvents, permissives, permissiveLinks, latest, safetyEvents] = await env.DB.batch([
@@ -124,8 +135,8 @@ async function baseState(env, from = null, to = null) {
     env.DB.prepare(`SELECT e.id,e.ldl_id,e.event_type,e.controller_code,c.name AS controller_name,e.occurred_at,e.payload_json,l.permanent_code
       FROM ldl_events e JOIN cco_controllers c ON c.code=e.controller_code JOIN ldl l ON l.id=e.ldl_id
       ORDER BY e.occurred_at DESC LIMIT 5000`),
-    env.DB.prepare(`SELECT c.*,e.name AS equipment_name,o.name AS operator_name,cc.name AS controller_name,uc.name AS updated_by_name FROM circulations c
-      JOIN equipment e ON e.id=c.equipment_id LEFT JOIN operators o ON o.registration=c.operator_registration
+    env.DB.prepare(`SELECT c.*,e.name AS equipment_name,he.name AS helper_equipment_name,o.name AS operator_name,cc.name AS controller_name,uc.name AS updated_by_name FROM circulations c
+      JOIN equipment e ON e.id=c.equipment_id LEFT JOIN equipment he ON he.id=c.helper_equipment_id LEFT JOIN operators o ON o.registration=c.operator_registration
       JOIN cco_controllers cc ON cc.code=c.authorized_by_controller LEFT JOIN cco_controllers uc ON uc.code=c.updated_by_controller
       WHERE c.status='authorized' OR (c.authorized_at>=? AND c.authorized_at<=?) ORDER BY c.authorized_at DESC`).bind(start, end),
     env.DB.prepare(`SELECT e.id,e.circulation_id,e.event_type,e.controller_code,c.name AS controller_name,e.occurred_at,e.payload_json,x.permanent_code
@@ -163,9 +174,9 @@ async function publicOperations(request, env) {
       l.km_start,l.km_end,l.workforce_count,l.work_description,l.requested_start,l.requested_end,l.created_at
       FROM ldl l JOIN requesters r ON r.code=l.requester_code WHERE l.status='active' ORDER BY l.km_start,l.created_at`),
     env.DB.prepare(`SELECT ll.ldl_id,ll.line_id FROM ldl_lines ll JOIN ldl l ON l.id=ll.ldl_id WHERE l.status='active'`),
-    env.DB.prepare(`SELECT c.id,c.sequence_number,c.permanent_code,c.equipment_id,e.name AS equipment_name,c.line_id,
-      c.km_start,c.km_end,c.planned_start,c.planned_end,c.direction,c.authorized_at
-      FROM circulations c JOIN equipment e ON e.id=c.equipment_id WHERE c.status='authorized' ORDER BY c.km_start,c.authorized_at`),
+    env.DB.prepare(`SELECT c.id,c.sequence_number,c.permanent_code,c.equipment_id,e.name AS equipment_name,c.helper_equipment_id,he.name AS helper_equipment_name,c.line_id,
+      c.km_start,c.km_end,c.planned_start,c.planned_end,c.direction,c.restrictions,c.wagon_type,c.wagon_count,c.load_status,c.cargo_description,c.authorized_at
+      FROM circulations c JOIN equipment e ON e.id=c.equipment_id LEFT JOIN equipment he ON he.id=c.helper_equipment_id WHERE c.status='authorized' ORDER BY c.km_start,c.authorized_at`),
     env.DB.prepare(`SELECT p.id,p.sequence_number,p.permanent_code,p.equipment_id,e.name AS equipment_name,p.line_id,p.km_start,p.km_end,
       p.planned_start,p.planned_end,p.speed_limit_kmh,p.work_description,p.justification,p.authorized_at
       FROM permissive_authorizations p JOIN equipment e ON e.id=p.equipment_id WHERE p.status='active' ORDER BY p.km_start,p.authorized_at`),
@@ -287,50 +298,64 @@ async function updateLdl(request, env, controller) {
 }
 
 async function createCirculation(request, env, controller) {
-  const body = await request.json().catch(() => ({})), equipmentId = code(body.equipmentId), operatorRegistration = code(body.operatorRegistration), line = clean(body.line);
+  const body = await request.json().catch(() => ({})), equipmentId = code(body.equipmentId), helperEquipmentId = code(body.helperEquipmentId), operatorRegistration = code(body.operatorRegistration), line = clean(body.line);
   const kmStart = numeric(body.kmStart), kmEnd = numeric(body.kmEnd), start = iso(body.start), end = iso(body.end), direction = body.direction, restrictions = clean(body.restrictions, 500);
+  const wagonType = clean(body.wagonType, 3).toUpperCase(), wagonCount = Math.round(numeric(body.wagonCount) || 0), loadStatus = clean(body.loadStatus, 10), cargoDescription = clean(body.cargoDescription, 300);
+  const hasWagons = Boolean(wagonType || wagonCount || loadStatus || cargoDescription);
   if (!equipmentId || !OPERATIONAL_LINES.includes(line) || kmStart === null || kmEnd === null || kmStart < 0 || kmEnd <= kmStart || !start || !end || end <= start || !['crescente', 'decrescente', 'manobra'].includes(direction)) return reply(request, { ok: false, error: 'Revise equipamento, linha, KM, horários e sentido.' }, 400);
+  if (helperEquipmentId === equipmentId) return reply(request, { ok: false, error: 'A locomotiva auxiliar deve ser diferente da locomotiva de tração.' }, 400);
+  if (hasWagons && (!WAGON_TYPES.includes(wagonType) || wagonCount < 1 || wagonCount > 500 || !['loaded', 'empty'].includes(loadStatus) || (loadStatus === 'loaded' && cargoDescription.length < 2))) return reply(request, { ok: false, error: 'Revise tipo, quantidade, condição e carga da composição. Para trem carregado, informe o material transportado.' }, 400);
   if (!lineRangeAvailable(line, kmStart, kmEnd)) return reply(request, { ok: false, error: 'A linha selecionada não existe em todo o trecho informado. Divida a circulação conforme os limites da infraestrutura.' }, 400);
   const equipment = await env.DB.prepare('SELECT id FROM equipment WHERE id=? AND active=1').bind(equipmentId).first();
   if (!equipment) return reply(request, { ok: false, error: 'Equipamento não cadastrado.' }, 400);
+  if (helperEquipmentId && !await env.DB.prepare("SELECT id FROM equipment WHERE id=? AND active=1 AND type='locomotiva'").bind(helperEquipmentId).first()) return reply(request, { ok: false, error: 'Locomotiva auxiliar inativa ou não cadastrada.' }, 400);
   if (operatorRegistration && !await env.DB.prepare('SELECT registration FROM operators WHERE registration=? AND active=1').bind(operatorRegistration).first()) return reply(request, { ok: false, error: 'Operador não cadastrado.' }, 400);
+  const assignmentConflicts = await findEquipmentAssignmentConflict(env, [equipmentId, helperEquipmentId].filter(Boolean), start, end);
+  if (assignmentConflicts.length) return reply(request, { ok: false, error: 'Uma das locomotivas/equipamentos já está vinculada a outra circulação no mesmo período.', conflicts: assignmentConflicts }, 409);
   const conflicts = await findConflicts(env, { lines: [line], kmStart, kmEnd, start, end });
   if (conflicts.length) return reply(request, { ok: false, error: 'Circulação proibida. Existe conflito operacional.', conflicts }, 409);
   const month = monthFrom(start), sequence = await monthlySequence(env, 'CIRC', month), permanentCode = `CIRC-${month}-${String(sequence).padStart(3, '0')}`, id = crypto.randomUUID(), now = new Date().toISOString();
   await env.DB.batch([
-    env.DB.prepare(`INSERT INTO circulations (id,sequence_number,sequence_month,permanent_code,equipment_id,operator_registration,line_id,km_start,km_end,planned_start,planned_end,direction,restrictions,authorized_by_controller,authorized_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id, sequence, month, permanentCode, equipmentId, operatorRegistration || null, line, kmStart, kmEnd, start, end, direction, restrictions || null, controller.code, now),
-    env.DB.prepare('INSERT INTO circulation_events (id,circulation_id,event_type,controller_code,occurred_at,payload_json) VALUES (?,?,?,?,?,?)').bind(crypto.randomUUID(), id, 'authorized', controller.code, now, JSON.stringify({ after: { equipmentId, operatorRegistration: operatorRegistration || null, line, kmStart, kmEnd, start, end, direction, restrictions: restrictions || '', revision: 0 } }))
+    env.DB.prepare(`INSERT INTO circulations (id,sequence_number,sequence_month,permanent_code,equipment_id,helper_equipment_id,operator_registration,line_id,km_start,km_end,planned_start,planned_end,direction,restrictions,wagon_type,wagon_count,load_status,cargo_description,authorized_by_controller,authorized_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id, sequence, month, permanentCode, equipmentId, helperEquipmentId || null, operatorRegistration || null, line, kmStart, kmEnd, start, end, direction, restrictions || null, hasWagons ? wagonType : null, hasWagons ? wagonCount : 0, hasWagons ? loadStatus : null, hasWagons && loadStatus === 'loaded' ? cargoDescription : null, controller.code, now),
+    env.DB.prepare('INSERT INTO circulation_events (id,circulation_id,event_type,controller_code,occurred_at,payload_json) VALUES (?,?,?,?,?,?)').bind(crypto.randomUUID(), id, 'authorized', controller.code, now, JSON.stringify({ after: { equipmentId, helperEquipmentId: helperEquipmentId || null, operatorRegistration: operatorRegistration || null, line, kmStart, kmEnd, start, end, direction, restrictions: restrictions || '', wagonType: hasWagons ? wagonType : null, wagonCount: hasWagons ? wagonCount : 0, loadStatus: hasWagons ? loadStatus : null, cargoDescription: hasWagons && loadStatus === 'loaded' ? cargoDescription : '', revision: 0 } }))
   ]);
   return reply(request, { ok: true, circulation: { id, displayCode: `CIRC ${String(sequence).padStart(3, '0')}`, permanentCode } }, 201);
 }
 
 async function updateCirculation(request, env, controller) {
-  const body = await request.json().catch(() => ({})), id = clean(body.id, 80), equipmentId = code(body.equipmentId), operatorRegistration = code(body.operatorRegistration), line = clean(body.line);
+  const body = await request.json().catch(() => ({})), id = clean(body.id, 80), equipmentId = code(body.equipmentId), helperEquipmentId = code(body.helperEquipmentId), operatorRegistration = code(body.operatorRegistration), line = clean(body.line);
   const kmStart = numeric(body.kmStart), kmEnd = numeric(body.kmEnd), start = iso(body.start), end = iso(body.end), direction = body.direction;
   const restrictions = clean(body.restrictions, 500), reason = clean(body.reason, 500), expectedRevision = Math.round(numeric(body.expectedRevision) ?? -1);
+  const wagonType = clean(body.wagonType, 3).toUpperCase(), wagonCount = Math.round(numeric(body.wagonCount) || 0), loadStatus = clean(body.loadStatus, 10), cargoDescription = clean(body.cargoDescription, 300);
+  const hasWagons = Boolean(wagonType || wagonCount || loadStatus || cargoDescription);
   if (!id || !equipmentId || !OPERATIONAL_LINES.includes(line) || kmStart === null || kmEnd === null || kmStart < 0 || kmEnd <= kmStart || !start || !end || end <= start || !['crescente', 'decrescente', 'manobra'].includes(direction) || reason.length < 8 || expectedRevision < 0) return reply(request, { ok: false, error: 'Revise equipamento, operador, linha, KM, horÃ¡rios, sentido e justificativa da alteraÃ§Ã£o.' }, 400);
+  if (helperEquipmentId === equipmentId) return reply(request, { ok: false, error: 'A locomotiva auxiliar deve ser diferente da locomotiva de tração.' }, 400);
+  if (hasWagons && (!WAGON_TYPES.includes(wagonType) || wagonCount < 1 || wagonCount > 500 || !['loaded', 'empty'].includes(loadStatus) || (loadStatus === 'loaded' && cargoDescription.length < 2))) return reply(request, { ok: false, error: 'Revise tipo, quantidade, condição e carga da composição.' }, 400);
   const current = await env.DB.prepare('SELECT * FROM circulations WHERE id=?').bind(id).first();
   if (!current || current.status !== 'authorized') return reply(request, { ok: false, error: 'Somente uma circulaÃ§Ã£o autorizada pode ser alterada.' }, 404);
   if (Number(current.revision || 0) !== expectedRevision) return reply(request, { ok: false, error: 'Esta circulaÃ§Ã£o foi alterada por outro controlador. Atualize o painel antes de editar novamente.' }, 409);
   const changedTrack = line !== current.line_id || kmStart !== Number(current.km_start) || kmEnd !== Number(current.km_end);
   if (changedTrack && !lineRangeAvailable(line, kmStart, kmEnd)) return reply(request, { ok: false, error: 'A linha selecionada nÃ£o existe em todo o novo trecho. Divida a circulaÃ§Ã£o conforme os limites da infraestrutura.' }, 400);
   if (!await env.DB.prepare('SELECT id FROM equipment WHERE id=? AND active=1').bind(equipmentId).first()) return reply(request, { ok: false, error: 'Equipamento inativo ou nÃ£o cadastrado.' }, 400);
+  if (helperEquipmentId && !await env.DB.prepare("SELECT id FROM equipment WHERE id=? AND active=1 AND type='locomotiva'").bind(helperEquipmentId).first()) return reply(request, { ok: false, error: 'Locomotiva auxiliar inativa ou não cadastrada.' }, 400);
   if (operatorRegistration && !await env.DB.prepare('SELECT registration FROM operators WHERE registration=? AND active=1').bind(operatorRegistration).first()) return reply(request, { ok: false, error: 'Operador inativo ou nÃ£o cadastrado.' }, 400);
   const linkedPermission = await env.DB.prepare(`SELECT p.permanent_code FROM permissive_authorizations p JOIN permissive_links pl ON pl.permission_id=p.id
     WHERE p.status='active' AND pl.record_kind='CIRC' AND pl.record_id=? LIMIT 1`).bind(id).first();
   if (linkedPermission) return reply(request, { ok: false, error: `Encerre primeiro a operaÃ§Ã£o permissiva ${linkedPermission.permanent_code} antes de alterar a circulaÃ§Ã£o.` }, 409);
+  const assignmentConflicts = await findEquipmentAssignmentConflict(env, [equipmentId, helperEquipmentId].filter(Boolean), start, end, id);
+  if (assignmentConflicts.length) return reply(request, { ok: false, error: 'Uma das locomotivas/equipamentos já está vinculada a outra circulação no mesmo período.', conflicts: assignmentConflicts }, 409);
   const conflicts = await findConflicts(env, { lines: [line], kmStart, kmEnd, start, end, ignoreCirculation: id });
   if (conflicts.length) return reply(request, { ok: false, error: 'AlteraÃ§Ã£o nÃ£o autorizada. O novo trecho ou perÃ­odo possui conflito operacional.', conflicts }, 409);
-  const before = { equipmentId: current.equipment_id, operatorRegistration: current.operator_registration || null, line: current.line_id, kmStart: current.km_start, kmEnd: current.km_end, start: current.planned_start, end: current.planned_end, direction: current.direction, restrictions: current.restrictions || '', revision: Number(current.revision || 0) };
+  const before = { equipmentId: current.equipment_id, helperEquipmentId: current.helper_equipment_id || null, operatorRegistration: current.operator_registration || null, line: current.line_id, kmStart: current.km_start, kmEnd: current.km_end, start: current.planned_start, end: current.planned_end, direction: current.direction, restrictions: current.restrictions || '', wagonType: current.wagon_type || null, wagonCount: Number(current.wagon_count || 0), loadStatus: current.load_status || null, cargoDescription: current.cargo_description || '', revision: Number(current.revision || 0) };
   const revision = before.revision + 1, now = new Date().toISOString(), revisionToken = token(16), eventId = crypto.randomUUID();
-  const after = { equipmentId, operatorRegistration: operatorRegistration || null, line, kmStart, kmEnd, start, end, direction, restrictions, revision };
+  const after = { equipmentId, helperEquipmentId: helperEquipmentId || null, operatorRegistration: operatorRegistration || null, line, kmStart, kmEnd, start, end, direction, restrictions, wagonType: hasWagons ? wagonType : null, wagonCount: hasWagons ? wagonCount : 0, loadStatus: hasWagons ? loadStatus : null, cargoDescription: hasWagons && loadStatus === 'loaded' ? cargoDescription : '', revision };
   const changed = Object.keys(after).some((key) => key !== 'revision' && JSON.stringify(before[key]) !== JSON.stringify(after[key]));
   if (!changed) return reply(request, { ok: false, error: 'Nenhum dado operacional foi alterado.' }, 400);
   const payload = JSON.stringify({ reason, before, after });
   await env.DB.batch([
-    env.DB.prepare(`UPDATE circulations SET equipment_id=?,operator_registration=?,line_id=?,km_start=?,km_end=?,planned_start=?,planned_end=?,direction=?,restrictions=?,revision=?,revision_token=?,updated_at=?,updated_by_controller=? WHERE id=? AND revision=?`)
-      .bind(equipmentId, operatorRegistration || null, line, kmStart, kmEnd, start, end, direction, restrictions || null, revision, revisionToken, now, controller.code, id, expectedRevision),
+    env.DB.prepare(`UPDATE circulations SET equipment_id=?,helper_equipment_id=?,operator_registration=?,line_id=?,km_start=?,km_end=?,planned_start=?,planned_end=?,direction=?,restrictions=?,wagon_type=?,wagon_count=?,load_status=?,cargo_description=?,revision=?,revision_token=?,updated_at=?,updated_by_controller=? WHERE id=? AND revision=?`)
+      .bind(equipmentId, helperEquipmentId || null, operatorRegistration || null, line, kmStart, kmEnd, start, end, direction, restrictions || null, after.wagonType, after.wagonCount, after.loadStatus, after.cargoDescription || null, revision, revisionToken, now, controller.code, id, expectedRevision),
     env.DB.prepare(`INSERT INTO circulation_events (id,circulation_id,event_type,controller_code,occurred_at,payload_json)
       SELECT ?,?,'updated',?,?,? WHERE EXISTS (SELECT 1 FROM circulations WHERE id=? AND revision_token=?)`).bind(eventId, id, controller.code, now, payload, id, revisionToken)
   ]);

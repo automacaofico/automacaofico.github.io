@@ -30,6 +30,8 @@ const lineLabel = (line) => LINE_LABELS[line] || line;
 const age = (value) => { const seconds = Math.max(0, (Date.now() - Date.parse(value)) / 1000); return seconds < 60 ? `${Math.round(seconds)} s` : seconds < 3600 ? `${Math.round(seconds / 60)} min` : `${Math.round(seconds / 3600)} h`; };
 const equipmentStatus = (item) => !item.receivedAt ? 'no-signal' : Date.now() - Date.parse(item.receivedAt) <= 30000 ? 'online' : Date.now() - Date.parse(item.receivedAt) <= 120000 ? 'unstable' : 'offline';
 const displayCode = (item, prefix) => `${prefix} ${String(item.sequence_number || '').padStart(3, '0')}`;
+const tractionLabel = (item) => `${item.equipment_id}${item.helper_equipment_id ? ` + ${item.helper_equipment_id}` : ''}`;
+const compositionLabel = (item) => !item.wagon_type || !Number(item.wagon_count) ? 'escoteira' : `${item.wagon_count} ${item.wagon_type} · ${item.load_status === 'loaded' ? `carregados${item.cargo_description ? ` · ${item.cargo_description}` : ''}` : 'vazios'}`;
 const gridKey = (lon, lat) => `${Math.floor(lon / .02)}:${Math.floor(lat / .02)}`;
 
 function prepareAxis(points) {
@@ -162,7 +164,7 @@ function operationalFeatures(items, type) {
     const properties = type === 'ldl'
       ? { ...shared, category: 'LDL · TRECHO BLOQUEADO', headline: `${item.requester_name || item.requester_code} · ${item.workforce_count} pessoas`, line: lineLabel(lineId), timing: `Prevista até ${formatTime(item.requested_end)}`, detail: item.work_description || '' }
       : type === 'circulation'
-        ? { ...shared, category: 'CIRCULAÇÃO AUTORIZADA', headline: `${item.equipment_id} · ${item.equipment_name || item.direction || 'Circulação'}`, line: lineLabel(item.line_id), timing: `${item.direction || 'circulação'} · prevista até ${formatTime(item.planned_end)}`, detail: '' }
+        ? { ...shared, category: 'CIRCULAÇÃO AUTORIZADA', headline: `${tractionLabel(item)} · ${item.equipment_name || item.direction || 'Circulação'}`, line: lineLabel(item.line_id), timing: `${item.direction || 'circulação'} · prevista até ${formatTime(item.planned_end)}`, detail: compositionLabel(item) }
         : { ...shared, category: 'OPERAÇÃO PERMISSIVA · 15 KM/H', headline: `${item.equipment_id} · ${item.equipment_name || 'Equipamento'}`, line: lineLabel(item.line_id), timing: `Velocidade máxima 15 km/h · até ${formatTime(item.planned_end)}`, detail: item.work_description || item.justification || '' };
     return { type: 'Feature', properties, geometry: { type: 'LineString', coordinates: lineCoordinates(lineId, Number(item.km_start), Number(item.km_end), helpers) } };
   }));
@@ -198,7 +200,7 @@ function operationRows() {
   const rows = [];
   for (const item of operations.ldls) rows.push({ type: 'ldl', code: displayCode(item, 'LDL'), title: `${item.workforce_count} pessoas protegidas`, line: item.lines.map(lineLabel).join(' + '), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, end: item.requested_end });
   for (const item of operations.permissives) rows.push({ type: 'permissive', code: displayCode(item, 'PERM'), title: `${item.equipment_id} · máximo 15 km/h`, line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, end: item.planned_end });
-  for (const item of operations.circulations) rows.push({ type: 'circulation', code: displayCode(item, 'CIRC'), title: `${item.equipment_id} · ${item.direction || 'circulação'}`, line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, end: item.planned_end });
+  for (const item of operations.circulations) rows.push({ type: 'circulation', code: displayCode(item, 'CIRC'), title: `${tractionLabel(item)} · ${compositionLabel(item)}`, line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, end: item.planned_end });
   const priority = { ldl: 0, permissive: 1, circulation: 2 };
   return rows.sort((a, b) => priority[a.type] - priority[b.type] || Number(a.km.split('+')[0]) - Number(b.km.split('+')[0]));
 }
