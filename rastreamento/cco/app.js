@@ -20,8 +20,8 @@ const elements = {
   ldlEditDialog: $('ldl-edit-dialog'), ldlEditForm: $('ldl-edit-form'), ldlEditCode: $('ldl-edit-code'), ldlEditRequester: $('ldl-edit-requester'), ldlEditChannel: $('ldl-edit-channel'), ldlEditKmStart: $('ldl-edit-km-start'), ldlEditKmEnd: $('ldl-edit-km-end'), ldlEditTrackContext: $('ldl-edit-track-context'), ldlEditWorkforce: $('ldl-edit-workforce'), ldlEditStart: $('ldl-edit-start'), ldlEditEnd: $('ldl-edit-end'), ldlEditDescription: $('ldl-edit-description'), ldlEditReason: $('ldl-edit-reason'), ldlEditMessage: $('ldl-edit-message'),
   ldlAuditDialog: $('ldl-audit-dialog'), ldlAuditTitle: $('ldl-audit-title'), ldlAuditSummary: $('ldl-audit-summary'), ldlAuditEvents: $('ldl-audit-events'),
   circulationForm: $('circulation-form'), circEquipment: $('circ-equipment'), circHelper: $('circ-helper'), circOperator: $('circ-operator'), circLine: $('circ-line'), circDirection: $('circ-direction'), circTrackContext: $('circ-track-context'),
-  circKmStart: $('circ-km-start'), circKmEnd: $('circ-km-end'), circStart: $('circ-start'), circEnd: $('circ-end'), circWagonType: $('circ-wagon-type'), circWagonCount: $('circ-wagon-count'), circLoadStatus: $('circ-load-status'), circCargo: $('circ-cargo'), circRestrictions: $('circ-restrictions'), circMessage: $('circ-message'),
-  circEditDialog: $('circ-edit-dialog'), circEditForm: $('circ-edit-form'), circEditCode: $('circ-edit-code'), circEditEquipment: $('circ-edit-equipment'), circEditHelper: $('circ-edit-helper'), circEditOperator: $('circ-edit-operator'), circEditLine: $('circ-edit-line'), circEditDirection: $('circ-edit-direction'), circEditTrackContext: $('circ-edit-track-context'), circEditKmStart: $('circ-edit-km-start'), circEditKmEnd: $('circ-edit-km-end'), circEditStart: $('circ-edit-start'), circEditEnd: $('circ-edit-end'), circEditWagonType: $('circ-edit-wagon-type'), circEditWagonCount: $('circ-edit-wagon-count'), circEditLoadStatus: $('circ-edit-load-status'), circEditCargo: $('circ-edit-cargo'), circEditRestrictions: $('circ-edit-restrictions'), circEditReason: $('circ-edit-reason'), circEditMessage: $('circ-edit-message'),
+  circKmStart: $('circ-km-start'), circKmEnd: $('circ-km-end'), circStart: $('circ-start'), circEnd: $('circ-end'), circCompositionList: $('circ-composition-list'), circAddConsist: $('circ-add-consist'), circRestrictions: $('circ-restrictions'), circMessage: $('circ-message'),
+  circEditDialog: $('circ-edit-dialog'), circEditForm: $('circ-edit-form'), circEditCode: $('circ-edit-code'), circEditEquipment: $('circ-edit-equipment'), circEditHelper: $('circ-edit-helper'), circEditOperator: $('circ-edit-operator'), circEditLine: $('circ-edit-line'), circEditDirection: $('circ-edit-direction'), circEditTrackContext: $('circ-edit-track-context'), circEditKmStart: $('circ-edit-km-start'), circEditKmEnd: $('circ-edit-km-end'), circEditStart: $('circ-edit-start'), circEditEnd: $('circ-edit-end'), circEditCompositionList: $('circ-edit-composition-list'), circEditAddConsist: $('circ-edit-add-consist'), circEditRestrictions: $('circ-edit-restrictions'), circEditReason: $('circ-edit-reason'), circEditMessage: $('circ-edit-message'),
   circAuditDialog: $('circ-audit-dialog'), circAuditTitle: $('circ-audit-title'), circAuditSummary: $('circ-audit-summary'), circAuditEvents: $('circ-audit-events'),
   permissiveForm: $('permissive-form'), permEquipment: $('perm-equipment'), permOperator: $('perm-operator'), permLine: $('perm-line'), permKmStart: $('perm-km-start'), permKmEnd: $('perm-km-end'), permTrackContext: $('perm-track-context'),
   permStart: $('perm-start'), permEnd: $('perm-end'), permChannel: $('perm-channel'), permDescription: $('perm-description'), permJustification: $('perm-justification'), permConflicts: $('perm-conflicts'), permConfirmed: $('perm-confirmed'), permMessage: $('perm-message')
@@ -48,9 +48,41 @@ function activeSafetyEvents() { return (state?.safetyEvents || []).filter((item)
 function intervalsOverlap(aStart, aEnd, bStart, bEnd) { return aStart <= bEnd && aEnd >= bStart; }
 function tractionLabel(item) { return `${item.equipment_id}${item.helper_equipment_id ? ` + ${item.helper_equipment_id}` : ''}`; }
 function compositionLabel(item) {
-  if (!item.wagon_type || !Number(item.wagon_count)) return 'Sem vagões / escoteira';
-  const condition = item.load_status === 'loaded' ? 'carregados' : 'vazios';
-  return `${item.wagon_count} vagões ${item.wagon_type} · ${condition}${item.load_status === 'loaded' && item.cargo_description ? ` · ${item.cargo_description}` : ''}`;
+  const groups = Array.isArray(item?.composition) ? item.composition : [];
+  if (!groups.length) return 'Sem vagões / escoteira';
+  return groups.map((group) => `${group.wagonCount} ${group.wagonType} ${group.loadStatus === 'loaded' ? `carregados · ${group.cargoDescription}` : 'vazios'}`).join(' + ');
+}
+
+function updateCompositionEditor(container) {
+  const rows = [...container.querySelectorAll('.composition-row')];
+  container.querySelector('.composition-empty')?.remove();
+  if (!rows.length) {
+    const empty = document.createElement('div'); empty.className = 'composition-empty'; empty.textContent = 'Sem grupos cadastrados · circulação escoteira'; container.append(empty);
+  }
+  let totals = container.parentElement.querySelector('.composition-totals');
+  if (!totals) { totals = document.createElement('div'); totals.className = 'composition-totals'; container.after(totals); }
+  const composition = readComposition(container), total = composition.reduce((sum, item) => sum + Number(item.wagonCount || 0), 0), loaded = composition.filter((item) => item.loadStatus === 'loaded').reduce((sum, item) => sum + Number(item.wagonCount || 0), 0);
+  totals.textContent = total ? `${total} vagões no total · ${loaded} carregados · ${total - loaded} vazios` : 'Trem escoteiro';
+}
+
+function addCompositionRow(container, item = {}) {
+  container.querySelector('.composition-empty')?.remove();
+  const row = document.createElement('div'); row.className = 'composition-row';
+  row.innerHTML = `<label>Tipo<select data-wagon-type aria-label="Tipo de vagão"><option>HNS</option><option>HNT</option><option>PET</option><option>PNT</option><option>PES</option></select></label><label>Quantidade<input data-wagon-count aria-label="Quantidade de vagões" type="number" min="1" max="500" required></label><label>Condição<select data-load-status aria-label="Condição dos vagões"><option value="loaded">Carregado</option><option value="empty">Vazio</option></select></label><label class="cargo-field">Carga transportada<input data-cargo aria-label="Carga transportada" maxlength="300" placeholder="Ex.: brita, trilhos, dormentes"></label><button type="button" class="remove-consist" aria-label="Remover grupo">×</button>`;
+  row.querySelector('[data-wagon-type]').value = item.wagonType || 'HNS'; row.querySelector('[data-wagon-count]').value = Number(item.wagonCount || 1); row.querySelector('[data-load-status]').value = item.loadStatus || 'loaded'; row.querySelector('[data-cargo]').value = item.cargoDescription || '';
+  const syncCargo = () => { const loaded = row.querySelector('[data-load-status]').value === 'loaded', input = row.querySelector('[data-cargo]'); input.disabled = !loaded; input.required = loaded; if (!loaded) input.value = ''; updateCompositionEditor(container); };
+  row.querySelector('[data-load-status]').addEventListener('change', syncCargo); row.querySelector('[data-wagon-count]').addEventListener('input', () => updateCompositionEditor(container)); row.querySelector('.remove-consist').onclick = () => { row.remove(); updateCompositionEditor(container); };
+  container.append(row); syncCargo();
+}
+
+function renderCompositionEditor(container, composition = []) {
+  container.replaceChildren();
+  for (const item of composition) addCompositionRow(container, item);
+  updateCompositionEditor(container);
+}
+
+function readComposition(container) {
+  return [...container.querySelectorAll('.composition-row')].map((row) => ({ wagonType: row.querySelector('[data-wagon-type]').value, wagonCount: Number(row.querySelector('[data-wagon-count]').value), loadStatus: row.querySelector('[data-load-status]').value, cargoDescription: row.querySelector('[data-cargo]').value.trim() }));
 }
 
 function updateTrackContext(kind) {
@@ -404,7 +436,7 @@ function renderPermissiveConflicts() {
 }
 
 const AUDIT_FIELD_LABELS = { requesterCode: 'Responsável', kmStart: 'KM inicial', kmEnd: 'KM final', lines: 'Linhas', workforceCount: 'Quantidade de pessoas', start: 'Início', end: 'Fim previsto', description: 'Serviço', channel: 'Canal', revision: 'Revisão' };
-const CIRC_AUDIT_FIELD_LABELS = { equipmentId: 'Tração/equipamento principal', helperEquipmentId: 'Locomotiva auxiliar', operatorRegistration: 'Operador', line: 'Linha', kmStart: 'KM inicial', kmEnd: 'KM final', start: 'Início', end: 'Fim previsto', direction: 'Sentido', restrictions: 'Restrições/observações', wagonType: 'Tipo de vagão', wagonCount: 'Quantidade de vagões', loadStatus: 'Condição da composição', cargoDescription: 'Material transportado', revision: 'Revisão' };
+const CIRC_AUDIT_FIELD_LABELS = { equipmentId: 'Tração/equipamento principal', helperEquipmentId: 'Locomotiva auxiliar', operatorRegistration: 'Operador', line: 'Linha', kmStart: 'KM inicial', kmEnd: 'KM final', start: 'Início', end: 'Fim previsto', direction: 'Sentido', restrictions: 'Restrições/observações', composition: 'Composição do trem', wagonType: 'Tipo de vagão', wagonCount: 'Quantidade de vagões', loadStatus: 'Condição da composição', cargoDescription: 'Material transportado', revision: 'Revisão' };
 function auditValue(key, value) {
   if (value === undefined || value === null || value === '') return '—';
   if (key === 'kmStart' || key === 'kmEnd') return formatKm(value);
@@ -416,6 +448,7 @@ function auditValue(key, value) {
   if (key === 'direction') return value === 'crescente' ? 'KM crescente' : value === 'decrescente' ? 'KM decrescente' : 'Manobra';
   if (key === 'loadStatus') return value === 'loaded' ? 'Carregado' : value === 'empty' ? 'Vazio' : 'Não se aplica';
   if (key === 'helperEquipmentId') return value || 'Sem locomotiva auxiliar';
+  if (key === 'composition') return compositionLabel({ composition: Array.isArray(value) ? value : [] });
   return String(value ?? '—');
 }
 function hasActiveLinkedPermissive(item, kind) { return activePermissives().some((permission) => permission.links?.some((link) => link.kind === kind && link.id === item.id)); }
@@ -454,7 +487,7 @@ function showLdlAudit(item) {
 function openEditCirculation(item) {
   editingCirculation = item; notify(elements.circEditMessage, ''); elements.circEditCode.textContent = displayCode(item, 'CIRC');
   elements.circEditEquipment.value = item.equipment_id; elements.circEditHelper.value = item.helper_equipment_id || ''; elements.circEditOperator.value = item.operator_registration || ''; elements.circEditLine.value = item.line_id; elements.circEditDirection.value = item.direction;
-  elements.circEditKmStart.value = formatKm(item.km_start); elements.circEditKmEnd.value = formatKm(item.km_end); elements.circEditStart.value = isoLocal(Date.parse(item.planned_start)); elements.circEditEnd.value = isoLocal(Date.parse(item.planned_end)); elements.circEditWagonType.value = item.wagon_type || ''; elements.circEditWagonCount.value = Number(item.wagon_count || 0); elements.circEditLoadStatus.value = item.load_status || ''; elements.circEditCargo.value = item.cargo_description || ''; elements.circEditRestrictions.value = item.restrictions || ''; elements.circEditReason.value = '';
+  elements.circEditKmStart.value = formatKm(item.km_start); elements.circEditKmEnd.value = formatKm(item.km_end); elements.circEditStart.value = isoLocal(Date.parse(item.planned_start)); elements.circEditEnd.value = isoLocal(Date.parse(item.planned_end)); renderCompositionEditor(elements.circEditCompositionList, item.composition || []); elements.circEditRestrictions.value = item.restrictions || ''; elements.circEditReason.value = '';
   updateTrackContext('edit-circulation'); elements.circEditLine.value = item.line_id; elements.circEditDialog.showModal();
 }
 
@@ -593,8 +626,12 @@ elements.circAuditExport.onclick = () => {
   const csv = '\ufeff' + rows.map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"','""')}"`).join(';')).join('\r\n'), url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })), link = document.createElement('a'); link.href = url; link.download = `auditoria-circulacoes-${new Date().toISOString().slice(0,10)}.csv`; link.click(); URL.revokeObjectURL(url);
 };
 
-document.querySelectorAll('[data-open]').forEach((button) => button.onclick = () => { const dialog = $(button.dataset.open), now = Date.now(); if (dialog.id === 'ldl-dialog') { elements.ldlStart.value = isoLocal(now); elements.ldlEnd.value = isoLocal(now + 4 * 3600000); updateTrackContext('ldl'); } else if (dialog.id === 'circulation-dialog') { elements.circStart.value = isoLocal(now); elements.circEnd.value = isoLocal(now + 2 * 3600000); updateTrackContext('circulation'); } else { elements.permStart.value = isoLocal(now); elements.permEnd.value = isoLocal(now + 2 * 3600000); updateTrackContext('permissive'); renderPermissiveConflicts(); } dialog.showModal(); });
+document.querySelectorAll('[data-open]').forEach((button) => button.onclick = () => { const dialog = $(button.dataset.open), now = Date.now(); if (dialog.id === 'ldl-dialog') { elements.ldlStart.value = isoLocal(now); elements.ldlEnd.value = isoLocal(now + 4 * 3600000); updateTrackContext('ldl'); } else if (dialog.id === 'circulation-dialog') { elements.circStart.value = isoLocal(now); elements.circEnd.value = isoLocal(now + 2 * 3600000); updateTrackContext('circulation'); updateCompositionEditor(elements.circCompositionList); } else { elements.permStart.value = isoLocal(now); elements.permEnd.value = isoLocal(now + 2 * 3600000); updateTrackContext('permissive'); renderPermissiveConflicts(); } dialog.showModal(); });
 document.querySelectorAll('[data-close]').forEach((button) => button.onclick = () => button.closest('dialog').close());
+elements.circAddConsist.onclick = () => addCompositionRow(elements.circCompositionList);
+elements.circEditAddConsist.onclick = () => addCompositionRow(elements.circEditCompositionList);
+renderCompositionEditor(elements.circCompositionList);
+renderCompositionEditor(elements.circEditCompositionList);
 document.querySelectorAll('[data-basemap]').forEach((button) => button.onclick = () => setBasemap(button.dataset.basemap));
 document.querySelectorAll('[data-package]').forEach((button) => button.onclick = () => focusPackage(button.dataset.package));
 for (const input of [elements.ldlKmStart, elements.ldlKmEnd]) input.addEventListener('input', () => updateTrackContext('ldl'));
@@ -619,13 +656,13 @@ elements.ldlEditForm.addEventListener('submit', async (event) => {
 });
 elements.circulationForm.addEventListener('submit', async (event) => {
   event.preventDefault(); notify(elements.circMessage, '');
-  try { const data = await api('/api/v1/cco/circulation/create', { method: 'POST', body: JSON.stringify({ equipmentId: elements.circEquipment.value, helperEquipmentId: elements.circHelper.value, operatorRegistration: elements.circOperator.value, line: elements.circLine.value, direction: elements.circDirection.value, kmStart: parseKm(elements.circKmStart.value), kmEnd: parseKm(elements.circKmEnd.value), start: elements.circStart.value, end: elements.circEnd.value, wagonType: elements.circWagonType.value, wagonCount: elements.circWagonCount.value, loadStatus: elements.circLoadStatus.value, cargoDescription: elements.circCargo.value, restrictions: elements.circRestrictions.value }) }); elements.circulationForm.closest('dialog').close(); notify(elements.message, `${data.circulation.displayCode} autorizada com sucesso.`, true); elements.circulationForm.reset(); await load(); }
+  try { const data = await api('/api/v1/cco/circulation/create', { method: 'POST', body: JSON.stringify({ equipmentId: elements.circEquipment.value, helperEquipmentId: elements.circHelper.value, operatorRegistration: elements.circOperator.value, line: elements.circLine.value, direction: elements.circDirection.value, kmStart: parseKm(elements.circKmStart.value), kmEnd: parseKm(elements.circKmEnd.value), start: elements.circStart.value, end: elements.circEnd.value, composition: readComposition(elements.circCompositionList), restrictions: elements.circRestrictions.value }) }); elements.circulationForm.closest('dialog').close(); notify(elements.message, `${data.circulation.displayCode} autorizada com sucesso.`, true); elements.circulationForm.reset(); renderCompositionEditor(elements.circCompositionList); await load(); }
   catch (error) { notify(elements.circMessage, `${error.message}${error.conflicts?.length ? ` Conflito: ${error.conflicts.map((x) => x.code).join(', ')}.` : ''}`); }
 });
 elements.circEditForm.addEventListener('submit', async (event) => {
   event.preventDefault(); notify(elements.circEditMessage, ''); if (!editingCirculation) return;
   try {
-    const data = await api('/api/v1/cco/circulation/update', { method: 'POST', body: JSON.stringify({ id: editingCirculation.id, expectedRevision: Number(editingCirculation.revision || 0), equipmentId: elements.circEditEquipment.value, helperEquipmentId: elements.circEditHelper.value, operatorRegistration: elements.circEditOperator.value, line: elements.circEditLine.value, direction: elements.circEditDirection.value, kmStart: parseKm(elements.circEditKmStart.value), kmEnd: parseKm(elements.circEditKmEnd.value), start: elements.circEditStart.value, end: elements.circEditEnd.value, wagonType: elements.circEditWagonType.value, wagonCount: elements.circEditWagonCount.value, loadStatus: elements.circEditLoadStatus.value, cargoDescription: elements.circEditCargo.value, restrictions: elements.circEditRestrictions.value, reason: elements.circEditReason.value }) });
+    const data = await api('/api/v1/cco/circulation/update', { method: 'POST', body: JSON.stringify({ id: editingCirculation.id, expectedRevision: Number(editingCirculation.revision || 0), equipmentId: elements.circEditEquipment.value, helperEquipmentId: elements.circEditHelper.value, operatorRegistration: elements.circEditOperator.value, line: elements.circEditLine.value, direction: elements.circEditDirection.value, kmStart: parseKm(elements.circEditKmStart.value), kmEnd: parseKm(elements.circEditKmEnd.value), start: elements.circEditStart.value, end: elements.circEditEnd.value, composition: readComposition(elements.circEditCompositionList), restrictions: elements.circEditRestrictions.value, reason: elements.circEditReason.value }) });
     elements.circEditDialog.close(); editingCirculation = null; notify(elements.message, `${data.circulation.displayCode} atualizada para a revisão ${data.circulation.revision}. Auditoria registrada.`, true); await load();
   } catch (error) { notify(elements.circEditMessage, `${error.message}${error.conflicts?.length ? ` Conflito: ${error.conflicts.map((x) => x.code).join(', ')}.` : ''}`); }
 });

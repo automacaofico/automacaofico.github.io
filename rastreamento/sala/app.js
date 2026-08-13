@@ -31,7 +31,9 @@ const age = (value) => { const seconds = Math.max(0, (Date.now() - Date.parse(va
 const equipmentStatus = (item) => !item.receivedAt ? 'no-signal' : Date.now() - Date.parse(item.receivedAt) <= 30000 ? 'online' : Date.now() - Date.parse(item.receivedAt) <= 120000 ? 'unstable' : 'offline';
 const displayCode = (item, prefix) => `${prefix} ${String(item.sequence_number || '').padStart(3, '0')}`;
 const tractionLabel = (item) => `${item.equipment_id}${item.helper_equipment_id ? ` + ${item.helper_equipment_id}` : ''}`;
-const compositionLabel = (item) => !item.wagon_type || !Number(item.wagon_count) ? 'escoteira' : `${item.wagon_count} ${item.wagon_type} · ${item.load_status === 'loaded' ? `carregados${item.cargo_description ? ` · ${item.cargo_description}` : ''}` : 'vazios'}`;
+const compositionLabel = (item) => !Array.isArray(item?.composition) || !item.composition.length
+  ? 'escoteira'
+  : item.composition.map((group) => `${group.wagonCount} ${group.wagonType} ${group.loadStatus === 'loaded' ? `carregados · ${group.cargoDescription}` : 'vazios'}`).join(' + ');
 const gridKey = (lon, lat) => `${Math.floor(lon / .02)}:${Math.floor(lat / .02)}`;
 
 function prepareAxis(points) {
