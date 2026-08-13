@@ -15,7 +15,7 @@ const state = {
   axis: [], map: null, equipment: [], markers: new Map(), popup: null, popupPinnedId: null,
   selectedId: 'LOCO001', latest: null, sound: false, priorOfflineCount: null, historyEquipment: null,
   basemap: 'street', packageMarkers: [], kmPopup: null, initialFitDone: false,
-  operations: { ldls: [], permissives: [], serverTime: null }, operationMarkers: [], operationPopup: null, operationsUnavailable: false
+  operations: { ldls: [], circulations: [], permissives: [], serverTime: null }, operationMarkers: [], operationPopup: null, operationsUnavailable: false
 };
 
 const $ = (id) => document.getElementById(id);
@@ -360,6 +360,8 @@ function currentEquipment(id) {
 
 function updateMarker(item) {
   if (!item?.receivedAt || !state.map?.loaded()) return;
+  const coupled = (state.operations.circulations || []).some((circulation) => (circulation.equipmentMembers || []).some((member) => member.equipmentId === item.equipmentId));
+  if (coupled) { state.markers.get(item.equipmentId)?.remove(); state.markers.delete(item.equipmentId); return; }
   let marker = state.markers.get(item.equipmentId);
   if (!marker) {
     const element = document.createElement('button');
@@ -411,7 +413,9 @@ function showEquipmentPopup(item) {
   }
   const operator = document.createElement('div'); operator.className = 'popup-operator';
   operator.textContent = item.operatorName ? `Operador: ${item.operatorName} · ${item.operatorRegistration}` : 'Operador não identificado';
-  content.append(header, km, detail, equipmentDetails, operator);
+  const circulation = (state.operations.circulations || []).find((entry) => entry.equipment_id === item.equipmentId || (entry.equipmentMembers || []).some((member) => member.equipmentId === item.equipmentId));
+  const formation = document.createElement('small'); formation.textContent = circulation ? `Formação: ${circulation.equipment_id} (comandante)${(circulation.equipmentMembers || []).map((member) => ` + ${member.equipmentId} (${member.operationalRole === 'traction_auxiliary' ? 'auxiliar de tração' : 'rebocado'})`).join('')}` : 'Sem circulação vinculada';
+  content.append(header, km, detail, equipmentDetails, operator, formation);
   if (!state.popup) state.popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 24, className: 'equipment-popup' });
   state.popup.setLngLat([item.longitude, item.latitude]).setDOMContent(content).addTo(state.map);
 }
@@ -427,7 +431,8 @@ function selectEquipment(id, fly) {
 function fitFleet() {
   if (!state.map || !state.axis.length) return;
   document.querySelectorAll('[data-package]').forEach((button) => button.classList.remove('active'));
-  const positioned = state.equipment.filter((item) => item.receivedAt && Number.isFinite(item.longitude) && Number.isFinite(item.latitude));
+  const coupledIds = new Set((state.operations.circulations || []).flatMap((circulation) => (circulation.equipmentMembers || []).map((member) => member.equipmentId)));
+  const positioned = state.equipment.filter((item) => item.receivedAt && !coupledIds.has(item.equipmentId) && Number.isFinite(item.longitude) && Number.isFinite(item.latitude));
   if (positioned.length === 1) {
     state.map.easeTo({ center: [positioned[0].longitude, positioned[0].latitude], zoom: 13, duration: 800 });
     return;
@@ -487,8 +492,8 @@ async function loadRailOperations() {
     const response = await fetch(`${API_BASE}/api/v1/cco/public/operations`, { cache: 'no-store' });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    state.operations = { ldls: data.ldls || [], permissives: data.permissives || [], serverTime: data.serverTime };
-    state.operationsUnavailable = false; renderRailOperations();
+    state.operations = { ldls: data.ldls || [], circulations: data.circulations || [], permissives: data.permissives || [], serverTime: data.serverTime };
+    state.operationsUnavailable = false; renderRailOperations(); state.equipment.forEach(updateMarker);
   } catch (error) {
     state.operationsUnavailable = true; renderRailOperations(); console.warn('Falha ao consultar bloqueios do CCO', error);
   }

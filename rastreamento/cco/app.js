@@ -19,9 +19,9 @@ const elements = {
   ldlWorkforce: $('ldl-workforce'), ldlStart: $('ldl-start'), ldlEnd: $('ldl-end'), ldlDescription: $('ldl-description'), ldlMessage: $('ldl-message'),
   ldlEditDialog: $('ldl-edit-dialog'), ldlEditForm: $('ldl-edit-form'), ldlEditCode: $('ldl-edit-code'), ldlEditRequester: $('ldl-edit-requester'), ldlEditChannel: $('ldl-edit-channel'), ldlEditKmStart: $('ldl-edit-km-start'), ldlEditKmEnd: $('ldl-edit-km-end'), ldlEditTrackContext: $('ldl-edit-track-context'), ldlEditWorkforce: $('ldl-edit-workforce'), ldlEditStart: $('ldl-edit-start'), ldlEditEnd: $('ldl-edit-end'), ldlEditDescription: $('ldl-edit-description'), ldlEditReason: $('ldl-edit-reason'), ldlEditMessage: $('ldl-edit-message'),
   ldlAuditDialog: $('ldl-audit-dialog'), ldlAuditTitle: $('ldl-audit-title'), ldlAuditSummary: $('ldl-audit-summary'), ldlAuditEvents: $('ldl-audit-events'),
-  circulationForm: $('circulation-form'), circEquipment: $('circ-equipment'), circHelper: $('circ-helper'), circOperator: $('circ-operator'), circLine: $('circ-line'), circDirection: $('circ-direction'), circTrackContext: $('circ-track-context'),
-  circKmStart: $('circ-km-start'), circKmEnd: $('circ-km-end'), circStart: $('circ-start'), circEnd: $('circ-end'), circCompositionList: $('circ-composition-list'), circAddConsist: $('circ-add-consist'), circRestrictions: $('circ-restrictions'), circMessage: $('circ-message'),
-  circEditDialog: $('circ-edit-dialog'), circEditForm: $('circ-edit-form'), circEditCode: $('circ-edit-code'), circEditEquipment: $('circ-edit-equipment'), circEditHelper: $('circ-edit-helper'), circEditOperator: $('circ-edit-operator'), circEditLine: $('circ-edit-line'), circEditDirection: $('circ-edit-direction'), circEditTrackContext: $('circ-edit-track-context'), circEditKmStart: $('circ-edit-km-start'), circEditKmEnd: $('circ-edit-km-end'), circEditStart: $('circ-edit-start'), circEditEnd: $('circ-edit-end'), circEditCompositionList: $('circ-edit-composition-list'), circEditAddConsist: $('circ-edit-add-consist'), circEditRestrictions: $('circ-edit-restrictions'), circEditReason: $('circ-edit-reason'), circEditMessage: $('circ-edit-message'),
+  circulationForm: $('circulation-form'), circEquipment: $('circ-equipment'), circOperator: $('circ-operator'), circLine: $('circ-line'), circDirection: $('circ-direction'), circTrackContext: $('circ-track-context'),
+  circKmStart: $('circ-km-start'), circKmEnd: $('circ-km-end'), circStart: $('circ-start'), circEnd: $('circ-end'), circEquipmentList: $('circ-equipment-list'), circAddEquipment: $('circ-add-equipment'), circCompositionList: $('circ-composition-list'), circAddConsist: $('circ-add-consist'), circRestrictions: $('circ-restrictions'), circMessage: $('circ-message'),
+  circEditDialog: $('circ-edit-dialog'), circEditForm: $('circ-edit-form'), circEditCode: $('circ-edit-code'), circEditEquipment: $('circ-edit-equipment'), circEditOperator: $('circ-edit-operator'), circEditLine: $('circ-edit-line'), circEditDirection: $('circ-edit-direction'), circEditTrackContext: $('circ-edit-track-context'), circEditKmStart: $('circ-edit-km-start'), circEditKmEnd: $('circ-edit-km-end'), circEditStart: $('circ-edit-start'), circEditEnd: $('circ-edit-end'), circEditEquipmentList: $('circ-edit-equipment-list'), circEditAddEquipment: $('circ-edit-add-equipment'), circEditCompositionList: $('circ-edit-composition-list'), circEditAddConsist: $('circ-edit-add-consist'), circEditRestrictions: $('circ-edit-restrictions'), circEditReason: $('circ-edit-reason'), circEditMessage: $('circ-edit-message'),
   circAuditDialog: $('circ-audit-dialog'), circAuditTitle: $('circ-audit-title'), circAuditSummary: $('circ-audit-summary'), circAuditEvents: $('circ-audit-events'),
   permissiveForm: $('permissive-form'), permEquipment: $('perm-equipment'), permOperator: $('perm-operator'), permLine: $('perm-line'), permKmStart: $('perm-km-start'), permKmEnd: $('perm-km-end'), permTrackContext: $('perm-track-context'),
   permStart: $('perm-start'), permEnd: $('perm-end'), permChannel: $('perm-channel'), permDescription: $('perm-description'), permJustification: $('perm-justification'), permConflicts: $('perm-conflicts'), permConfirmed: $('perm-confirmed'), permMessage: $('perm-message')
@@ -46,7 +46,8 @@ function activeCirculations() { return (state?.circulations || []).filter((item)
 function activePermissives() { return (state?.permissives || []).filter((item) => item.status === 'active'); }
 function activeSafetyEvents() { return (state?.safetyEvents || []).filter((item) => item.status === 'active'); }
 function intervalsOverlap(aStart, aEnd, bStart, bEnd) { return aStart <= bEnd && aEnd >= bStart; }
-function tractionLabel(item) { return `${item.equipment_id}${item.helper_equipment_id ? ` + ${item.helper_equipment_id}` : ''}`; }
+function memberRoleLabel(role) { return role === 'traction_auxiliary' ? 'auxiliar de tração' : 'rebocado'; }
+function tractionLabel(item) { return `${item.equipment_id} (comandante)${(item.equipmentMembers || []).map((member) => ` + ${member.equipmentId} (${memberRoleLabel(member.operationalRole)})`).join('')}`; }
 function compositionLabel(item) {
   const groups = Array.isArray(item?.composition) ? item.composition : [];
   if (!groups.length) return 'Sem vagões / escoteira';
@@ -83,6 +84,39 @@ function renderCompositionEditor(container, composition = []) {
 
 function readComposition(container) {
   return [...container.querySelectorAll('.composition-row')].map((row) => ({ wagonType: row.querySelector('[data-wagon-type]').value, wagonCount: Number(row.querySelector('[data-wagon-count]').value), loadStatus: row.querySelector('[data-load-status]').value, cargoDescription: row.querySelector('[data-cargo]').value.trim() }));
+}
+
+function updateEquipmentFormationEditor(container) {
+  const rows = [...container.querySelectorAll('.equipment-member-row')];
+  container.querySelector('.composition-empty')?.remove();
+  if (!rows.length) { const empty = document.createElement('div'); empty.className = 'composition-empty'; empty.textContent = 'Nenhum equipamento acoplado'; container.append(empty); }
+  let summary = container.parentElement.querySelector('.formation-summary');
+  if (!summary) { summary = document.createElement('div'); summary.className = 'formation-summary'; container.after(summary); }
+  const members = readEquipmentMembers(container), auxiliary = members.filter((item) => item.operationalRole === 'traction_auxiliary').length, towed = members.length - auxiliary;
+  summary.textContent = members.length ? `${members.length} acoplado${members.length === 1 ? '' : 's'} · ${auxiliary} auxiliar${auxiliary === 1 ? '' : 'es'} de tração · ${towed} rebocado${towed === 1 ? '' : 's'}` : 'Somente o equipamento comandante';
+}
+
+function addEquipmentMemberRow(container, item = {}) {
+  container.querySelector('.composition-empty')?.remove();
+  const row = document.createElement('div'); row.className = 'equipment-member-row';
+  row.innerHTML = `<label>Equipamento<select data-member-equipment aria-label="Equipamento acoplado"></select></label><label>Função na formação<select data-member-role aria-label="Função do equipamento acoplado"><option value="traction_auxiliary">Auxiliar de tração</option><option value="towed">Rebocado</option></select></label><button type="button" class="remove-equipment" aria-label="Remover equipamento acoplado">×</button>`;
+  const select = row.querySelector('[data-member-equipment]');
+  for (const equipment of state?.equipment || []) select.add(new Option(`${equipment.id} · ${equipment.name}`, equipment.id));
+  if (item.equipmentId && [...select.options].some((option) => option.value === item.equipmentId)) select.value = item.equipmentId;
+  row.querySelector('[data-member-role]').value = item.operationalRole || 'towed';
+  row.querySelector('[data-member-role]').addEventListener('change', () => updateEquipmentFormationEditor(container));
+  row.querySelector('.remove-equipment').onclick = () => { row.remove(); updateEquipmentFormationEditor(container); };
+  container.append(row); updateEquipmentFormationEditor(container);
+}
+
+function renderEquipmentFormationEditor(container, members = []) {
+  container.replaceChildren();
+  for (const item of members) addEquipmentMemberRow(container, item);
+  updateEquipmentFormationEditor(container);
+}
+
+function readEquipmentMembers(container) {
+  return [...container.querySelectorAll('.equipment-member-row')].map((row) => ({ equipmentId: row.querySelector('[data-member-equipment]').value, operationalRole: row.querySelector('[data-member-role]').value }));
 }
 
 function updateTrackContext(kind) {
@@ -247,7 +281,7 @@ function focusMapOperation(item, kind) {
 }
 
 function showEquipmentPopup(item, projection) {
-  const equipment = state.equipment.find((entry) => entry.id === item.equipment_id), circulation = activeCirculations().find((entry) => entry.equipment_id === item.equipment_id || entry.helper_equipment_id === item.equipment_id);
+  const equipment = state.equipment.find((entry) => entry.id === item.equipment_id), circulation = activeCirculations().find((entry) => entry.equipment_id === item.equipment_id || (entry.equipmentMembers || []).some((member) => member.equipmentId === item.equipment_id));
   const card = document.createElement('article'); card.className = 'cco-equipment-popup-card';
   const header = document.createElement('header'), name = document.createElement('strong'), badge = document.createElement('span'); name.textContent = item.equipment_id; badge.textContent = 'POSIÇÃO GPS'; header.append(name, badge);
   const body = document.createElement('div'); body.className = 'cco-operation-popup-body';
@@ -255,8 +289,9 @@ function showEquipmentPopup(item, projection) {
   const alias = document.createElement('strong'); alias.textContent = equipment?.name || item.equipment_id;
   const detail = document.createElement('small'); detail.textContent = `${equipment?.description || equipment?.type || 'Equipamento ferroviário'} · ${Number(item.speed_mps || 0) * 3.6 < .5 ? 'parado' : `${(Number(item.speed_mps) * 3.6).toFixed(1).replace('.', ',')} km/h`}`;
   const operator = document.createElement('small'); operator.textContent = `Operador: ${circulation?.operator_name || 'não informado'} · Sinal: ${date(item.captured_at)}`;
-  const consist = document.createElement('small'); consist.textContent = circulation ? `${item.equipment_id === circulation.equipment_id ? 'Tração' : 'Auxiliar'} · ${compositionLabel(circulation)}` : 'Sem circulação vinculada';
-  body.append(km, alias, detail, operator, consist); card.append(header, body);
+  const formation = document.createElement('small'); formation.textContent = circulation ? `Formação: ${tractionLabel(circulation)}` : 'Sem circulação vinculada';
+  const consist = document.createElement('small'); consist.textContent = circulation ? compositionLabel(circulation) : '';
+  body.append(km, alias, detail, operator, formation, consist); card.append(header, body);
   if (!equipmentPopup) equipmentPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 20, className: 'cco-equipment-popup' });
   equipmentPopup.setLngLat(projection.coordinate).setDOMContent(card).addTo(map);
 }
@@ -303,7 +338,9 @@ function renderMap() {
   map.getSource('operations').setData({ type: 'FeatureCollection', features });
   const permissiveFeatures = activePermissives().map((item) => ({ type: 'Feature', properties: { id: item.id, kind: 'permissive', code: displayCode(item, 'PERM'), equipment: item.equipment_id, line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}` }, geometry: { type: 'LineString', coordinates: lineCoordinates(item.line_id, item.km_start, item.km_end, helpers) } }));
   map.getSource('permissives')?.setData({ type: 'FeatureCollection', features: permissiveFeatures });
+  const coupledIds = new Set(activeCirculations().flatMap((circulation) => (circulation.equipmentMembers || []).map((member) => member.equipmentId)));
   for (const item of state.latest || []) {
+    if (coupledIds.has(item.equipment_id)) { equipmentMarkers.get(item.equipment_id)?.remove(); equipmentMarkers.delete(item.equipment_id); continue; }
     const projection = projectToAxis(Number(item.longitude), Number(item.latitude)); if (!projection) continue;
     let marker = equipmentMarkers.get(item.equipment_id);
     if (!marker) {
@@ -384,7 +421,7 @@ function renderSafetyEvents() {
 }
 
 function populateSelects() {
-  const currentRequester = elements.ldlRequester.value, currentEditRequester = elements.ldlEditRequester.value, currentEquipment = elements.circEquipment.value, currentHelper = elements.circHelper.value, currentEditEquipment = elements.circEditEquipment.value, currentEditHelper = elements.circEditHelper.value, currentPermEquipment = elements.permEquipment.value;
+  const currentRequester = elements.ldlRequester.value, currentEditRequester = elements.ldlEditRequester.value, currentEquipment = elements.circEquipment.value, currentEditEquipment = elements.circEditEquipment.value, currentPermEquipment = elements.permEquipment.value;
   elements.ldlRequester.replaceChildren();
   for (const item of state.requesters.filter((r) => r.active)) elements.ldlRequester.add(new Option(`${item.code} · ${item.name}`, item.code));
   elements.ldlEditRequester.replaceChildren();
@@ -393,10 +430,6 @@ function populateSelects() {
   elements.circEditEquipment.replaceChildren();
   for (const item of state.equipment) elements.circEquipment.add(new Option(`${item.id} · ${item.name}`, item.id));
   for (const item of state.equipment) elements.circEditEquipment.add(new Option(`${item.id} · ${item.name}`, item.id));
-  elements.circHelper.replaceChildren(new Option('Sem locomotiva auxiliar', ''));
-  elements.circEditHelper.replaceChildren(new Option('Sem locomotiva auxiliar', ''));
-  for (const item of state.equipment.filter((entry) => entry.type === 'locomotiva')) elements.circHelper.add(new Option(`${item.id} · ${item.name}`, item.id));
-  for (const item of state.equipment.filter((entry) => entry.type === 'locomotiva')) elements.circEditHelper.add(new Option(`${item.id} · ${item.name}`, item.id));
   elements.permEquipment.replaceChildren();
   for (const item of state.equipment) elements.permEquipment.add(new Option(`${item.id} · ${item.name}`, item.id));
   elements.circOperator.replaceChildren(new Option('Não informado', ''));
@@ -408,9 +441,7 @@ function populateSelects() {
   if ([...elements.ldlRequester.options].some((o) => o.value === currentRequester)) elements.ldlRequester.value = currentRequester;
   if ([...elements.ldlEditRequester.options].some((o) => o.value === currentEditRequester)) elements.ldlEditRequester.value = currentEditRequester;
   if ([...elements.circEquipment.options].some((o) => o.value === currentEquipment)) elements.circEquipment.value = currentEquipment;
-  if ([...elements.circHelper.options].some((o) => o.value === currentHelper)) elements.circHelper.value = currentHelper;
   if ([...elements.circEditEquipment.options].some((o) => o.value === currentEditEquipment)) elements.circEditEquipment.value = currentEditEquipment;
-  if ([...elements.circEditHelper.options].some((o) => o.value === currentEditHelper)) elements.circEditHelper.value = currentEditHelper;
   if ([...elements.permEquipment.options].some((o) => o.value === currentPermEquipment)) elements.permEquipment.value = currentPermEquipment;
 }
 
@@ -436,7 +467,7 @@ function renderPermissiveConflicts() {
 }
 
 const AUDIT_FIELD_LABELS = { requesterCode: 'Responsável', kmStart: 'KM inicial', kmEnd: 'KM final', lines: 'Linhas', workforceCount: 'Quantidade de pessoas', start: 'Início', end: 'Fim previsto', description: 'Serviço', channel: 'Canal', revision: 'Revisão' };
-const CIRC_AUDIT_FIELD_LABELS = { equipmentId: 'Tração/equipamento principal', helperEquipmentId: 'Locomotiva auxiliar', operatorRegistration: 'Operador', line: 'Linha', kmStart: 'KM inicial', kmEnd: 'KM final', start: 'Início', end: 'Fim previsto', direction: 'Sentido', restrictions: 'Restrições/observações', composition: 'Composição do trem', wagonType: 'Tipo de vagão', wagonCount: 'Quantidade de vagões', loadStatus: 'Condição da composição', cargoDescription: 'Material transportado', revision: 'Revisão' };
+const CIRC_AUDIT_FIELD_LABELS = { equipmentId: 'Equipamento comandante', equipmentMembers: 'Equipamentos acoplados', helperEquipmentId: 'Locomotiva auxiliar (legado)', operatorRegistration: 'Operador', line: 'Linha', kmStart: 'KM inicial', kmEnd: 'KM final', start: 'Início', end: 'Fim previsto', direction: 'Sentido', restrictions: 'Restrições/observações', composition: 'Composição de vagões', wagonType: 'Tipo de vagão', wagonCount: 'Quantidade de vagões', loadStatus: 'Condição da composição', cargoDescription: 'Material transportado', revision: 'Revisão' };
 function auditValue(key, value) {
   if (value === undefined || value === null || value === '') return '—';
   if (key === 'kmStart' || key === 'kmEnd') return formatKm(value);
@@ -449,6 +480,7 @@ function auditValue(key, value) {
   if (key === 'loadStatus') return value === 'loaded' ? 'Carregado' : value === 'empty' ? 'Vazio' : 'Não se aplica';
   if (key === 'helperEquipmentId') return value || 'Sem locomotiva auxiliar';
   if (key === 'composition') return compositionLabel({ composition: Array.isArray(value) ? value : [] });
+  if (key === 'equipmentMembers') return Array.isArray(value) && value.length ? value.map((item) => `${item.equipmentId} (${memberRoleLabel(item.operationalRole)})`).join(' + ') : 'Nenhum equipamento acoplado';
   return String(value ?? '—');
 }
 function hasActiveLinkedPermissive(item, kind) { return activePermissives().some((permission) => permission.links?.some((link) => link.kind === kind && link.id === item.id)); }
@@ -486,7 +518,8 @@ function showLdlAudit(item) {
 
 function openEditCirculation(item) {
   editingCirculation = item; notify(elements.circEditMessage, ''); elements.circEditCode.textContent = displayCode(item, 'CIRC');
-  elements.circEditEquipment.value = item.equipment_id; elements.circEditHelper.value = item.helper_equipment_id || ''; elements.circEditOperator.value = item.operator_registration || ''; elements.circEditLine.value = item.line_id; elements.circEditDirection.value = item.direction;
+  elements.circEditEquipment.value = item.equipment_id; elements.circEditOperator.value = item.operator_registration || ''; elements.circEditLine.value = item.line_id; elements.circEditDirection.value = item.direction;
+  renderEquipmentFormationEditor(elements.circEditEquipmentList, item.equipmentMembers || []);
   elements.circEditKmStart.value = formatKm(item.km_start); elements.circEditKmEnd.value = formatKm(item.km_end); elements.circEditStart.value = isoLocal(Date.parse(item.planned_start)); elements.circEditEnd.value = isoLocal(Date.parse(item.planned_end)); renderCompositionEditor(elements.circEditCompositionList, item.composition || []); elements.circEditRestrictions.value = item.restrictions || ''; elements.circEditReason.value = '';
   updateTrackContext('edit-circulation'); elements.circEditLine.value = item.line_id; elements.circEditDialog.showModal();
 }
@@ -628,8 +661,12 @@ elements.circAuditExport.onclick = () => {
 
 document.querySelectorAll('[data-open]').forEach((button) => button.onclick = () => { const dialog = $(button.dataset.open), now = Date.now(); if (dialog.id === 'ldl-dialog') { elements.ldlStart.value = isoLocal(now); elements.ldlEnd.value = isoLocal(now + 4 * 3600000); updateTrackContext('ldl'); } else if (dialog.id === 'circulation-dialog') { elements.circStart.value = isoLocal(now); elements.circEnd.value = isoLocal(now + 2 * 3600000); updateTrackContext('circulation'); updateCompositionEditor(elements.circCompositionList); } else { elements.permStart.value = isoLocal(now); elements.permEnd.value = isoLocal(now + 2 * 3600000); updateTrackContext('permissive'); renderPermissiveConflicts(); } dialog.showModal(); });
 document.querySelectorAll('[data-close]').forEach((button) => button.onclick = () => button.closest('dialog').close());
+elements.circAddEquipment.onclick = () => addEquipmentMemberRow(elements.circEquipmentList);
+elements.circEditAddEquipment.onclick = () => addEquipmentMemberRow(elements.circEditEquipmentList);
 elements.circAddConsist.onclick = () => addCompositionRow(elements.circCompositionList);
 elements.circEditAddConsist.onclick = () => addCompositionRow(elements.circEditCompositionList);
+renderEquipmentFormationEditor(elements.circEquipmentList);
+renderEquipmentFormationEditor(elements.circEditEquipmentList);
 renderCompositionEditor(elements.circCompositionList);
 renderCompositionEditor(elements.circEditCompositionList);
 document.querySelectorAll('[data-basemap]').forEach((button) => button.onclick = () => setBasemap(button.dataset.basemap));
@@ -656,13 +693,13 @@ elements.ldlEditForm.addEventListener('submit', async (event) => {
 });
 elements.circulationForm.addEventListener('submit', async (event) => {
   event.preventDefault(); notify(elements.circMessage, '');
-  try { const data = await api('/api/v1/cco/circulation/create', { method: 'POST', body: JSON.stringify({ equipmentId: elements.circEquipment.value, helperEquipmentId: elements.circHelper.value, operatorRegistration: elements.circOperator.value, line: elements.circLine.value, direction: elements.circDirection.value, kmStart: parseKm(elements.circKmStart.value), kmEnd: parseKm(elements.circKmEnd.value), start: elements.circStart.value, end: elements.circEnd.value, composition: readComposition(elements.circCompositionList), restrictions: elements.circRestrictions.value }) }); elements.circulationForm.closest('dialog').close(); notify(elements.message, `${data.circulation.displayCode} autorizada com sucesso.`, true); elements.circulationForm.reset(); renderCompositionEditor(elements.circCompositionList); await load(); }
+  try { const data = await api('/api/v1/cco/circulation/create', { method: 'POST', body: JSON.stringify({ equipmentId: elements.circEquipment.value, equipmentMembers: readEquipmentMembers(elements.circEquipmentList), operatorRegistration: elements.circOperator.value, line: elements.circLine.value, direction: elements.circDirection.value, kmStart: parseKm(elements.circKmStart.value), kmEnd: parseKm(elements.circKmEnd.value), start: elements.circStart.value, end: elements.circEnd.value, composition: readComposition(elements.circCompositionList), restrictions: elements.circRestrictions.value }) }); elements.circulationForm.closest('dialog').close(); notify(elements.message, `${data.circulation.displayCode} autorizada com sucesso.`, true); elements.circulationForm.reset(); renderEquipmentFormationEditor(elements.circEquipmentList); renderCompositionEditor(elements.circCompositionList); await load(); }
   catch (error) { notify(elements.circMessage, `${error.message}${error.conflicts?.length ? ` Conflito: ${error.conflicts.map((x) => x.code).join(', ')}.` : ''}`); }
 });
 elements.circEditForm.addEventListener('submit', async (event) => {
   event.preventDefault(); notify(elements.circEditMessage, ''); if (!editingCirculation) return;
   try {
-    const data = await api('/api/v1/cco/circulation/update', { method: 'POST', body: JSON.stringify({ id: editingCirculation.id, expectedRevision: Number(editingCirculation.revision || 0), equipmentId: elements.circEditEquipment.value, helperEquipmentId: elements.circEditHelper.value, operatorRegistration: elements.circEditOperator.value, line: elements.circEditLine.value, direction: elements.circEditDirection.value, kmStart: parseKm(elements.circEditKmStart.value), kmEnd: parseKm(elements.circEditKmEnd.value), start: elements.circEditStart.value, end: elements.circEditEnd.value, composition: readComposition(elements.circEditCompositionList), restrictions: elements.circEditRestrictions.value, reason: elements.circEditReason.value }) });
+    const data = await api('/api/v1/cco/circulation/update', { method: 'POST', body: JSON.stringify({ id: editingCirculation.id, expectedRevision: Number(editingCirculation.revision || 0), equipmentId: elements.circEditEquipment.value, equipmentMembers: readEquipmentMembers(elements.circEditEquipmentList), operatorRegistration: elements.circEditOperator.value, line: elements.circEditLine.value, direction: elements.circEditDirection.value, kmStart: parseKm(elements.circEditKmStart.value), kmEnd: parseKm(elements.circEditKmEnd.value), start: elements.circEditStart.value, end: elements.circEditEnd.value, composition: readComposition(elements.circEditCompositionList), restrictions: elements.circEditRestrictions.value, reason: elements.circEditReason.value }) });
     elements.circEditDialog.close(); editingCirculation = null; notify(elements.message, `${data.circulation.displayCode} atualizada para a revisão ${data.circulation.revision}. Auditoria registrada.`, true); await load();
   } catch (error) { notify(elements.circEditMessage, `${error.message}${error.conflicts?.length ? ` Conflito: ${error.conflicts.map((x) => x.code).join(', ')}.` : ''}`); }
 });

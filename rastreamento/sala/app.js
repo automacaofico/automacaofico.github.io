@@ -30,7 +30,8 @@ const lineLabel = (line) => LINE_LABELS[line] || line;
 const age = (value) => { const seconds = Math.max(0, (Date.now() - Date.parse(value)) / 1000); return seconds < 60 ? `${Math.round(seconds)} s` : seconds < 3600 ? `${Math.round(seconds / 60)} min` : `${Math.round(seconds / 3600)} h`; };
 const equipmentStatus = (item) => !item.receivedAt ? 'no-signal' : Date.now() - Date.parse(item.receivedAt) <= 30000 ? 'online' : Date.now() - Date.parse(item.receivedAt) <= 120000 ? 'unstable' : 'offline';
 const displayCode = (item, prefix) => `${prefix} ${String(item.sequence_number || '').padStart(3, '0')}`;
-const tractionLabel = (item) => `${item.equipment_id}${item.helper_equipment_id ? ` + ${item.helper_equipment_id}` : ''}`;
+const memberRoleLabel = (role) => role === 'traction_auxiliary' ? 'auxiliar de tração' : 'rebocado';
+const tractionLabel = (item) => `${item.equipment_id} (comandante)${(item.equipmentMembers || []).map((member) => ` + ${member.equipmentId} (${memberRoleLabel(member.operationalRole)})`).join('')}`;
 const compositionLabel = (item) => !Array.isArray(item?.composition) || !item.composition.length
   ? 'escoteira'
   : item.composition.map((group) => `${group.wagonCount} ${group.wagonType} ${group.loadStatus === 'loaded' ? `carregados · ${group.cargoDescription}` : 'vazios'}`).join(' + ');
@@ -104,7 +105,9 @@ function equipmentPopupContent(item, projection) {
   const signal = document.createElement('small'); signal.textContent = `Último sinal há ${age(item.receivedAt)}`;
   content.append(heading, statusLine, km, name);
   if (item.description) { const description = document.createElement('em'); description.textContent = item.description; content.append(description); }
-  content.append(telemetry, operator, signal);
+  const circulation = operations.circulations.find((entry) => entry.equipment_id === item.equipmentId || (entry.equipmentMembers || []).some((member) => member.equipmentId === item.equipmentId));
+  const formation = document.createElement('small'); formation.textContent = circulation ? `Formação: ${tractionLabel(circulation)}` : 'Sem circulação vinculada';
+  content.append(telemetry, operator, signal, formation);
   return content;
 }
 
@@ -180,8 +183,9 @@ function renderMap() {
 function fitRailway() { if (!map || !axis.length) return; const bounds = new maplibregl.LngLatBounds(); axis.forEach((point) => bounds.extend(point.coordinate)); map.fitBounds(bounds, { padding: { top: 100, right: 70, bottom: 60, left: 70 }, maxZoom: 9, duration: 700 }); }
 function renderEquipmentMarkers() {
   if (!map) return;
+  const coupledIds = new Set(operations.circulations.flatMap((circulation) => (circulation.equipmentMembers || []).map((member) => member.equipmentId)));
   for (const item of equipment) {
-    if (!item.receivedAt) { markers.get(item.equipmentId)?.remove(); markers.delete(item.equipmentId); continue; }
+    if (!item.receivedAt || coupledIds.has(item.equipmentId)) { markers.get(item.equipmentId)?.remove(); markers.delete(item.equipmentId); continue; }
     const projection = projectToAxis(item.longitude, item.latitude); if (!projection) continue;
     let marker = markers.get(item.equipmentId);
     if (!marker) {
