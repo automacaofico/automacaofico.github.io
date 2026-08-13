@@ -218,6 +218,67 @@ async function state(request, env, controller) {
   return reply(request, { ok: true, serverTime: new Date().toISOString(), controller, ...(await baseState(env, from, to)) });
 }
 
+function historyRange(url) {
+  const now = new Date(), defaultFrom = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const from = iso(url.searchParams.get('from')) || defaultFrom.toISOString();
+  const to = iso(url.searchParams.get('to')) || now.toISOString();
+  if (Date.parse(from) > Date.parse(to)) return { error: 'A data inicial deve ser anterior à data final.' };
+  if (Date.parse(to) - Date.parse(from) > 732 * 86400000) return { error: 'Consulte no máximo 24 meses por vez.' };
+  return { from, to };
+}
+
+async function operationalHistory(request, env, controller) {
+  const range = historyRange(new URL(request.url));
+  if (range.error) return reply(request, { ok: false, error: range.error }, 400);
+  const { from, to } = range;
+  const [ldls, circulations, permissives, safetyEvents] = await env.DB.batch([
+    env.DB.prepare(`SELECT l.id,l.permanent_code AS code,'ldl' AS type,l.status,l.created_at AS recorded_at,
+      l.requested_start AS start_at,l.requested_end AS planned_end_at,COALESCE(l.returned_at,l.cancelled_at) AS closed_at,
+      l.km_start,l.km_end,l.workforce_count AS workforce,l.work_description AS description,l.request_channel AS channel,
+      l.requester_code AS subject_code,r.name AS subject_name,r.company AS subject_detail,
+      GROUP_CONCAT(ll.line_id,'|') AS lines,c.code AS controller_code,c.name AS controller_name,
+      l.revision,COALESCE(l.updated_at,l.created_at) AS updated_at
+      FROM ldl l JOIN requesters r ON r.code=l.requester_code JOIN cco_controllers c ON c.code=l.created_by_controller
+      LEFT JOIN ldl_lines ll ON ll.ldl_id=l.id
+      WHERE l.created_at>=? AND l.created_at<=?
+      GROUP BY l.id ORDER BY l.created_at DESC LIMIT 10000`).bind(from, to),
+    env.DB.prepare(`SELECT x.id,x.permanent_code AS code,'circulation' AS type,x.status,x.authorized_at AS recorded_at,
+      x.planned_start AS start_at,x.planned_end AS planned_end_at,COALESCE(x.completed_at,x.cancelled_at) AS closed_at,
+      x.km_start,x.km_end,0 AS workforce,x.restrictions AS description,NULL AS channel,
+      x.equipment_id AS subject_code,e.name AS subject_name,
+      COALESCE(o.name,'Operador não informado') AS subject_detail,x.line_id AS lines,
+      c.code AS controller_code,c.name AS controller_name,x.revision,COALESCE(x.updated_at,x.authorized_at) AS updated_at,
+      (SELECT GROUP_CONCAT(cem.equipment_id || ':' || cem.operational_role,'|') FROM circulation_equipment_members cem WHERE cem.circulation_id=x.id) AS equipment_members,
+      (SELECT GROUP_CONCAT(cc.wagon_type || ':' || cc.wagon_count || ':' || cc.load_status || ':' || COALESCE(cc.cargo_description,''),'|') FROM circulation_consist cc WHERE cc.circulation_id=x.id) AS composition
+      FROM circulations x JOIN equipment e ON e.id=x.equipment_id LEFT JOIN operators o ON o.registration=x.operator_registration
+      JOIN cco_controllers c ON c.code=x.authorized_by_controller
+      WHERE x.authorized_at>=? AND x.authorized_at<=? ORDER BY x.authorized_at DESC LIMIT 10000`).bind(from, to),
+    env.DB.prepare(`SELECT p.id,p.permanent_code AS code,'permissive' AS type,p.status,p.authorized_at AS recorded_at,
+      p.planned_start AS start_at,p.planned_end AS planned_end_at,COALESCE(p.completed_at,p.cancelled_at) AS closed_at,
+      p.km_start,p.km_end,0 AS workforce,p.work_description AS description,p.communication_channel AS channel,
+      p.equipment_id AS subject_code,e.name AS subject_name,
+      COALESCE(o.name,'Operador não informado') AS subject_detail,p.line_id AS lines,
+      c.code AS controller_code,c.name AS controller_name,0 AS revision,p.authorized_at AS updated_at,
+      p.speed_limit_kmh,p.justification
+      FROM permissive_authorizations p JOIN equipment e ON e.id=p.equipment_id LEFT JOIN operators o ON o.registration=p.operator_registration
+      JOIN cco_controllers c ON c.code=p.authorized_by_controller
+      WHERE p.authorized_at>=? AND p.authorized_at<=? ORDER BY p.authorized_at DESC LIMIT 10000`).bind(from, to),
+    env.DB.prepare(`SELECT s.id,('INVASÃO ' || l.permanent_code) AS code,'safety' AS type,s.status,s.first_seen_at AS recorded_at,
+      s.first_seen_at AS start_at,s.last_seen_at AS planned_end_at,s.resolved_at AS closed_at,
+      s.station_m AS km_start,s.station_m AS km_end,0 AS workforce,'Invasão de trecho bloqueado por LDL' AS description,NULL AS channel,
+      s.equipment_id AS subject_code,e.name AS subject_name,l.permanent_code AS subject_detail,'line01' AS lines,
+      c.code AS controller_code,c.name AS controller_name,0 AS revision,s.last_seen_at AS updated_at,
+      s.speed_kmh,s.accuracy_m,s.occurrences,s.severity
+      FROM safety_events s JOIN equipment e ON e.id=s.equipment_id JOIN ldl l ON l.id=s.ldl_id
+      JOIN cco_controllers c ON c.code=s.detected_by_controller
+      WHERE s.first_seen_at>=? AND s.first_seen_at<=? ORDER BY s.first_seen_at DESC LIMIT 10000`).bind(from, to)
+  ]);
+  const records = [...(ldls.results || []), ...(circulations.results || []), ...(permissives.results || []), ...(safetyEvents.results || [])]
+    .map((row) => ({ ...row, lines: String(row.lines || '').split('|').filter(Boolean) }))
+    .sort((a, b) => Date.parse(b.recorded_at) - Date.parse(a.recorded_at));
+  return reply(request, { ok: true, serverTime: new Date().toISOString(), controller, range: { from, to }, records });
+}
+
 async function publicOperations(request, env) {
   const [ldls, ldlLines, circulations, circulationConsist, circulationMembers, permissives, permissiveLinks, safetyEvents] = await env.DB.batch([
     env.DB.prepare(`SELECT l.id,l.sequence_number,l.permanent_code,l.requester_code,r.name AS requester_name,r.company,
@@ -528,6 +589,7 @@ export async function routeCco(request, env) {
   if (!controller) return reply(request, { ok: false, error: 'Sessão do CCO inválida ou expirada.' }, 401);
   if (request.method === 'POST' && path === '/api/v1/cco/logout') return logout(request, env);
   if (request.method === 'GET' && path === '/api/v1/cco/state') return state(request, env, controller);
+  if (request.method === 'GET' && path === '/api/v1/cco/history') return operationalHistory(request, env, controller);
   if (request.method === 'POST' && path === '/api/v1/cco/safety/sync') return syncSafetyEvents(request, env, controller);
   if (request.method === 'POST' && path === '/api/v1/cco/ldl/create') return createLdl(request, env, controller);
   if (request.method === 'POST' && path === '/api/v1/cco/ldl/update') return updateLdl(request, env, controller);

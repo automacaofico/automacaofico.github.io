@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Histórico e Análises | CCO FICO</title>
+  <link rel="stylesheet" href="../styles.css?v=20260811-3">
+  <link rel="stylesheet" href="../../credits.css?v=20260811-1">
+  <link rel="stylesheet" href="styles.css?v=20260813-1">
+</head>
+<body>
+  <header>
+    <a class="brand" href="../"><img src="../../../mapa-pendencias/assets/brand/fico-logo-color.png" alt="FICO"><span>HISTÓRICO OPERACIONAL CCO</span></a>
+    <div class="session"><i></i><span id="controller-name">VALIDANDO ACESSO</span><time id="clock">--:--:--</time><a class="header-back" href="../">VOLTAR AO CCO</a></div>
+  </header>
+
+  <main>
+    <section id="access-denied" class="access-card card" hidden>
+      <p>ACESSO PROTEGIDO</p><h1>Entre primeiro<br><span>no painel do CCO.</span></h1>
+      <a href="../">ACESSAR CONTROLE OPERACIONAL</a>
+    </section>
+
+    <section id="app" hidden>
+      <div class="page-heading">
+        <div><p>INTELIGÊNCIA OPERACIONAL</p><h1>Histórico e análises</h1><span>Consulte diretamente o banco oficial do CCO. O Excel passa a ser apenas uma opção de exportação.</span></div>
+        <div class="heading-actions"><button id="refresh" class="secondary">ATUALIZAR</button><button id="export">EXPORTAR FILTRADO</button></div>
+      </div>
+
+      <section class="filters card" aria-label="Filtros do histórico">
+        <label>Data inicial<input id="from" type="date"></label>
+        <label>Data final<input id="to" type="date"></label>
+        <label>Tipo<select id="type"><option value="all">Todos</option><option value="ldl">LDLs</option><option value="circulation">Circulações</option><option value="permissive">Permissivos</option><option value="safety">Segurança</option></select></label>
+        <label>Situação<select id="status"><option value="all">Todas</option></select></label>
+        <label>Linha<select id="line"><option value="all">Todas</option></select></label>
+        <label class="search">Busca livre<input id="search" type="search" placeholder="Código, equipamento, solicitante, controlador…"></label>
+        <button id="apply">APLICAR PERÍODO</button><button id="clear" class="secondary">LIMPAR FILTROS</button>
+      </section>
+
+      <div id="message" class="message" hidden></div>
+      <section class="history-kpis">
+        <article><span>REGISTROS</span><strong id="kpi-total">0</strong><small>no recorte selecionado</small></article>
+        <article class="ldl"><span>LDLs EMITIDAS</span><strong id="kpi-ldl">0</strong><small id="kpi-people">0 pessoas mobilizadas</small></article>
+        <article class="circulation"><span>CIRCULAÇÕES</span><strong id="kpi-circulation">0</strong><small>autorizações registradas</small></article>
+        <article class="permissive"><span>PERMISSIVOS</span><strong id="kpi-permissive">0</strong><small>operações conjuntas</small></article>
+        <article class="danger"><span>INVASÕES DE LDL</span><strong id="kpi-safety">0</strong><small>ocorrências de segurança</small></article>
+        <article><span>DURAÇÃO MÉDIA</span><strong id="kpi-duration">—</strong><small>registros encerrados</small></article>
+      </section>
+
+      <section class="analytics-grid">
+        <article class="card chart-card">
+          <div class="card-head"><div><p>EVOLUÇÃO</p><h2>Registros ao longo do tempo</h2></div><span id="trend-caption"></span></div>
+          <div id="trend-chart" class="trend-chart"></div>
+          <div class="chart-legend"><span class="ldl-dot">LDL</span><span class="circ-dot">Circulação</span><span class="perm-dot">Permissivo</span><span class="safety-dot">Segurança</span></div>
+        </article>
+        <article class="card breakdown-card">
+          <div class="card-head"><div><p>DISTRIBUIÇÃO</p><h2>Situação dos registros</h2></div></div>
+          <div id="status-chart" class="status-chart"></div>
+        </article>
+        <article class="card ranking-card">
+          <div class="card-head"><div><p>RECORRÊNCIA</p><h2>Equipamentos e solicitantes</h2></div></div>
+          <ol id="ranking"></ol>
+        </article>
+      </section>
+
+      <section class="card records-card">
+        <div class="card-head"><div><p>BASE CONSULTÁVEL</p><h2>Registros detalhados</h2></div><b id="result-count">0 resultados</b></div>
+        <div class="table-wrap"><table><thead><tr><th>Tipo</th><th>Código</th><th>Situação</th><th>Responsável / equipamento</th><th>Linha</th><th>Trecho</th><th>Início</th><th>Encerramento</th><th>Controlador</th><th></th></tr></thead><tbody id="records-body"></tbody></table></div>
+      </section>
+      <p id="freshness" class="freshness"></p>
+      <p class="fico-credit fico-credit--footer">Desenvolvido por&nbsp;<b>Thyago Viégas</b>&nbsp;· 2026</p>
+    </section>
+  </main>
+
+  <dialog id="detail-dialog"><div class="dialog-head"><div><p>REGISTRO OPERACIONAL</p><h2 id="detail-title"></h2></div><button id="detail-close" type="button">×</button></div><div id="detail-body" class="detail-body"></div><div class="dialog-actions"><button id="detail-ok" type="button">FECHAR</button></div></dialog>
+  <script type="module" src="app.js?v=20260813-1"></script>
+</body>
+</html>
