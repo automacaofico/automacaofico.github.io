@@ -7,6 +7,7 @@ const API = /^(?:localhost|127\.0\.0\.1)$/.test(location.hostname)
   ? 'http://127.0.0.1:8791'
   : 'https://fico-tracking-api.automacaofico.workers.dev';
 const AXIS_URL = '../../mapa-superestrutura/assets/data/fico-axis-full.json';
+const STATUS_LABELS = { active: 'Ativa', returned: 'Devolvida', cancelled: 'Cancelada', authorized: 'Autorizada', completed: 'Concluída', resolved: 'Resolvida' };
 const $ = (id) => document.getElementById(id);
 const elements = {
   login: $('login'), app: $('app'), loginForm: $('login-form'), code: $('controller-code'), pin: $('controller-pin'),
@@ -602,7 +603,7 @@ function renderHistory() {
   if (filter === 'all' || filter === 'circulation') for (const item of state.circulations) rows.push({ code: displayCode(item, 'CIRC'), status: item.status, owner: `${tractionLabel(item)} · ${compositionLabel(item)} · ${item.operator_name || '—'}`, line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, start: item.planned_start, end: item.planned_end, controller: `${item.authorized_by_controller} · ${item.controller_name}`, time: item.authorized_at });
   if (filter === 'all' || filter === 'permissive') for (const item of state.permissives) rows.push({ code: displayCode(item, 'PERM'), status: item.status, owner: `${item.equipment_id} · 15 km/h · ${item.operator_name || '—'}`, line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, start: item.planned_start, end: item.planned_end, controller: `${item.authorized_by_controller} · ${item.controller_name}`, time: item.authorized_at });
   rows.sort((a, b) => Date.parse(b.time) - Date.parse(a.time)); elements.historyBody.replaceChildren();
-  for (const item of rows) { const row = elements.historyBody.insertRow(); [item.code, item.status, item.owner, item.line, item.km, date(item.start), date(item.end), item.controller].forEach((value) => { const cell = row.insertCell(); cell.textContent = value; }); }
+  for (const item of rows) { const row = elements.historyBody.insertRow(); [item.code, STATUS_LABELS[item.status] || item.status, item.owner, item.line, item.km, date(item.start), date(item.end), item.controller].forEach((value) => { const cell = row.insertCell(); cell.textContent = value; }); }
   if (!rows.length) { const row = elements.historyBody.insertRow(), cell = row.insertCell(); cell.colSpan = 8; cell.textContent = 'Nenhum registro no período.'; }
 }
 
