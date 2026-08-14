@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="ldl-revisions.css?v=20260813-5">
   <link rel="stylesheet" href="../credits.css?v=20260811-1">
   <link rel="stylesheet" href="../rail-infrastructure.css?v=20260811-1">
+  <link rel="stylesheet" href="premium.css?v=20260814-2">
 </head>
 <body>
   <header>
@@ -21,15 +22,17 @@
   </header>
 
   <main>
-    <section id="login" class="login card">
-      <p>ACESSO INDIVIDUAL · CONTROLADOR</p>
-      <h1>Assumir painel<br><span>do CCO.</span></h1>
-      <form id="login-form">
-        <label>Código do controlador<input id="controller-code" placeholder="Ex.: GAMA02" autocomplete="username" required></label>
-        <label>PIN individual<input id="controller-pin" type="password" inputmode="numeric" autocomplete="current-password" required></label>
-        <button>ENTRAR NO CCO</button>
-      </form>
-      <div id="login-message" class="message" hidden></div>
+    <section id="login" class="login card login-shell">
+      <div class="login-panel">
+        <p>ACESSO INDIVIDUAL · CONTROLADOR</p>
+        <h1>Assumir painel<br><span>do CCO.</span></h1>
+        <form id="login-form">
+          <label>Código do controlador<input id="controller-code" placeholder="Ex.: GAMA02" autocomplete="username" required></label>
+          <label>PIN individual<input id="controller-pin" type="password" inputmode="numeric" autocomplete="current-password" required></label>
+          <button>ENTRAR NO CCO</button>
+        </form>
+        <div id="login-message" class="message" hidden></div>
+      </div>
     </section>
 
     <section id="app" hidden>
