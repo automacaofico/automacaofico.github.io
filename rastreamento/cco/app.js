@@ -37,6 +37,11 @@ function notify(element, text, success = false) {
 }
 function date(value) { return value ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : '—'; }
 function isoLocal(value) { const d = new Date(value); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
+function ccoLocalToIso(value) {
+  const local = String(value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?$/.test(local)) return local;
+  return new Date(`${local}-03:00`).toISOString();
+}
 function formatKm(meters) { const value = Math.max(0, Math.round(Number(meters))); return `${Math.floor(value / 1000)}+${String(value % 1000).padStart(3, '0')}`; }
 function parseKm(value) { const normalized = String(value).trim().replace(',', '.'); if (/^\d+\+\d{1,3}$/.test(normalized)) { const [km, m] = normalized.split('+'); return Number(km) * 1000 + Number(m); } const number = Number(normalized); return Number.isFinite(number) ? (number < 1000 ? number * 1000 : number) : null; }
 function displayCode(item, prefix) { return `${prefix} ${String(item.sequence_number).padStart(3, '0')}`; }
@@ -306,7 +311,7 @@ function initMap() {
     map.addLayer({ id: 'package-casing', type: 'line', source: 'packages', paint: { 'line-color': '#fff', 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 6, 14, 11], 'line-opacity': .92 } });
     map.addLayer({ id: 'package-lines', type: 'line', source: 'packages', paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 3, 14, 7], 'line-opacity': .96 } });
     map.addLayer({ id: 'package-hit', type: 'line', source: 'packages', paint: { 'line-color': '#fff', 'line-width': 24, 'line-opacity': .01 } });
-    addInfrastructureLayers(map, { sliceAxis, pointAtStation });
+    const infrastructure = addInfrastructureLayers(map, { sliceAxis, pointAtStation });
     map.addSource('operations', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     map.addLayer({ id: 'operations', type: 'line', source: 'operations', paint: { 'line-color': ['get', 'color'], 'line-width': 8, 'line-opacity': .9 } });
     map.addSource('permissives', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -315,8 +320,10 @@ function initMap() {
     addPackageMarkers();
     map.on('mouseenter', 'package-hit', () => { map.getCanvas().style.cursor = 'crosshair'; });
     map.on('mousemove', 'package-hit', (event) => {
-      const operation = map.queryRenderedFeatures(event.point, { layers: ['operations', 'permissives'] });
-      if (!operation.length) showKmReadout(event.lngLat);
+      const priorityLayers = ['operations', 'permissives', ...infrastructure.layers].filter((layer) => map.getLayer(layer));
+      const priorityFeatures = map.queryRenderedFeatures(event.point, { layers: priorityLayers });
+      if (priorityFeatures.length) { kmPopup?.remove(); return; }
+      showKmReadout(event.lngLat);
     });
     map.on('mouseleave', 'package-hit', () => { map.getCanvas().style.cursor = ''; kmPopup?.remove(); });
     for (const layer of ['operations', 'permissives']) {
@@ -422,6 +429,7 @@ function renderSafetyEvents() {
 
 function populateSelects() {
   const currentRequester = elements.ldlRequester.value, currentEditRequester = elements.ldlEditRequester.value, currentEquipment = elements.circEquipment.value, currentEditEquipment = elements.circEditEquipment.value, currentPermEquipment = elements.permEquipment.value;
+  const currentOperator = elements.circOperator.value, currentEditOperator = elements.circEditOperator.value, currentPermOperator = elements.permOperator.value;
   elements.ldlRequester.replaceChildren();
   for (const item of state.requesters.filter((r) => r.active)) elements.ldlRequester.add(new Option(`${item.code} · ${item.name}`, item.code));
   elements.ldlEditRequester.replaceChildren();
@@ -443,6 +451,9 @@ function populateSelects() {
   if ([...elements.circEquipment.options].some((o) => o.value === currentEquipment)) elements.circEquipment.value = currentEquipment;
   if ([...elements.circEditEquipment.options].some((o) => o.value === currentEditEquipment)) elements.circEditEquipment.value = currentEditEquipment;
   if ([...elements.permEquipment.options].some((o) => o.value === currentPermEquipment)) elements.permEquipment.value = currentPermEquipment;
+  if ([...elements.circOperator.options].some((o) => o.value === currentOperator)) elements.circOperator.value = currentOperator;
+  if ([...elements.circEditOperator.options].some((o) => o.value === currentEditOperator)) elements.circEditOperator.value = currentEditOperator;
+  if ([...elements.permOperator.options].some((o) => o.value === currentPermOperator)) elements.permOperator.value = currentPermOperator;
 }
 
 function permissiveConflictRecords() {
@@ -549,7 +560,7 @@ function showCirculationAudit(item) {
 function record(item, kind) {
   const isLdl = kind === 'ldl', isPermissive = kind === 'permissive', isCirculation = kind === 'circulation', wrapper = document.createElement('article'); wrapper.className = `record ${isLdl ? '' : isPermissive ? 'permissive' : 'circulation'}`;
   const prefix = isLdl ? 'LDL' : isPermissive ? 'PERM' : 'CIRC';
-  const codeText = displayCode(item, prefix), main = isLdl ? `${item.requester_name} · ${item.workforce_count} pessoas` : isCirculation ? `${tractionLabel(item)} · ${item.operator_name || 'operador não informado'}` : `${item.equipment_id} · ${item.operator_name || 'operador não informado'}`;
+  const codeText = displayCode(item, prefix), main = isLdl ? `${item.requester_code} · ${item.requester_name} · ${item.workforce_count} pessoas` : isCirculation ? `${tractionLabel(item)} · ${item.operator_name || 'operador não informado'}` : `${item.equipment_id} · ${item.operator_name || 'operador não informado'}`;
   const lines = isLdl ? item.lines.map(lineLabel).join(' + ') : lineLabel(item.line_id);
   wrapper.innerHTML = `<div class="code"></div><div><strong></strong><span></span><small></small></div><div class="record-actions"><button class="secondary" data-edit>EDITAR</button><button class="secondary" data-audit>AUDITORIA</button><button data-complete></button><button class="danger" data-cancel>CANCELAR</button></div>`;
   wrapper.querySelector('.code').textContent = codeText; wrapper.querySelector('strong').textContent = main; wrapper.querySelector('span').textContent = `${lines} · KM ${formatKm(item.km_start)}–${formatKm(item.km_end)}${isPermissive ? ' · MÁX. 15 KM/H' : ''}`; wrapper.querySelector('small').textContent = `${date(isLdl ? item.requested_start : item.planned_start)} → ${date(isLdl ? item.requested_end : item.planned_end)}`;
@@ -587,9 +598,9 @@ function record(item, kind) {
 
 function renderHistory() {
   const filter = elements.historyFilter.value, rows = [];
-  if (filter === 'all' || filter === 'ldl') for (const item of state.ldls) rows.push({ code: displayCode(item, 'LDL'), status: item.status, owner: `${item.requester_name} · ${item.workforce_count} pessoas`, line: item.lines.map(lineLabel).join(' + '), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, start: item.requested_start, end: item.requested_end, controller: item.controller_name, time: item.created_at });
-  if (filter === 'all' || filter === 'circulation') for (const item of state.circulations) rows.push({ code: displayCode(item, 'CIRC'), status: item.status, owner: `${tractionLabel(item)} · ${compositionLabel(item)} · ${item.operator_name || '—'}`, line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, start: item.planned_start, end: item.planned_end, controller: item.controller_name, time: item.authorized_at });
-  if (filter === 'all' || filter === 'permissive') for (const item of state.permissives) rows.push({ code: displayCode(item, 'PERM'), status: item.status, owner: `${item.equipment_id} · 15 km/h · ${item.operator_name || '—'}`, line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, start: item.planned_start, end: item.planned_end, controller: item.controller_name, time: item.authorized_at });
+  if (filter === 'all' || filter === 'ldl') for (const item of state.ldls) rows.push({ code: displayCode(item, 'LDL'), status: item.status, owner: `${item.requester_code} · ${item.requester_name} · ${item.workforce_count} pessoas`, line: item.lines.map(lineLabel).join(' + '), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, start: item.requested_start, end: item.requested_end, controller: `${item.created_by_controller} · ${item.controller_name}`, time: item.created_at });
+  if (filter === 'all' || filter === 'circulation') for (const item of state.circulations) rows.push({ code: displayCode(item, 'CIRC'), status: item.status, owner: `${tractionLabel(item)} · ${compositionLabel(item)} · ${item.operator_name || '—'}`, line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, start: item.planned_start, end: item.planned_end, controller: `${item.authorized_by_controller} · ${item.controller_name}`, time: item.authorized_at });
+  if (filter === 'all' || filter === 'permissive') for (const item of state.permissives) rows.push({ code: displayCode(item, 'PERM'), status: item.status, owner: `${item.equipment_id} · 15 km/h · ${item.operator_name || '—'}`, line: lineLabel(item.line_id), km: `${formatKm(item.km_start)}–${formatKm(item.km_end)}`, start: item.planned_start, end: item.planned_end, controller: `${item.authorized_by_controller} · ${item.controller_name}`, time: item.authorized_at });
   rows.sort((a, b) => Date.parse(b.time) - Date.parse(a.time)); elements.historyBody.replaceChildren();
   for (const item of rows) { const row = elements.historyBody.insertRow(); [item.code, item.status, item.owner, item.line, item.km, date(item.start), date(item.end), item.controller].forEach((value) => { const cell = row.insertCell(); cell.textContent = value; }); }
   if (!rows.length) { const row = elements.historyBody.insertRow(), cell = row.insertCell(); cell.colSpan = 8; cell.textContent = 'Nenhum registro no período.'; }
@@ -634,9 +645,9 @@ elements.logout.onclick = async () => { try { await api('/api/v1/cco/logout', { 
 elements.refresh.onclick = load; elements.historyFilter.onchange = renderHistory; elements.pdf.onclick = () => window.print();
 elements.excel.onclick = () => {
   if (!state) return; const rows = [['Código','Tipo','Situação','Responsável/Equipamento','Linha','KM inicial','KM final','Início','Fim','Controlador']];
-  for (const item of state.ldls) rows.push([item.permanent_code,'LDL',item.status,`${item.requester_code} - ${item.requester_name}`,item.lines.map(lineLabel).join(' + '),formatKm(item.km_start),formatKm(item.km_end),item.requested_start,item.requested_end,item.controller_name]);
-  for (const item of state.circulations) rows.push([item.permanent_code,'Circulação',item.status,`${tractionLabel(item)} · ${compositionLabel(item)}`,lineLabel(item.line_id),formatKm(item.km_start),formatKm(item.km_end),item.planned_start,item.planned_end,item.controller_name]);
-  for (const item of state.permissives) rows.push([item.permanent_code,'Permissivo 15 km/h',item.status,item.equipment_id,lineLabel(item.line_id),formatKm(item.km_start),formatKm(item.km_end),item.planned_start,item.planned_end,item.controller_name]);
+  for (const item of state.ldls) rows.push([item.permanent_code,'LDL',item.status,`${item.requester_code} - ${item.requester_name}`,item.lines.map(lineLabel).join(' + '),formatKm(item.km_start),formatKm(item.km_end),item.requested_start,item.requested_end,`${item.created_by_controller} - ${item.controller_name}`]);
+  for (const item of state.circulations) rows.push([item.permanent_code,'Circulação',item.status,`${tractionLabel(item)} · ${compositionLabel(item)}`,lineLabel(item.line_id),formatKm(item.km_start),formatKm(item.km_end),item.planned_start,item.planned_end,`${item.authorized_by_controller} - ${item.controller_name}`]);
+  for (const item of state.permissives) rows.push([item.permanent_code,'Permissivo 15 km/h',item.status,item.equipment_id,lineLabel(item.line_id),formatKm(item.km_start),formatKm(item.km_end),item.planned_start,item.planned_end,`${item.authorized_by_controller} - ${item.controller_name}`]);
   for (const item of state.safetyEvents || []) rows.push([item.id,'Invasão de LDL',item.status,item.equipment_id,'Linha 01',formatKm(item.station_m),formatKm(item.station_m),item.first_seen_at,item.last_seen_at,item.detected_by_controller]);
   const csv = '\ufeff' + rows.map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"','""')}"`).join(';')).join('\r\n'), url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })), link = document.createElement('a'); link.href = url; link.download = `controle-cco-${new Date().toISOString().slice(0,7)}.csv`; link.click(); URL.revokeObjectURL(url);
 };
@@ -680,26 +691,26 @@ elements.circEditLine.addEventListener('change', () => updateTrackContext('edit-
 for (const input of [elements.permKmStart, elements.permKmEnd]) input.addEventListener('input', () => updateTrackContext('permissive'));
 elements.ldlForm.addEventListener('submit', async (event) => {
   event.preventDefault(); notify(elements.ldlMessage, ''); const lines = [...document.querySelectorAll('[name="ldl-line"]:checked')].map((item) => item.value);
-  try { const data = await api('/api/v1/cco/ldl/create', { method: 'POST', body: JSON.stringify({ requesterCode: elements.ldlRequester.value, channel: elements.ldlChannel.value, kmStart: parseKm(elements.ldlKmStart.value), kmEnd: parseKm(elements.ldlKmEnd.value), lines, workforceCount: elements.ldlWorkforce.value, start: elements.ldlStart.value, end: elements.ldlEnd.value, description: elements.ldlDescription.value }) }); elements.ldlForm.closest('dialog').close(); notify(elements.message, `${data.ldl.displayCode} emitida com sucesso.`, true); elements.ldlForm.reset(); await load(); }
+  try { const data = await api('/api/v1/cco/ldl/create', { method: 'POST', body: JSON.stringify({ requesterCode: elements.ldlRequester.value, channel: elements.ldlChannel.value, kmStart: parseKm(elements.ldlKmStart.value), kmEnd: parseKm(elements.ldlKmEnd.value), lines, workforceCount: elements.ldlWorkforce.value, start: ccoLocalToIso(elements.ldlStart.value), end: ccoLocalToIso(elements.ldlEnd.value), description: elements.ldlDescription.value }) }); elements.ldlForm.closest('dialog').close(); notify(elements.message, `${data.ldl.displayCode} emitida com sucesso.`, true); elements.ldlForm.reset(); await load(); }
   catch (error) { notify(elements.ldlMessage, `${error.message}${error.conflicts?.length ? ` Conflito: ${error.conflicts.map((x) => x.code).join(', ')}.` : ''}`); }
 });
 elements.ldlEditForm.addEventListener('submit', async (event) => {
   event.preventDefault(); notify(elements.ldlEditMessage, ''); if (!editingLdl) return;
   const lines = [...document.querySelectorAll('[name="edit-ldl-line"]:checked')].map((item) => item.value);
   try {
-    const data = await api('/api/v1/cco/ldl/update', { method: 'POST', body: JSON.stringify({ id: editingLdl.id, expectedRevision: Number(editingLdl.revision || 0), requesterCode: elements.ldlEditRequester.value, channel: elements.ldlEditChannel.value, kmStart: parseKm(elements.ldlEditKmStart.value), kmEnd: parseKm(elements.ldlEditKmEnd.value), lines, workforceCount: elements.ldlEditWorkforce.value, start: elements.ldlEditStart.value, end: elements.ldlEditEnd.value, description: elements.ldlEditDescription.value, reason: elements.ldlEditReason.value }) });
+    const data = await api('/api/v1/cco/ldl/update', { method: 'POST', body: JSON.stringify({ id: editingLdl.id, expectedRevision: Number(editingLdl.revision || 0), requesterCode: elements.ldlEditRequester.value, channel: elements.ldlEditChannel.value, kmStart: parseKm(elements.ldlEditKmStart.value), kmEnd: parseKm(elements.ldlEditKmEnd.value), lines, workforceCount: elements.ldlEditWorkforce.value, start: ccoLocalToIso(elements.ldlEditStart.value), end: ccoLocalToIso(elements.ldlEditEnd.value), description: elements.ldlEditDescription.value, reason: elements.ldlEditReason.value }) });
     elements.ldlEditDialog.close(); editingLdl = null; notify(elements.message, `${data.ldl.displayCode} atualizada para a revisão ${data.ldl.revision}. Auditoria registrada.`, true); await load();
   } catch (error) { notify(elements.ldlEditMessage, `${error.message}${error.conflicts?.length ? ` Conflito: ${error.conflicts.map((x) => x.code).join(', ')}.` : ''}`); }
 });
 elements.circulationForm.addEventListener('submit', async (event) => {
   event.preventDefault(); notify(elements.circMessage, '');
-  try { const data = await api('/api/v1/cco/circulation/create', { method: 'POST', body: JSON.stringify({ equipmentId: elements.circEquipment.value, equipmentMembers: readEquipmentMembers(elements.circEquipmentList), operatorRegistration: elements.circOperator.value, line: elements.circLine.value, direction: elements.circDirection.value, kmStart: parseKm(elements.circKmStart.value), kmEnd: parseKm(elements.circKmEnd.value), start: elements.circStart.value, end: elements.circEnd.value, composition: readComposition(elements.circCompositionList), restrictions: elements.circRestrictions.value }) }); elements.circulationForm.closest('dialog').close(); notify(elements.message, `${data.circulation.displayCode} autorizada com sucesso.`, true); elements.circulationForm.reset(); renderEquipmentFormationEditor(elements.circEquipmentList); renderCompositionEditor(elements.circCompositionList); await load(); }
+  try { const data = await api('/api/v1/cco/circulation/create', { method: 'POST', body: JSON.stringify({ equipmentId: elements.circEquipment.value, equipmentMembers: readEquipmentMembers(elements.circEquipmentList), operatorRegistration: elements.circOperator.value, line: elements.circLine.value, direction: elements.circDirection.value, kmStart: parseKm(elements.circKmStart.value), kmEnd: parseKm(elements.circKmEnd.value), start: ccoLocalToIso(elements.circStart.value), end: ccoLocalToIso(elements.circEnd.value), composition: readComposition(elements.circCompositionList), restrictions: elements.circRestrictions.value }) }); elements.circulationForm.closest('dialog').close(); notify(elements.message, `${data.circulation.displayCode} autorizada com sucesso.`, true); elements.circulationForm.reset(); renderEquipmentFormationEditor(elements.circEquipmentList); renderCompositionEditor(elements.circCompositionList); await load(); }
   catch (error) { notify(elements.circMessage, `${error.message}${error.conflicts?.length ? ` Conflito: ${error.conflicts.map((x) => x.code).join(', ')}.` : ''}`); }
 });
 elements.circEditForm.addEventListener('submit', async (event) => {
   event.preventDefault(); notify(elements.circEditMessage, ''); if (!editingCirculation) return;
   try {
-    const data = await api('/api/v1/cco/circulation/update', { method: 'POST', body: JSON.stringify({ id: editingCirculation.id, expectedRevision: Number(editingCirculation.revision || 0), equipmentId: elements.circEditEquipment.value, equipmentMembers: readEquipmentMembers(elements.circEditEquipmentList), operatorRegistration: elements.circEditOperator.value, line: elements.circEditLine.value, direction: elements.circEditDirection.value, kmStart: parseKm(elements.circEditKmStart.value), kmEnd: parseKm(elements.circEditKmEnd.value), start: elements.circEditStart.value, end: elements.circEditEnd.value, composition: readComposition(elements.circEditCompositionList), restrictions: elements.circEditRestrictions.value, reason: elements.circEditReason.value }) });
+    const data = await api('/api/v1/cco/circulation/update', { method: 'POST', body: JSON.stringify({ id: editingCirculation.id, expectedRevision: Number(editingCirculation.revision || 0), equipmentId: elements.circEditEquipment.value, equipmentMembers: readEquipmentMembers(elements.circEditEquipmentList), operatorRegistration: elements.circEditOperator.value, line: elements.circEditLine.value, direction: elements.circEditDirection.value, kmStart: parseKm(elements.circEditKmStart.value), kmEnd: parseKm(elements.circEditKmEnd.value), start: ccoLocalToIso(elements.circEditStart.value), end: ccoLocalToIso(elements.circEditEnd.value), composition: readComposition(elements.circEditCompositionList), restrictions: elements.circEditRestrictions.value, reason: elements.circEditReason.value }) });
     elements.circEditDialog.close(); editingCirculation = null; notify(elements.message, `${data.circulation.displayCode} atualizada para a revisão ${data.circulation.revision}. Auditoria registrada.`, true); await load();
   } catch (error) { notify(elements.circEditMessage, `${error.message}${error.conflicts?.length ? ` Conflito: ${error.conflicts.map((x) => x.code).join(', ')}.` : ''}`); }
 });
@@ -709,7 +720,7 @@ elements.permissiveForm.addEventListener('submit', async (event) => {
   event.preventDefault(); notify(elements.permMessage, '');
   const linkedRecords = [...document.querySelectorAll('[name="perm-record"]:checked')].map((item) => ({ kind: item.dataset.kind, id: item.value }));
   try {
-    const data = await api('/api/v1/cco/permissive/create', { method: 'POST', body: JSON.stringify({ equipmentId: elements.permEquipment.value, operatorRegistration: elements.permOperator.value, line: elements.permLine.value, kmStart: parseKm(elements.permKmStart.value), kmEnd: parseKm(elements.permKmEnd.value), start: elements.permStart.value, end: elements.permEnd.value, channel: elements.permChannel.value, description: elements.permDescription.value, justification: elements.permJustification.value, communicationConfirmed: elements.permConfirmed.checked, linkedRecords }) });
+    const data = await api('/api/v1/cco/permissive/create', { method: 'POST', body: JSON.stringify({ equipmentId: elements.permEquipment.value, operatorRegistration: elements.permOperator.value, line: elements.permLine.value, kmStart: parseKm(elements.permKmStart.value), kmEnd: parseKm(elements.permKmEnd.value), start: ccoLocalToIso(elements.permStart.value), end: ccoLocalToIso(elements.permEnd.value), channel: elements.permChannel.value, description: elements.permDescription.value, justification: elements.permJustification.value, communicationConfirmed: elements.permConfirmed.checked, linkedRecords }) });
     elements.permissiveForm.closest('dialog').close(); notify(elements.message, `${data.permissive.displayCode} emitido com limite obrigatório de 15 km/h.`, true); elements.permissiveForm.reset(); await load();
   } catch (error) { notify(elements.permMessage, `${error.message}${error.conflicts?.length ? ` Conflito: ${error.conflicts.map((x) => x.code).join(', ')}.` : ''}`); renderPermissiveConflicts(); }
 });

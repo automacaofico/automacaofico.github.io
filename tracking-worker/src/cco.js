@@ -22,8 +22,21 @@ function token(bytesLength = 24) {
 
 function clean(value, max = 200) { return String(value || '').trim().replace(/\s+/g, ' ').slice(0, max); }
 function code(value) { const result = clean(value, 16).toUpperCase(); return /^[A-Z0-9-]{3,16}$/.test(result) ? result : null; }
-function monthFrom(iso) { return new Date(iso).toISOString().slice(0, 7); }
-function iso(value) { const date = new Date(value); return Number.isFinite(date.valueOf()) ? date.toISOString() : null; }
+export const LDL_MIN_WORKFORCE = 2;
+export function iso(value) {
+  const raw = String(value || '').trim();
+  const date = new Date(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?$/.test(raw) ? `${raw}-03:00` : raw);
+  return Number.isFinite(date.valueOf()) ? date.toISOString() : null;
+}
+export function monthFrom(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.valueOf())) return null;
+  return new Date(date.valueOf() - 3 * 3600000).toISOString().slice(0, 7);
+}
+export function validLdlWorkforce(value) {
+  const workforce = Math.round(numeric(value) || 0);
+  return workforce >= LDL_MIN_WORKFORCE && workforce <= 2000;
+}
 function numeric(value) { const number = Number(value); return Number.isFinite(number) ? number : null; }
 function activeAuthorized(env, value) { return Boolean(env.OPERATOR_ADMIN_PASSWORD) && String(value || '') === env.OPERATOR_ADMIN_PASSWORD; }
 const WAGON_TYPES = ['HNS', 'HNT', 'PET', 'PNT', 'PES'];
@@ -349,7 +362,7 @@ async function createLdl(request, env, controller) {
   const kmStart = numeric(body.kmStart), kmEnd = numeric(body.kmEnd), start = iso(body.start), end = iso(body.end);
   const lines = [...new Set(Array.isArray(body.lines) ? body.lines.map((line) => clean(line)) : [])].filter((line) => OPERATIONAL_LINES.includes(line)).sort();
   const workforce = Math.round(numeric(body.workforceCount) || 0), description = clean(body.description, 500), channel = body.channel;
-  if (!requesterCode || kmStart === null || kmEnd === null || kmStart < 0 || kmEnd <= kmStart || !start || !end || end <= start || !lines.length || workforce < 1 || workforce > 2000 || description.length < 3 || !['radio', 'whatsapp'].includes(channel)) return reply(request, { ok: false, error: 'Revise solicitante, linhas, KM, horários, efetivo, serviço e canal.' }, 400);
+  if (!requesterCode || kmStart === null || kmEnd === null || kmStart < 0 || kmEnd <= kmStart || !start || !end || end <= start || !lines.length || !validLdlWorkforce(workforce) || description.length < 3 || !['radio', 'whatsapp'].includes(channel)) return reply(request, { ok: false, error: 'Revise solicitante, linhas, KM, horários, efetivo mínimo de 2 pessoas, serviço e canal.' }, 400);
   if (lines.some((line) => !lineRangeAvailable(line, kmStart, kmEnd))) return reply(request, { ok: false, error: 'Uma das linhas selecionadas não existe em todo o trecho informado. Divida a LDL conforme os limites do pátio, DTO ou linha especial.' }, 400);
   const requester = await env.DB.prepare('SELECT code FROM requesters WHERE code=? AND active=1').bind(requesterCode).first();
   if (!requester) return reply(request, { ok: false, error: 'Solicitante inativo ou não cadastrado.' }, 400);
@@ -384,7 +397,7 @@ async function updateLdl(request, env, controller) {
   const kmStart = numeric(body.kmStart), kmEnd = numeric(body.kmEnd), start = iso(body.start), end = iso(body.end), expectedRevision = Math.round(numeric(body.expectedRevision) ?? -1);
   const lines = [...new Set(Array.isArray(body.lines) ? body.lines.map((line) => clean(line)) : [])].filter((line) => OPERATIONAL_LINES.includes(line)).sort();
   const workforce = Math.round(numeric(body.workforceCount) || 0), description = clean(body.description, 500), reason = clean(body.reason, 500), channel = body.channel;
-  if (!id || !requesterCode || kmStart === null || kmEnd === null || kmStart < 0 || kmEnd <= kmStart || !start || !end || end <= start || !lines.length || workforce < 1 || workforce > 2000 || description.length < 3 || reason.length < 8 || !['radio', 'whatsapp'].includes(channel) || expectedRevision < 0) return reply(request, { ok: false, error: 'Revise responsável, linhas, KM, horários, efetivo, serviço, canal e justificativa da alteração.' }, 400);
+  if (!id || !requesterCode || kmStart === null || kmEnd === null || kmStart < 0 || kmEnd <= kmStart || !start || !end || end <= start || !lines.length || !validLdlWorkforce(workforce) || description.length < 3 || reason.length < 8 || !['radio', 'whatsapp'].includes(channel) || expectedRevision < 0) return reply(request, { ok: false, error: 'Revise responsável, linhas, KM, horários, efetivo mínimo de 2 pessoas, serviço, canal e justificativa da alteração.' }, 400);
   if (lines.some((line) => !lineRangeAvailable(line, kmStart, kmEnd))) return reply(request, { ok: false, error: 'Uma das linhas selecionadas não existe em todo o novo trecho. Divida a LDL conforme os limites da infraestrutura.' }, 400);
   const current = await env.DB.prepare('SELECT * FROM ldl WHERE id=?').bind(id).first();
   if (!current || current.status !== 'active') return reply(request, { ok: false, error: 'Somente uma LDL ativa pode ser alterada.' }, 404);
