@@ -71,7 +71,19 @@
     background-image:radial-gradient(circle,#d7deea 1px,transparent 1px);
     background-size:22px 22px;background-color:var(--bg);
   }
-  #chartCanvas{position:relative;width:3200px;height:2000px;}
+  #chartStage{position:relative;width:3200px;height:2000px;}
+  #chartCanvas{position:absolute;top:0;left:0;width:3200px;height:2000px;transform-origin:0 0;}
+  .zoom-controls{
+    position:absolute;top:14px;right:14px;z-index:30;display:flex;align-items:center;gap:4px;
+    padding:5px;background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:10px;
+    box-shadow:0 5px 18px rgba(20,42,76,.16);backdrop-filter:blur(8px);
+  }
+  .zoom-controls button{
+    min-width:34px;height:34px;border:0;border-radius:7px;background:#edf3f9;color:var(--navy);
+    font:900 18px Arial,sans-serif;cursor:pointer;transition:background .12s,color .12s,transform .12s;
+  }
+  .zoom-controls button:hover{background:var(--navy);color:#fff;transform:translateY(-1px);}
+  .zoom-controls .zoom-value{min-width:62px;font-size:11px;letter-spacing:.2px;}
   svg#lines{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
   svg#lines path{fill:none;stroke:var(--navy);stroke-width:2;opacity:.55;}
   svg#lines path.ghost{stroke:var(--orange);stroke-width:2.5;stroke-dasharray:6 4;opacity:.9;}
@@ -316,9 +328,16 @@
 <main>
   <div class="panel active" id="panel-chart">
     <div id="chartScroll">
-      <div id="chartCanvas">
-        <svg id="lines"></svg>
+      <div id="chartStage">
+        <div id="chartCanvas">
+          <svg id="lines"></svg>
+        </div>
       </div>
+    </div>
+    <div class="zoom-controls" aria-label="Controles de zoom">
+      <button type="button" id="zoomOut" title="Diminuir zoom" aria-label="Diminuir zoom">&minus;</button>
+      <button type="button" id="zoomReset" class="zoom-value" title="Restaurar zoom para 100%" aria-label="Restaurar zoom para 100%">100%</button>
+      <button type="button" id="zoomIn" title="Aumentar zoom" aria-label="Aumentar zoom">+</button>
     </div>
     <div class="canvas-hint">
       Clique duas vezes num campo para editar. Arraste um balão e solte <b>sobre outro</b> para reconectar a hierarquia (ou use o campo "superior"); solte em área vazia para só reposicionar. Use <b>+</b> no balão para adicionar subordinado, e <b>×</b> para excluir (filhos sobem para o superior).
@@ -885,7 +904,31 @@
 
   // ---------- render geral ----------
   const canvas = document.getElementById('chartCanvas');
+  const chartStage = document.getElementById('chartStage');
+  const chartScroll = document.getElementById('chartScroll');
   const svg = document.getElementById('lines');
+  const ZOOM_MIN = .4;
+  const ZOOM_MAX = 1.8;
+  const ZOOM_STEP = .1;
+  let chartWidth = 3200;
+  let chartHeight = 2000;
+  let zoomLevel = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number(localStorage.getItem('fico_organograma_zoom')) || 1));
+
+  function applyChartZoom(nextZoom, preserveCenter = true){
+    const previousZoom = zoomLevel;
+    const centerX = (chartScroll.scrollLeft + chartScroll.clientWidth / 2) / previousZoom;
+    const centerY = (chartScroll.scrollTop + chartScroll.clientHeight / 2) / previousZoom;
+    zoomLevel = Math.round(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, nextZoom)) * 10) / 10;
+    canvas.style.transform = `scale(${zoomLevel})`;
+    chartStage.style.width = (chartWidth * zoomLevel) + 'px';
+    chartStage.style.height = (chartHeight * zoomLevel) + 'px';
+    document.getElementById('zoomReset').textContent = Math.round(zoomLevel * 100) + '%';
+    localStorage.setItem('fico_organograma_zoom', String(zoomLevel));
+    if(preserveCenter){
+      chartScroll.scrollLeft = centerX * zoomLevel - chartScroll.clientWidth / 2;
+      chartScroll.scrollTop = centerY * zoomLevel - chartScroll.clientHeight / 2;
+    }
+  }
 
   function render(){
     normalizeRelationshipState(state);
@@ -905,11 +948,14 @@
       maxY = Math.max(maxY, n.y+220);
       canvas.appendChild(buildNodeEl(n));
     });
-    canvas.style.width = maxX+'px';
-    canvas.style.height = maxY+'px';
+    chartWidth = maxX;
+    chartHeight = maxY;
+    canvas.style.width = chartWidth+'px';
+    canvas.style.height = chartHeight+'px';
     svg.setAttribute('width', maxX);
     svg.setAttribute('height', maxY);
     drawLines();
+    applyChartZoom(zoomLevel, false);
   }
 
   function buildNodeEl(n){
@@ -1032,8 +1078,8 @@
     const n = byId(id);
     dragCtx = {
       id, el,
-      offsetX: e.clientX + scrollEl.scrollLeft - rect.left - n.x,
-      offsetY: e.clientY + scrollEl.scrollTop - rect.top - n.y,
+      offsetX: (e.clientX + scrollEl.scrollLeft - rect.left) / zoomLevel - n.x,
+      offsetY: (e.clientY + scrollEl.scrollTop - rect.top) / zoomLevel - n.y,
       moved:false, targetId:null
     };
     el.classList.add('dragging');
@@ -1047,8 +1093,8 @@
     const scrollEl = document.getElementById('chartScroll');
     const rect = scrollEl.getBoundingClientRect();
     const n = byId(dragCtx.id);
-    n.x = Math.max(0, e.clientX + scrollEl.scrollLeft - rect.left - dragCtx.offsetX);
-    n.y = Math.max(0, e.clientY + scrollEl.scrollTop - rect.top - dragCtx.offsetY);
+    n.x = Math.max(0, (e.clientX + scrollEl.scrollLeft - rect.left) / zoomLevel - dragCtx.offsetX);
+    n.y = Math.max(0, (e.clientY + scrollEl.scrollTop - rect.top) / zoomLevel - dragCtx.offsetY);
     dragCtx.el.style.left = n.x+'px';
     dragCtx.el.style.top = n.y+'px';
 
@@ -1714,6 +1760,16 @@
     state = seedData();
     save(); render();
   });
+
+  // ---------- zoom do quadro de hierarquia ----------
+  document.getElementById('zoomOut').addEventListener('click', ()=>applyChartZoom(zoomLevel - ZOOM_STEP));
+  document.getElementById('zoomIn').addEventListener('click', ()=>applyChartZoom(zoomLevel + ZOOM_STEP));
+  document.getElementById('zoomReset').addEventListener('click', ()=>applyChartZoom(1));
+  chartScroll.addEventListener('wheel', e=>{
+    if(!e.ctrlKey) return;
+    e.preventDefault();
+    applyChartZoom(zoomLevel + (e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP));
+  }, {passive:false});
 
   // ---------- tabs ----------
   document.querySelectorAll('.tab').forEach(tab=>{
