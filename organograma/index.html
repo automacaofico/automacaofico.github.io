@@ -171,6 +171,9 @@
   .field-row .computed-val{display:flex;align-items:center;min-height:30px;background:#edf4fb;border:1px solid #d7e5f3;border-radius:6px;padding:5px 7px;color:var(--navy);font-size:12px;font-weight:900;}
   .linked-source{display:block;margin-top:3px;color:var(--blue);font-size:9.5px;font-weight:800;letter-spacing:.2px;}
   .linked-source.warn{color:#b36b00;}
+  .contract-links{display:grid;gap:4px;max-height:130px;overflow:auto;background:#f8fafc;border:1px solid #dbe3ee;border-radius:7px;padding:6px;}
+  .contract-option{display:flex!important;align-items:flex-start;gap:6px;font-size:11px!important;color:var(--navy)!important;text-transform:none!important;letter-spacing:0!important;cursor:pointer;}
+  .contract-option input{margin:1px 0 0;accent-color:var(--blue);}
   .list-block{margin-top:9px;}
   .list-block .lbl{font-size:9.5px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.3px;margin-bottom:5px;}
 
@@ -567,6 +570,9 @@
     });
 
     targetState.carros.forEach(car=>{
+      const legacyContractIds = Array.isArray(car.contratoIds) ? car.contratoIds : (car.contratoId ? [car.contratoId] : []);
+      car.contratoIds = [...new Set(legacyContractIds.filter(id=>targetState.contratos.some(contract=>contract.id===id)))];
+      delete car.contratoId;
       const people = Array.isArray(car.pessoas) ? car.pessoas : [];
       car.pessoas = people.map(person=>{
         if(person && typeof person === 'object'){
@@ -1110,7 +1116,7 @@
         if(!confirm('Excluir este contrato?')) return;
         snapshot();
         state.contratos = state.contratos.filter(x=>x.id!==c.id);
-        state.carros.forEach(car=>{ if(car.contratoId===c.id) car.contratoId=undefined; });
+        state.carros.forEach(car=>{ car.contratoIds=(car.contratoIds||[]).filter(id=>id!==c.id); });
         save(); renderContratos(); renderCarros();
       });
       grid.appendChild(card);
@@ -1185,7 +1191,7 @@
         <div class="ititle" contenteditable="true" data-ph="ex: INFRA01 / SUPER01 / GER01">${escapeHtml(c.codigo||'')}</div>
         <div class="field-row"><label>Local / pacote dedicado</label><div class="val" contenteditable="true" data-ph="ex: Pacote 02" data-f="local">${escapeHtml(c.local||'')}</div></div>
         <div class="field-row"><label>Cidade base</label><div class="val" contenteditable="true" data-ph="cidade" data-f="cidade">${escapeHtml(c.cidade||'')}</div></div>
-        <div class="field-row"><label>Contrato vinculado</label><select class="val contratosel"></select></div>
+        <div class="field-row"><label>Contratos vinculados</label><div class="contract-links"></div><small class="linked-source contract-count"></small></div>
         <div class="list-block">
           <div class="lbl">Pessoas atendidas</div>
           <small class="linked-source">Nomes vinculados à Hierarquia</small>
@@ -1197,26 +1203,39 @@
       wireEditable(carTitle, c, 'codigo', renderCarrosSummary);
       card.querySelectorAll('.val[contenteditable]').forEach(v=>wireEditable(v, c, v.dataset.f, renderCarrosSummary));
 
-      const contratoSel = card.querySelector('.contratosel');
-      contratoSel.addEventListener('pointerdown', e=>e.stopPropagation());
-      const noneOpt = document.createElement('option');
-      noneOpt.value = '';
-      noneOpt.textContent = '— nenhum —';
-      contratoSel.appendChild(noneOpt);
-      state.contratos.forEach(ct=>{
-        const opt = document.createElement('option');
-        opt.value = ct.id;
-        opt.textContent = ct.nome || '(sem nome)';
-        if(ct.id === c.contratoId) opt.selected = true;
-        contratoSel.appendChild(opt);
-      });
-      if(!c.contratoId) noneOpt.selected = true;
-      contratoSel.addEventListener('change', ()=>{
-        snapshot();
-        c.contratoId = contratoSel.value || undefined;
-        save();
-        renderCarros();
-      });
+      const contractLinks = card.querySelector('.contract-links');
+      const contractCount = card.querySelector('.contract-count');
+      const updateContractCount = ()=>{
+        const count = (c.contratoIds||[]).length;
+        contractCount.textContent = count ? `${count} contrato(s) vinculado(s)` : 'Nenhum contrato vinculado';
+        contractCount.classList.toggle('warn',!count);
+      };
+      if(!state.contratos.length){
+        contractLinks.innerHTML = '<span style="font-size:11px;color:var(--muted)">Cadastre um contrato primeiro.</span>';
+      }else{
+        state.contratos.forEach(contract=>{
+          const label = document.createElement('label');
+          label.className = 'contract-option';
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.value = contract.id;
+          checkbox.checked = (c.contratoIds||[]).includes(contract.id);
+          const text = document.createElement('span');
+          text.textContent = contract.nome || '(sem nome)';
+          checkbox.addEventListener('change',()=>{
+            snapshot();
+            const selected = new Set(c.contratoIds||[]);
+            checkbox.checked ? selected.add(contract.id) : selected.delete(contract.id);
+            c.contratoIds = [...selected];
+            updateContractCount();
+            save();
+            renderCarrosSummary();
+          });
+          label.append(checkbox,text);
+          contractLinks.appendChild(label);
+        });
+      }
+      updateContractCount();
 
       const peopleEl = card.querySelector('.people');
       c.pessoas = c.pessoas || [];
@@ -1259,7 +1278,7 @@
     });
     grid.appendChild(makeAddCard('+ novo carro', ()=>{
       snapshot();
-      state.carros.push({id:uid('cr'), codigo:'', local:'', cidade:'', contratoId:undefined, pessoas:[{nodeId:'',legacyName:''}]});
+      state.carros.push({id:uid('cr'), codigo:'', local:'', cidade:'', contratoIds:[], pessoas:[{nodeId:'',legacyName:''}]});
       save(); renderCarros();
       setTimeout(()=>{
         const els = grid.querySelectorAll('.ititle');
@@ -1278,7 +1297,7 @@
     }
     let html = `<tr><th>Contrato</th><th>Cobertura</th><th>Carros vinculados</th><th>Local / pacote</th><th>Cidade base</th><th>Pessoas vinculadas</th></tr>`;
     state.contratos.forEach(ct=>{
-      const carrosDoContrato = state.carros.filter(c=>c.contratoId===ct.id);
+      const carrosDoContrato = state.carros.filter(c=>(c.contratoIds||[]).includes(ct.id));
       const ok = carrosDoContrato.length > 0;
       const codigos = carrosDoContrato.map(c=>escapeHtml(c.codigo||'(sem código)')).join(', ');
       const locais = [...new Set(carrosDoContrato.map(c=>c.local).filter(Boolean))];
@@ -1293,7 +1312,7 @@
         <td>${people.length ? people.map(escapeHtml).join(', ') : '—'}</td>
       </tr>`;
     });
-    const semContrato = state.carros.filter(c=>!c.contratoId);
+    const semContrato = state.carros.filter(c=>!(c.contratoIds||[]).length);
     if(semContrato.length){
       const people = [...new Set(semContrato.flatMap(c=>(c.pessoas||[]).map(person=>personLabel(person.nodeId, person.legacyName)).filter(name=>name!=='—')))];
       const locais = [...new Set(semContrato.map(c=>c.local).filter(Boolean))];
