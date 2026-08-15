@@ -163,6 +163,9 @@
   .field-row .val{font-size:12.5px;outline:none;border-bottom:1px dashed #e2e6ee;padding:3px 2px;color:var(--text);min-height:16px;}
   .field-row .val:empty:before{content:attr(data-ph);color:#b7bfcf;}
   .field-row .val:focus{border-bottom-color:var(--orange);}
+  .field-row select.val{width:100%;background:#f8fafc;border:1px solid #dbe3ee;border-radius:6px;padding:6px;color:var(--navy);font-weight:700;}
+  .linked-source{display:block;margin-top:3px;color:var(--blue);font-size:9.5px;font-weight:800;letter-spacing:.2px;}
+  .linked-source.warn{color:#b36b00;}
   .list-block{margin-top:9px;}
   .list-block .lbl{font-size:9.5px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.3px;margin-bottom:5px;}
 
@@ -172,6 +175,7 @@
   }
   .member-row .m:empty:before{content:"nome";color:#b7bfcf;}
   .member-row .m:focus{border-bottom-color:var(--orange);}
+  .member-row select.m{background:#f8fafc;border:1px solid #dbe3ee;border-radius:6px;padding:6px;min-width:0;}
   .member-row .rm{color:#c0392b;font-size:13px;cursor:pointer;opacity:.6;font-weight:800;}
   .member-row .rm:hover{opacity:1;}
 
@@ -376,6 +380,7 @@
     sharedDirty = false;
     if(data.state){
       state = data.state;
+      normalizeRelationshipState(state);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       render();
       setSaveStatus('sincronizado para todos', '#7CFC9A');
@@ -479,7 +484,7 @@
 
     const carros = [];
     for(let i=1;i<=8;i++){
-      carros.push({id:uid('cr'), codigo:'', local:'', cidade:'', pessoas:['']});
+      carros.push({id:uid('cr'), codigo:'', local:'', cidade:'', pessoas:[{nodeId:'',legacyName:''}]});
     }
 
     // governança é derivada automaticamente de "nodes" (ver syncGovernanca)
@@ -512,6 +517,7 @@
 
   // ---------- estado ----------
   let state = load() || seedData();
+  normalizeRelationshipState(state);
   let history = [];
 
   function load(){
@@ -524,6 +530,44 @@
       if(!parsed.governanca) parsed.governanca = [];
       return parsed;
     }catch(e){ return null; }
+  }
+
+  // A hierarquia é a fonte única de pessoas para todas as demais abas.
+  function normalizeName(value){
+    return String(value || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  }
+
+  function findNodeIdByName(name, targetState = state){
+    const normalized = normalizeName(name);
+    if(!normalized) return '';
+    return targetState.nodes.find(node=>normalizeName(node.name)===normalized)?.id || '';
+  }
+
+  function normalizeRelationshipState(targetState){
+    targetState.nodes = Array.isArray(targetState.nodes) ? targetState.nodes : [];
+    targetState.contratos = Array.isArray(targetState.contratos) ? targetState.contratos : [];
+    targetState.carros = Array.isArray(targetState.carros) ? targetState.carros : [];
+    targetState.governanca = Array.isArray(targetState.governanca) ? targetState.governanca : [];
+
+    targetState.contratos.forEach(contract=>{
+      if(!contract.gestorNodeId && contract.gestor) contract.gestorNodeId = findNodeIdByName(contract.gestor, targetState);
+      if(!contract.fiscalNodeId && contract.fiscal) contract.fiscalNodeId = findNodeIdByName(contract.fiscal, targetState);
+      if(contract.gestorNodeId) contract.gestor = '';
+      if(contract.fiscalNodeId) contract.fiscal = '';
+    });
+
+    targetState.carros.forEach(car=>{
+      const people = Array.isArray(car.pessoas) ? car.pessoas : [];
+      car.pessoas = people.map(person=>{
+        if(person && typeof person === 'object'){
+          const nodeId = person.nodeId && targetState.nodes.some(node=>node.id===person.nodeId) ? person.nodeId : '';
+          return {nodeId, legacyName:nodeId ? '' : String(person.legacyName || '').trim()};
+        }
+        const legacyName = String(person || '').trim();
+        const nodeId = findNodeIdByName(legacyName, targetState);
+        return {nodeId, legacyName:nodeId ? '' : legacyName};
+      });
+    });
   }
 
   function snapshot(){
@@ -579,6 +623,43 @@
   }
   function uid(prefix){ return prefix + '_' + Math.random().toString(36).slice(2,9); }
 
+  function personLabel(nodeId, legacyName = ''){
+    const node = nodeId ? byId(nodeId) : null;
+    return node ? (node.name || '(sem nome)') : (legacyName || '—');
+  }
+
+  function populatePersonSelect(select, nodeId, legacyName = ''){
+    const empty = document.createElement('option');
+    empty.value = '';
+    empty.textContent = '— selecionar da hierarquia —';
+    select.appendChild(empty);
+    state.nodes
+      .slice()
+      .sort((a,b)=>(a.name||'').localeCompare(b.name||'', 'pt-BR'))
+      .forEach(node=>{
+        const option = document.createElement('option');
+        option.value = node.id;
+        option.textContent = node.name || '(sem nome)';
+        option.selected = node.id === nodeId;
+        select.appendChild(option);
+      });
+    if(!nodeId && legacyName){
+      const legacy = document.createElement('option');
+      legacy.value = '__legacy__';
+      legacy.textContent = `⚠ ${legacyName} · vincular à hierarquia`;
+      legacy.selected = true;
+      select.appendChild(legacy);
+    }else if(!nodeId){
+      empty.selected = true;
+    }
+  }
+
+  function refreshLinkedPanels(){
+    renderContratos();
+    renderCarros();
+    renderGovernanca();
+  }
+
   function escapeHtml(s){
     return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   }
@@ -631,6 +712,7 @@
   const svg = document.getElementById('lines');
 
   function render(){
+    normalizeRelationshipState(state);
     renderChart();
     renderContratos();
     renderCarros();
@@ -685,6 +767,7 @@
         const node = byId(n.id);
         node[fieldEl.dataset.field] = fieldEl.textContent.trim();
         save();
+        if(['name','role','front'].includes(fieldEl.dataset.field)) refreshLinkedPanels();
       });
       fieldEl.addEventListener('keydown', e=>{
         if(e.key==='Enter'){ e.preventDefault(); fieldEl.blur(); }
@@ -857,12 +940,22 @@
     if(!confirm('Excluir este balão? Os subordinados diretos sobem para o superior dele.')) return;
     snapshot();
     const n = byId(id);
+    const preservedName = n?.name || '';
+    state.contratos.forEach(contract=>{
+      if(contract.gestorNodeId===id){ contract.gestorNodeId=''; contract.gestor=preservedName; }
+      if(contract.fiscalNodeId===id){ contract.fiscalNodeId=''; contract.fiscal=preservedName; }
+    });
+    state.carros.forEach(car=>{
+      (car.pessoas||[]).forEach(person=>{
+        if(person.nodeId===id){ person.nodeId=''; person.legacyName=preservedName; }
+      });
+    });
     const kids = childrenOf(id);
     kids.forEach(k=>{ k.parentId = n.parentId; });
     state.nodes = state.nodes.filter(x=>x.id!==id);
     layoutTree(state.nodes);
     save();
-    renderChart();
+    render();
   }
 
   // ---------- CONTRATOS ----------
@@ -876,23 +969,40 @@
         <div class="idel" title="Excluir contrato">×</div>
         <div class="ititle" contenteditable="true" data-ph="nome do contrato">${escapeHtml(c.nome||'')}</div>
         <div class="field-row"><label>Contratada</label><div class="val" contenteditable="true" data-ph="empresa" data-f="contratada">${escapeHtml(c.contratada||'')}</div></div>
-        <div class="field-row"><label>Gestor do contrato</label><div class="val" contenteditable="true" data-ph="nome do gestor" data-f="gestor">${escapeHtml(c.gestor||'')}</div></div>
-        <div class="field-row"><label>Fiscal do contrato</label><div class="val" contenteditable="true" data-ph="nome do fiscal" data-f="fiscal">${escapeHtml(c.fiscal||'')}</div></div>
+        <div class="field-row"><label>Gestor do contrato</label><select class="val personsel" data-ref="gestor"></select><small class="linked-source">Vinculado à Hierarquia</small></div>
+        <div class="field-row"><label>Fiscal do contrato</label><select class="val personsel" data-ref="fiscal"></select><small class="linked-source">Vinculado à Hierarquia</small></div>
       `;
-      wireEditable(card.querySelector('.ititle'), c, 'nome');
-      card.querySelectorAll('.val').forEach(v=>wireEditable(v, c, v.dataset.f));
+      const contractTitle = card.querySelector('.ititle');
+      wireEditable(contractTitle, c, 'nome');
+      contractTitle.addEventListener('blur', renderCarros);
+      card.querySelectorAll('.val[contenteditable]').forEach(v=>wireEditable(v, c, v.dataset.f));
+      card.querySelectorAll('.personsel').forEach(select=>{
+        const ref = select.dataset.ref;
+        const idField = `${ref}NodeId`;
+        populatePersonSelect(select, c[idField], c[ref]);
+        if(!c[idField] && c[ref]) select.nextElementSibling.classList.add('warn');
+        select.addEventListener('change', ()=>{
+          if(select.value==='__legacy__') return;
+          snapshot();
+          c[idField] = select.value || '';
+          c[ref] = '';
+          save();
+          renderContratos();
+        });
+      });
       card.querySelector('.idel').addEventListener('click', ()=>{
         if(!confirm('Excluir este contrato?')) return;
         snapshot();
         state.contratos = state.contratos.filter(x=>x.id!==c.id);
-        save(); renderContratos();
+        state.carros.forEach(car=>{ if(car.contratoId===c.id) car.contratoId=undefined; });
+        save(); renderContratos(); renderCarros();
       });
       grid.appendChild(card);
     });
     grid.appendChild(makeAddCard('+ novo contrato', ()=>{
       snapshot();
-      state.contratos.push({id:uid('ct'), nome:'', contratada:'', gestor:'', fiscal:''});
-      save(); renderContratos();
+      state.contratos.push({id:uid('ct'), nome:'', contratada:'', gestorNodeId:'', fiscalNodeId:'', gestor:'', fiscal:''});
+      save(); renderContratos(); renderCarros();
       setTimeout(()=>{
         const els = grid.querySelectorAll('.ititle');
         if(els.length) els[els.length-1].focus();
@@ -913,8 +1023,8 @@
       html += `<tr>
         <td>${escapeHtml(c.nome||'(sem nome)')}</td>
         <td>${escapeHtml(c.contratada||'—')}</td>
-        <td>${escapeHtml(c.gestor||'—')}</td>
-        <td>${escapeHtml(c.fiscal||'—')}</td>
+        <td>${escapeHtml(personLabel(c.gestorNodeId, c.gestor))}</td>
+        <td>${escapeHtml(personLabel(c.fiscalNodeId, c.fiscal))}</td>
       </tr>`;
     });
     table.innerHTML = html;
@@ -935,11 +1045,14 @@
         <div class="field-row"><label>Contrato vinculado</label><select class="val contratosel"></select></div>
         <div class="list-block">
           <div class="lbl">Pessoas atendidas</div>
+          <small class="linked-source">Nomes vinculados à Hierarquia</small>
           <div class="people"></div>
           <div class="addlink addperson">+ adicionar pessoa</div>
         </div>
       `;
-      wireEditable(card.querySelector('.ititle'), c, 'codigo');
+      const carTitle = card.querySelector('.ititle');
+      wireEditable(carTitle, c, 'codigo');
+      carTitle.addEventListener('blur', renderCarrosSummary);
       card.querySelectorAll('.val[contenteditable]').forEach(v=>wireEditable(v, c, v.dataset.f));
 
       const contratoSel = card.querySelector('.contratosel');
@@ -965,18 +1078,31 @@
 
       const peopleEl = card.querySelector('.people');
       c.pessoas = c.pessoas || [];
-      c.pessoas.forEach((p,idx)=>{
-        peopleEl.appendChild(buildListRow(p,
-          (val)=>{ c.pessoas[idx]=val; save(); },
-          ()=>{ snapshot(); c.pessoas.splice(idx,1); save(); renderCarros(); }
-        ));
+      c.pessoas.forEach((person,idx)=>{
+        const row = document.createElement('div');
+        row.className = 'member-row';
+        row.innerHTML = `<select class="m" aria-label="Pessoa atendida"></select><div class="rm" title="Remover vínculo">×</div>`;
+        const select = row.querySelector('select');
+        populatePersonSelect(select, person.nodeId, person.legacyName);
+        select.addEventListener('change', ()=>{
+          if(select.value==='__legacy__') return;
+          snapshot();
+          person.nodeId = select.value || '';
+          person.legacyName = '';
+          save();
+          renderCarros();
+        });
+        row.querySelector('.rm').addEventListener('click', ()=>{
+          snapshot(); c.pessoas.splice(idx,1); save(); renderCarros();
+        });
+        peopleEl.appendChild(row);
       });
       card.querySelector('.addperson').addEventListener('click', ()=>{
         snapshot();
-        c.pessoas.push('');
+        c.pessoas.push({nodeId:'',legacyName:''});
         save(); renderCarros();
         setTimeout(()=>{
-          const rows = card.querySelectorAll('.people .m');
+          const rows = card.querySelectorAll('.people select');
           if(rows.length) rows[rows.length-1].focus();
         },30);
       });
@@ -991,7 +1117,7 @@
     });
     grid.appendChild(makeAddCard('+ novo carro', ()=>{
       snapshot();
-      state.carros.push({id:uid('cr'), codigo:'', local:'', cidade:'', contratoId:undefined, pessoas:['']});
+      state.carros.push({id:uid('cr'), codigo:'', local:'', cidade:'', contratoId:undefined, pessoas:[{nodeId:'',legacyName:''}]});
       save(); renderCarros();
       setTimeout(()=>{
         const els = grid.querySelectorAll('.ititle');
@@ -1008,20 +1134,23 @@
       table.innerHTML = `<tr><td class="empty-row">Cadastre contratos na aba "Contratos" para ver a cobertura aqui.</td></tr>`;
       return;
     }
-    let html = `<tr><th>Contrato</th><th>Cobertura</th><th>Carros vinculados</th></tr>`;
+    let html = `<tr><th>Contrato</th><th>Cobertura</th><th>Carros vinculados</th><th>Pessoas vinculadas</th></tr>`;
     state.contratos.forEach(ct=>{
       const carrosDoContrato = state.carros.filter(c=>c.contratoId===ct.id);
       const ok = carrosDoContrato.length > 0;
       const codigos = carrosDoContrato.map(c=>escapeHtml(c.codigo||'(sem código)')).join(', ');
+      const people = [...new Set(carrosDoContrato.flatMap(c=>(c.pessoas||[]).map(person=>personLabel(person.nodeId, person.legacyName)).filter(name=>name!=='—')))];
       html += `<tr>
         <td>${escapeHtml(ct.nome||'(sem nome)')}</td>
         <td><span class="badge ${ok?'ok':'warn'}">${ok? carrosDoContrato.length+' carro(s)' : 'sem carro'}</span></td>
         <td>${ok ? codigos : '—'}</td>
+        <td>${people.length ? people.map(escapeHtml).join(', ') : '—'}</td>
       </tr>`;
     });
     const semContrato = state.carros.filter(c=>!c.contratoId);
     if(semContrato.length){
-      html += `<tr><td colspan="2">Carros sem contrato vinculado</td><td>${semContrato.map(c=>escapeHtml(c.codigo||'(sem código)')).join(', ')}</td></tr>`;
+      const people = [...new Set(semContrato.flatMap(c=>(c.pessoas||[]).map(person=>personLabel(person.nodeId, person.legacyName)).filter(name=>name!=='—')))];
+      html += `<tr><td colspan="2">Carros sem contrato vinculado</td><td>${semContrato.map(c=>escapeHtml(c.codigo||'(sem código)')).join(', ')}</td><td>${people.length ? people.map(escapeHtml).join(', ') : '—'}</td></tr>`;
     }
     table.innerHTML = html;
   }
@@ -1048,6 +1177,8 @@
       card.className = 'info-card w300';
       card.innerHTML = `
         <div class="ititle" style="cursor:default;">${escapeHtml(nomePessoa)}</div>
+        <div class="field-row"><label>Função na hierarquia</label><div class="val" style="border-bottom:0;">${escapeHtml(node?.role || '—')}</div><small class="linked-source">Atualização automática</small></div>
+        <div class="field-row"><label>Frente / pacote</label><div class="val" style="border-bottom:0;">${escapeHtml(node?.front || '—')}</div></div>
         <div class="field-row"><label>Responsabilidade</label><div class="val" contenteditable="true" data-ph="ex: coordenação da frente X" data-f="responsabilidade">${escapeHtml(g.responsabilidade||'')}</div></div>
         <div class="list-block">
           <div class="lbl">Entregas obrigatórias</div>
@@ -1060,7 +1191,7 @@
           <div class="addlink addreuniao">+ adicionar reunião</div>
         </div>
       `;
-      card.querySelectorAll('.val').forEach(v=>wireEditable(v, g, v.dataset.f));
+      card.querySelectorAll('.val[contenteditable]').forEach(v=>wireEditable(v, g, v.dataset.f));
 
       const entregasEl = card.querySelector('.entregas');
       g.entregas = g.entregas || [];
@@ -1227,6 +1358,7 @@
         if(!parsed.governanca) parsed.governanca = [];
         snapshot();
         state = parsed;
+        normalizeRelationshipState(state);
         save(); render();
       }catch(err){
         alert('Não foi possível importar: ' + err.message);
