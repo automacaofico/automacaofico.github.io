@@ -147,7 +147,7 @@
   }
   .info-card.w220{width:220px;}
   .info-card.w300{width:300px;}
-  .info-card.wContract{width:min(620px,calc(100vw - 64px));}
+  .info-card.wContract{width:min(560px,calc(100vw - 64px));}
   .contract-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 14px;}
   .contract-fields .full{grid-column:1/-1;}
   .info-card .ititle{
@@ -218,6 +218,22 @@
   .badge{display:inline-block;font-size:10.5px;font-weight:800;padding:2px 9px;border-radius:20px;white-space:nowrap;}
   .badge.ok{background:#dff5e6;color:#1f7a3f;}
   .badge.warn{background:#ffe2b0;color:#7a4b00;}
+  .health-ok{background:#dff5e6!important;color:#1f7a3f!important;border-color:#a8dfba!important;}
+  .health-warn{background:#fff0cf!important;color:#8a5700!important;border-color:#f2c46d!important;}
+  .health-critical{background:#ffe1df!important;color:#a52722!important;border-color:#eeaaa6!important;}
+
+  .charts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:16px;padding-bottom:8px;}
+  .chart-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:0 2px 8px rgba(20,42,76,.06);min-height:150px;}
+  .chart-card h4{margin:0;color:var(--navy);font-size:13px;}
+  .chart-card .chart-sub{margin:3px 0 12px;color:var(--muted);font-size:10.5px;line-height:1.35;}
+  .bar-list{display:grid;gap:9px;}
+  .bar-head{display:flex;justify-content:space-between;gap:10px;margin-bottom:3px;font-size:11px;color:var(--text);}
+  .bar-head strong{color:var(--navy);white-space:nowrap;}
+  .bar-track{height:10px;border-radius:999px;background:#e7ecf3;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(20,42,76,.05);}
+  .bar-fill{height:100%;min-width:2px;border-radius:999px;background:var(--blue);}
+  .bar-fill.secondary{background:var(--orange);}
+  .chart-empty{display:flex;align-items:center;justify-content:center;min-height:90px;color:var(--muted);font-size:11.5px;text-align:center;}
+  .app-footer{flex:0 0 auto;background:var(--navy);color:rgba(255,255,255,.82);text-align:center;padding:6px 12px;font-size:10.5px;letter-spacing:.2px;}
 
   /* ===================== GATE DE SENHA ===================== */
   #gate{
@@ -275,7 +291,7 @@
   <img id="logoImg" alt="FICO">
   <div class="titles">
     <h1>Organograma Funcional</h1>
-    <div class="sub" contenteditable="true" id="subtitle">Reunião de equipe — editar data/observação aqui</div>
+    <div class="sub" id="lastUpdated">Última versão salva: carregando…</div>
   </div>
   <div class="spacer"></div>
   <div class="toolbar">
@@ -315,6 +331,7 @@
       <div class="summary-block">
         <h3>Quadro resumo — contratos</h3>
         <div class="summary-wrap"><table class="summary-table" id="contratosSummary"></table></div>
+        <div class="charts-grid" id="contratosCharts"></div>
       </div>
     </div>
   </div>
@@ -325,6 +342,7 @@
       <div class="summary-block">
         <h3>Quadro resumo — cobertura de carro por contrato</h3>
         <div class="summary-wrap"><table class="summary-table" id="carrosSummary"></table></div>
+        <div class="charts-grid" id="carrosCharts"></div>
       </div>
     </div>
   </div>
@@ -332,9 +350,15 @@
   <div class="panel" id="panel-governanca">
     <div class="panel-scroll">
       <div class="cards-grid" id="governancaGrid"></div>
+      <div class="summary-block">
+        <h3>Quadro resumo — governança</h3>
+        <div class="summary-wrap"><table class="summary-table" id="governancaSummary"></table></div>
+        <div class="charts-grid" id="governancaCharts"></div>
+      </div>
     </div>
   </div>
 </main>
+<footer class="app-footer">Desenvolvido por Thyago Viégas</footer>
 </div><!-- /#app -->
 
 <input type="file" id="importFile" accept="application/json" style="display:none">
@@ -354,6 +378,7 @@
     : 'https://fico-tracking-api.automacaofico.workers.dev';
   let syncToken = sessionStorage.getItem(TOKEN_KEY) || '';
   let sharedRevision = 0;
+  let sharedUpdatedAt = '';
   let sharedReady = false;
   let sharedDirty = false;
   let sharedSaveTimer;
@@ -386,9 +411,21 @@
     dot.style.boxShadow = `0 0 6px ${glow}`;
   }
 
+  function renderLastUpdated(){
+    const element = document.getElementById('lastUpdated');
+    if(!sharedUpdatedAt){
+      element.textContent = 'Última versão salva: nenhuma versão compartilhada';
+      return;
+    }
+    const normalized = sharedUpdatedAt.includes('T') ? sharedUpdatedAt : sharedUpdatedAt.replace(' ','T')+'Z';
+    const date = new Date(normalized);
+    element.textContent = `Última versão salva: ${Number.isNaN(date.valueOf()) ? sharedUpdatedAt : date.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}`;
+  }
+
   async function loadShared(){
     const data = await api('/api/v1/organogram/state');
     sharedRevision = Number(data.revision || 0);
+    sharedUpdatedAt = data.updatedAt || '';
     sharedReady = true;
     sharedDirty = false;
     if(data.state){
@@ -401,6 +438,7 @@
       sharedDirty = true;
       setSaveStatus('versão local · clique em Salvar', '#F89B32');
     }
+    renderLastUpdated();
     return data;
   }
 
@@ -455,6 +493,8 @@
           keepalive
         });
         sharedRevision = Number(data.revision);
+        sharedUpdatedAt = data.updatedAt || new Date().toISOString();
+        renderLastUpdated();
         setSaveStatus('salvo para todos', '#7CFC9A');
       }catch(error){
         if(error.status === 409){
@@ -737,6 +777,55 @@
     return hasNumericValue(value) ? `${numericValue(value).toLocaleString('pt-BR')} dias` : '—';
   }
 
+  function alertClass(percent){
+    if(percent===null || !Number.isFinite(percent)) return '';
+    if(percent < 25) return 'health-critical';
+    if(percent < 50) return 'health-warn';
+    return 'health-ok';
+  }
+
+  function appendBarChart(container,title,subtitle,items,{percentage=false,secondary=false}={}){
+    const card = document.createElement('section');
+    card.className = 'chart-card';
+    const heading = document.createElement('h4');
+    heading.textContent = title;
+    const sub = document.createElement('div');
+    sub.className = 'chart-sub';
+    sub.textContent = subtitle;
+    card.append(heading,sub);
+    if(!items.length){
+      const empty = document.createElement('div');
+      empty.className = 'chart-empty';
+      empty.textContent = 'Dados insuficientes para gerar este gráfico.';
+      card.appendChild(empty);
+      container.appendChild(card);
+      return;
+    }
+    const max = percentage ? 100 : Math.max(...items.map(item=>numericValue(item.value)),1);
+    const list = document.createElement('div');
+    list.className = 'bar-list';
+    items.forEach(item=>{
+      const row = document.createElement('div');
+      const head = document.createElement('div');
+      head.className = 'bar-head';
+      const label = document.createElement('span');
+      label.textContent = item.label;
+      const value = document.createElement('strong');
+      value.textContent = item.display ?? item.value;
+      head.append(label,value);
+      const track = document.createElement('div');
+      track.className = 'bar-track';
+      const fill = document.createElement('div');
+      fill.className = `bar-fill${secondary?' secondary':''}${item.className?' '+item.className:''}`;
+      fill.style.width = `${Math.max(0,Math.min(100,(numericValue(item.value)/max)*100))}%`;
+      track.appendChild(fill);
+      row.append(head,track);
+      list.appendChild(row);
+    });
+    card.appendChild(list);
+    container.appendChild(card);
+  }
+
   function wireFormControl(element, object, field, {numeric=false,onChange}={}){
     const commit = ()=>{
       object[field] = numeric ? (element.value==='' ? null : numericValue(element.value)) : element.value;
@@ -804,7 +893,7 @@
     renderContratos();
     renderCarros();
     renderGovernanca();
-    document.getElementById('subtitle').textContent = state.subtitle || '';
+    renderLastUpdated();
   }
 
   function renderChart(){
@@ -1050,8 +1139,14 @@
     const metrics = contractMetrics(contract);
     const balance = card.querySelector('[data-computed="saldo"]');
     const deadline = card.querySelector('[data-computed="prazo"]');
-    if(balance) balance.textContent = `${formatMoney(contract.saldoContratualAtual)} · ${formatPercent(metrics.balancePercent)}`;
-    if(deadline) deadline.textContent = `${metrics.remainingDays===null?'—':metrics.remainingDays+' dias'} · ${formatPercent(metrics.remainingPercent)}`;
+    if(balance){
+      balance.textContent = `${formatMoney(contract.saldoContratualAtual)} · ${formatPercent(metrics.balancePercent)}`;
+      balance.className = `computed-val ${alertClass(metrics.balancePercent)}`.trim();
+    }
+    if(deadline){
+      deadline.textContent = `${metrics.remainingDays===null?'—':metrics.remainingDays+' dias'} · ${formatPercent(metrics.remainingPercent)}`;
+      deadline.className = `computed-val ${alertClass(metrics.remainingPercent)}`.trim();
+    }
   }
 
   function renderContratos(){
@@ -1074,12 +1169,12 @@
           <div class="field-row"><label>Valor contratual original (R$)</label><input class="val contract-control numeric" type="number" min="0" step="0.01" data-f="valorContratualOriginal" value="${numericInputValue(c.valorContratualOriginal)}"></div>
           <div class="field-row"><label>Valor contratual + aditivo (R$)</label><input class="val contract-control numeric" type="number" min="0" step="0.01" data-f="valorContratualVigente" value="${numericInputValue(c.valorContratualVigente)}"></div>
           <div class="field-row"><label>Saldo contratual atual (R$)</label><input class="val contract-control numeric" type="number" min="0" step="0.01" data-f="saldoContratualAtual" value="${numericInputValue(c.saldoContratualAtual)}"></div>
-          <div class="field-row"><label>Saldo contratual atual</label><div class="computed-val" data-computed="saldo">${formatMoney(c.saldoContratualAtual)} · ${formatPercent(metrics.balancePercent)}</div></div>
+          <div class="field-row"><label>Saldo contratual atual</label><div class="computed-val ${alertClass(metrics.balancePercent)}" data-computed="saldo">${formatMoney(c.saldoContratualAtual)} · ${formatPercent(metrics.balancePercent)}</div></div>
           <div class="field-row"><label>Data de vencimento</label><input class="val contract-control" type="date" data-f="dataVencimento" value="${escapeHtml(c.dataVencimento||'')}"></div>
           <div class="field-row"><label>Status</label><select class="val contract-control" data-f="status"><option value="">— selecionar —</option>${contractStatuses.map(status=>`<option value="${escapeHtml(status)}" ${c.status===status?'selected':''}>${escapeHtml(status)}</option>`).join('')}</select></div>
           <div class="field-row"><label>Prazo contratual original (dias)</label><input class="val contract-control numeric" type="number" min="0" step="1" data-f="prazoContratualOriginal" value="${numericInputValue(c.prazoContratualOriginal)}"></div>
           <div class="field-row"><label>Prazo contratual vigente (dias)</label><input class="val contract-control numeric" type="number" min="0" step="1" data-f="prazoContratualVigente" value="${numericInputValue(c.prazoContratualVigente)}"></div>
-          <div class="field-row"><label>Prazo contratual faltante</label><div class="computed-val" data-computed="prazo">${metrics.remainingDays===null?'—':metrics.remainingDays+' dias'} · ${formatPercent(metrics.remainingPercent)}</div></div>
+          <div class="field-row"><label>Prazo contratual faltante</label><div class="computed-val ${alertClass(metrics.remainingPercent)}" data-computed="prazo">${metrics.remainingDays===null?'—':metrics.remainingDays+' dias'} · ${formatPercent(metrics.remainingPercent)}</div></div>
           <div class="field-row"><label>Pleito em análise?</label><select class="val contract-control" data-f="pleitoEmAnalise"><option value="">— selecionar —</option><option value="Não" ${c.pleitoEmAnalise==='Não'?'selected':''}>Não</option><option value="Sim" ${c.pleitoEmAnalise==='Sim'?'selected':''}>Sim</option></select></div>
           <div class="field-row"><label>Último BM pago</label><input class="val contract-control" data-f="ultimoBmPago" placeholder="Ex.: BM 12" value="${escapeHtml(c.ultimoBmPago||'')}"></div>
           <div class="field-row"><label>Mês de referência do BM</label><input class="val contract-control" type="month" data-f="mesReferenciaBm" value="${escapeHtml(c.mesReferenciaBm||'')}"></div>
@@ -1143,6 +1238,7 @@
     const table = document.getElementById('contratosSummary');
     if(!state.contratos.length){
       table.innerHTML = `<tr><td class="empty-row">Nenhum contrato cadastrado ainda.</td></tr>`;
+      renderContratosCharts();
       return;
     }
     let html = `<tr><th>SAP</th><th>Contrato</th><th>Contratada</th><th>Status</th><th>Valor original</th><th>Valor vigente</th><th>Aditivo vigente</th><th>Vencimento</th><th>Saldo atual</th><th>Saldo %</th><th>Pleito</th><th>Último BM</th><th>Referência BM</th><th>Prazo original</th><th>Prazo vigente</th><th>Prazo faltante</th><th>Prazo %</th><th>Gestor</th><th>Fiscal</th><th>Preposto</th></tr>`;
@@ -1157,21 +1253,46 @@
         <td>${formatMoney(c.valorContratualVigente)}</td>
         <td>${escapeHtml(c.aditivoVigente||'—')}</td>
         <td>${formatDateBr(c.dataVencimento)}</td>
-        <td>${formatMoney(c.saldoContratualAtual)}</td>
-        <td>${formatPercent(metrics.balancePercent)}</td>
+        <td class="${alertClass(metrics.balancePercent)}">${formatMoney(c.saldoContratualAtual)}</td>
+        <td class="${alertClass(metrics.balancePercent)}">${formatPercent(metrics.balancePercent)}</td>
         <td>${c.pleitoEmAnalise ? `<span class="badge ${c.pleitoEmAnalise==='Sim'?'warn':'ok'}">${escapeHtml(c.pleitoEmAnalise)}</span>` : '—'}</td>
         <td>${escapeHtml(c.ultimoBmPago||'—')}</td>
         <td>${formatMonthBr(c.mesReferenciaBm)}</td>
         <td>${formatDays(c.prazoContratualOriginal)}</td>
         <td>${formatDays(c.prazoContratualVigente)}</td>
-        <td>${metrics.remainingDays===null?'—':metrics.remainingDays.toLocaleString('pt-BR')+' dias'}</td>
-        <td>${formatPercent(metrics.remainingPercent)}</td>
+        <td class="${alertClass(metrics.remainingPercent)}">${metrics.remainingDays===null?'—':metrics.remainingDays.toLocaleString('pt-BR')+' dias'}</td>
+        <td class="${alertClass(metrics.remainingPercent)}">${formatPercent(metrics.remainingPercent)}</td>
         <td>${escapeHtml(personLabel(c.gestorNodeId, c.gestor))}</td>
         <td>${escapeHtml(personLabel(c.fiscalNodeId, c.fiscal))}</td>
         <td>${escapeHtml(c.prepostoContratada||'—')}</td>
       </tr>`;
     });
     table.innerHTML = html;
+    renderContratosCharts();
+  }
+
+  function renderContratosCharts(){
+    const container = document.getElementById('contratosCharts');
+    container.innerHTML = '';
+    const statusCounts = new Map();
+    state.contratos.forEach(contract=>{
+      const status = contract.status || 'Sem status informado';
+      statusCounts.set(status,(statusCounts.get(status)||0)+1);
+    });
+    appendBarChart(container,'Contratos por status','Quantidade de contratos em cada etapa do ciclo contratual.',
+      [...statusCounts].map(([label,value])=>({label,value,display:String(value)})).sort((a,b)=>b.value-a.value));
+
+    const balances = state.contratos.map(contract=>{
+      const metrics = contractMetrics(contract);
+      return {label:contract.nome||contract.numeroSap||'(sem nome)',value:metrics.balancePercent,display:formatPercent(metrics.balancePercent),className:alertClass(metrics.balancePercent)};
+    }).filter(item=>item.value!==null);
+    appendBarChart(container,'Saldo contratual restante','Verde ≥ 50%; amarelo de 25% a 49,9%; vermelho abaixo de 25%.',balances,{percentage:true});
+
+    const deadlines = state.contratos.map(contract=>{
+      const metrics = contractMetrics(contract);
+      return {label:contract.nome||contract.numeroSap||'(sem nome)',value:metrics.remainingPercent,display:metrics.remainingDays===null?'—':`${metrics.remainingDays} dias · ${formatPercent(metrics.remainingPercent)}`,className:alertClass(metrics.remainingPercent)};
+    }).filter(item=>item.value!==null);
+    appendBarChart(container,'Prazo contratual restante','Dias e percentual restantes. Verde ≥ 50%; amarelo de 25% a 49,9%; vermelho abaixo de 25%.',deadlines,{percentage:true});
   }
 
   function refreshContractSummaries(){
@@ -1293,6 +1414,7 @@
     const table = document.getElementById('carrosSummary');
     if(!state.contratos.length){
       table.innerHTML = `<tr><td class="empty-row">Cadastre contratos na aba "Contratos" para ver a cobertura aqui.</td></tr>`;
+      renderCarrosCharts();
       return;
     }
     let html = `<tr><th>Contrato</th><th>Cobertura</th><th>Carros vinculados</th><th>Local / pacote</th><th>Cidade base</th><th>Pessoas vinculadas</th></tr>`;
@@ -1320,6 +1442,31 @@
       html += `<tr><td colspan="2">Carros sem contrato vinculado</td><td>${semContrato.map(c=>escapeHtml(c.codigo||'(sem código)')).join(', ')}</td><td>${locais.length ? locais.map(escapeHtml).join(', ') : '—'}</td><td>${cidades.length ? cidades.map(escapeHtml).join(', ') : '—'}</td><td>${people.length ? people.map(escapeHtml).join(', ') : '—'}</td></tr>`;
     }
     table.innerHTML = html;
+    renderCarrosCharts();
+  }
+
+  function renderCarrosCharts(){
+    const container = document.getElementById('carrosCharts');
+    container.innerHTML = '';
+    const coverage = state.contratos.map(contract=>({
+      label:contract.nome||'(sem nome)',
+      value:state.carros.filter(car=>(car.contratoIds||[]).includes(contract.id)).length
+    })).sort((a,b)=>b.value-a.value);
+    appendBarChart(container,'Recursos por contrato','Um mesmo carro/recurso pode ser contabilizado em mais de um contrato.',coverage);
+
+    const cityCounts = new Map();
+    state.carros.forEach(car=>{
+      const city = car.cidade || 'Sem cidade informada';
+      cityCounts.set(city,(cityCounts.get(city)||0)+1);
+    });
+    appendBarChart(container,'Distribuição por cidade base','Quantidade de carros e recursos por base operacional.',
+      [...cityCounts].map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value),{secondary:true});
+
+    const linked = state.carros.filter(car=>(car.contratoIds||[]).length).length;
+    appendBarChart(container,'Situação dos vínculos','Recursos vinculados a ao menos um contrato versus sem vínculo.',[
+      {label:'Com contrato vinculado',value:linked},
+      {label:'Sem contrato vinculado',value:state.carros.length-linked}
+    ]);
   }
 
   // ---------- GOVERNANÇA ----------
@@ -1358,7 +1505,7 @@
           <div class="addlink addreuniao">+ adicionar reunião</div>
         </div>
       `;
-      card.querySelectorAll('.val[contenteditable]').forEach(v=>wireEditable(v, g, v.dataset.f));
+      card.querySelectorAll('.val[contenteditable]').forEach(v=>wireEditable(v, g, v.dataset.f, renderGovernancaSummary));
 
       const entregasEl = card.querySelector('.entregas');
       g.entregas = g.entregas || [];
@@ -1396,8 +1543,8 @@
         mp.addEventListener('keydown', e=>{
           if(e.key==='Tab'){ e.preventDefault(); mp.blur(); if(e.shiftKey) mn.focus(); }
         });
-        mn.addEventListener('input', ()=>{ r.nome = mn.textContent.trim(); scheduleSave(); });
-        mp.addEventListener('input', ()=>{ r.periodicidade = mp.textContent.trim(); scheduleSave(); });
+        mn.addEventListener('input', ()=>{ r.nome = mn.textContent.trim(); renderGovernancaCharts(); scheduleSave(); });
+        mp.addEventListener('input', ()=>{ r.periodicidade = mp.textContent.trim(); renderGovernancaCharts(); scheduleSave(); });
         mn.addEventListener('blur', ()=>{ r.nome = mn.textContent.trim(); save(); });
         mp.addEventListener('blur', ()=>{ r.periodicidade = mp.textContent.trim(); save(); });
         row.querySelector('.rm').addEventListener('click', ()=>{
@@ -1423,18 +1570,44 @@
       hint.textContent = 'Nenhuma pessoa na hierarquia ainda. Adicione balões na aba "Hierarquia" — eles aparecem aqui automaticamente.';
       grid.appendChild(hint);
     }
+    renderGovernancaSummary();
+    renderGovernancaCharts();
   }
 
-  // ---------- subtitle ----------
-  document.getElementById('subtitle').addEventListener('focus', ()=>snapshot());
-  document.getElementById('subtitle').addEventListener('input', e=>{
-    state.subtitle = e.target.textContent.trim();
-    scheduleSave();
-  });
-  document.getElementById('subtitle').addEventListener('blur', e=>{
-    state.subtitle = e.target.textContent.trim();
-    save();
-  });
+  function renderGovernancaSummary(){
+    const table = document.getElementById('governancaSummary');
+    if(!state.governanca.length){
+      table.innerHTML = `<tr><td class="empty-row">Nenhuma pessoa disponível para o quadro de governança.</td></tr>`;
+      return;
+    }
+    let html = `<tr><th>Pessoa</th><th>Função</th><th>Frente / pacote</th><th>Responsabilidade</th><th>Entregas</th><th>Reuniões</th></tr>`;
+    state.governanca.forEach(governance=>{
+      const node = byId(governance.nodeId);
+      html += `<tr><td>${escapeHtml(node?.name||'(pessoa removida)')}</td><td>${escapeHtml(node?.role||'—')}</td><td>${escapeHtml(node?.front||'—')}</td><td>${escapeHtml(governance.responsabilidade||'—')}</td><td>${(governance.entregas||[]).filter(Boolean).length}</td><td>${(governance.reunioes||[]).filter(meeting=>meeting.nome||meeting.periodicidade).length}</td></tr>`;
+    });
+    table.innerHTML = html;
+  }
+
+  function renderGovernancaCharts(){
+    const container = document.getElementById('governancaCharts');
+    container.innerHTML = '';
+    const workload = state.governanca.map(governance=>{
+      const node = byId(governance.nodeId);
+      const deliveries = (governance.entregas||[]).filter(Boolean).length;
+      const meetings = (governance.reunioes||[]).filter(meeting=>meeting.nome||meeting.periodicidade).length;
+      return {label:node?.name||'(pessoa removida)',value:deliveries+meetings,display:`${deliveries} entrega(s) · ${meetings} reunião(ões)`};
+    }).sort((a,b)=>b.value-a.value);
+    appendBarChart(container,'Carga de governança por pessoa','Total de entregas obrigatórias e reuniões recorrentes cadastradas.',workload);
+
+    const cadence = new Map();
+    state.governanca.flatMap(governance=>governance.reunioes||[]).forEach(meeting=>{
+      if(!meeting.nome && !meeting.periodicidade) return;
+      const label = meeting.periodicidade || 'Sem periodicidade informada';
+      cadence.set(label,(cadence.get(label)||0)+1);
+    });
+    appendBarChart(container,'Reuniões por periodicidade','Distribuição da agenda obrigatória de governança.',
+      [...cadence].map(([label,value])=>({label,value})).sort((a,b)=>b.value-a.value),{secondary:true});
+  }
 
   document.getElementById('btnSave').addEventListener('click', async()=>{
     if(document.activeElement && document.activeElement.isContentEditable) document.activeElement.blur();
