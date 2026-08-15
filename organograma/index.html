@@ -665,15 +665,17 @@
   }
 
   // ---------- editable field helper (usado nas abas contratos/carros/governança) ----------
-  function wireEditable(el, obj, field){
+  function wireEditable(el, obj, field, onChange){
     el.addEventListener('pointerdown', e=>e.stopPropagation());
     el.addEventListener('focus', ()=>snapshot());
     el.addEventListener('input', ()=>{
       obj[field] = el.textContent.trim();
+      if(onChange) onChange();
       scheduleSave();
     });
     el.addEventListener('blur', ()=>{
       obj[field] = el.textContent.trim();
+      if(onChange) onChange();
       save();
     });
     el.addEventListener('keydown', e=>{
@@ -973,9 +975,9 @@
         <div class="field-row"><label>Fiscal do contrato</label><select class="val personsel" data-ref="fiscal"></select><small class="linked-source">Vinculado à Hierarquia</small></div>
       `;
       const contractTitle = card.querySelector('.ititle');
-      wireEditable(contractTitle, c, 'nome');
+      wireEditable(contractTitle, c, 'nome', refreshContractSummaries);
       contractTitle.addEventListener('blur', renderCarros);
-      card.querySelectorAll('.val[contenteditable]').forEach(v=>wireEditable(v, c, v.dataset.f));
+      card.querySelectorAll('.val[contenteditable]').forEach(v=>wireEditable(v, c, v.dataset.f, renderContratosSummary));
       card.querySelectorAll('.personsel').forEach(select=>{
         const ref = select.dataset.ref;
         const idField = `${ref}NodeId`;
@@ -1030,6 +1032,11 @@
     table.innerHTML = html;
   }
 
+  function refreshContractSummaries(){
+    renderContratosSummary();
+    renderCarrosSummary();
+  }
+
   // ---------- CARROS ----------
   function renderCarros(){
     const grid = document.getElementById('carrosGrid');
@@ -1051,9 +1058,8 @@
         </div>
       `;
       const carTitle = card.querySelector('.ititle');
-      wireEditable(carTitle, c, 'codigo');
-      carTitle.addEventListener('blur', renderCarrosSummary);
-      card.querySelectorAll('.val[contenteditable]').forEach(v=>wireEditable(v, c, v.dataset.f));
+      wireEditable(carTitle, c, 'codigo', renderCarrosSummary);
+      card.querySelectorAll('.val[contenteditable]').forEach(v=>wireEditable(v, c, v.dataset.f, renderCarrosSummary));
 
       const contratoSel = card.querySelector('.contratosel');
       contratoSel.addEventListener('pointerdown', e=>e.stopPropagation());
@@ -1134,23 +1140,29 @@
       table.innerHTML = `<tr><td class="empty-row">Cadastre contratos na aba "Contratos" para ver a cobertura aqui.</td></tr>`;
       return;
     }
-    let html = `<tr><th>Contrato</th><th>Cobertura</th><th>Carros vinculados</th><th>Pessoas vinculadas</th></tr>`;
+    let html = `<tr><th>Contrato</th><th>Cobertura</th><th>Carros vinculados</th><th>Local / pacote</th><th>Cidade base</th><th>Pessoas vinculadas</th></tr>`;
     state.contratos.forEach(ct=>{
       const carrosDoContrato = state.carros.filter(c=>c.contratoId===ct.id);
       const ok = carrosDoContrato.length > 0;
       const codigos = carrosDoContrato.map(c=>escapeHtml(c.codigo||'(sem código)')).join(', ');
+      const locais = [...new Set(carrosDoContrato.map(c=>c.local).filter(Boolean))];
+      const cidades = [...new Set(carrosDoContrato.map(c=>c.cidade).filter(Boolean))];
       const people = [...new Set(carrosDoContrato.flatMap(c=>(c.pessoas||[]).map(person=>personLabel(person.nodeId, person.legacyName)).filter(name=>name!=='—')))];
       html += `<tr>
         <td>${escapeHtml(ct.nome||'(sem nome)')}</td>
         <td><span class="badge ${ok?'ok':'warn'}">${ok? carrosDoContrato.length+' carro(s)' : 'sem carro'}</span></td>
         <td>${ok ? codigos : '—'}</td>
+        <td>${locais.length ? locais.map(escapeHtml).join(', ') : '—'}</td>
+        <td>${cidades.length ? cidades.map(escapeHtml).join(', ') : '—'}</td>
         <td>${people.length ? people.map(escapeHtml).join(', ') : '—'}</td>
       </tr>`;
     });
     const semContrato = state.carros.filter(c=>!c.contratoId);
     if(semContrato.length){
       const people = [...new Set(semContrato.flatMap(c=>(c.pessoas||[]).map(person=>personLabel(person.nodeId, person.legacyName)).filter(name=>name!=='—')))];
-      html += `<tr><td colspan="2">Carros sem contrato vinculado</td><td>${semContrato.map(c=>escapeHtml(c.codigo||'(sem código)')).join(', ')}</td><td>${people.length ? people.map(escapeHtml).join(', ') : '—'}</td></tr>`;
+      const locais = [...new Set(semContrato.map(c=>c.local).filter(Boolean))];
+      const cidades = [...new Set(semContrato.map(c=>c.cidade).filter(Boolean))];
+      html += `<tr><td colspan="2">Carros sem contrato vinculado</td><td>${semContrato.map(c=>escapeHtml(c.codigo||'(sem código)')).join(', ')}</td><td>${locais.length ? locais.map(escapeHtml).join(', ') : '—'}</td><td>${cidades.length ? cidades.map(escapeHtml).join(', ') : '—'}</td><td>${people.length ? people.map(escapeHtml).join(', ') : '—'}</td></tr>`;
     }
     table.innerHTML = html;
   }
