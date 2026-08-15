@@ -468,7 +468,9 @@ window.FicoMotion = (function(){
   return {available, revealApp, revealPanel, revealItem, pulse, tap};
 })();
 
-window.FicoMotion.revealGate();
+const revealAccessOnPaint = ()=>window.setTimeout(()=>window.FicoMotion.revealGate(), 80);
+if(document.readyState === 'complete') revealAccessOnPaint();
+else window.addEventListener('load', revealAccessOnPaint, {once:true});
 if(document.getElementById('app').style.display !== 'none'){
   window.FicoMotion.revealApp();
 }
