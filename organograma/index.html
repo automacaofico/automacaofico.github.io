@@ -147,6 +147,9 @@
   }
   .info-card.w220{width:220px;}
   .info-card.w300{width:300px;}
+  .info-card.wContract{width:min(620px,calc(100vw - 64px));}
+  .contract-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 14px;}
+  .contract-fields .full{grid-column:1/-1;}
   .info-card .ititle{
     font-weight:900;color:var(--navy);font-size:14px;outline:none;
     border-bottom:2px solid var(--orange);padding-bottom:5px;margin-bottom:9px;min-height:18px;
@@ -164,6 +167,8 @@
   .field-row .val:empty:before{content:attr(data-ph);color:#b7bfcf;}
   .field-row .val:focus{border-bottom-color:var(--orange);}
   .field-row select.val{width:100%;background:#f8fafc;border:1px solid #dbe3ee;border-radius:6px;padding:6px;color:var(--navy);font-weight:700;}
+  .field-row input.val{box-sizing:border-box;width:100%;background:#f8fafc;border:1px solid #dbe3ee;border-radius:6px;padding:6px;color:var(--navy);font:700 12px Arial,sans-serif;}
+  .field-row .computed-val{display:flex;align-items:center;min-height:30px;background:#edf4fb;border:1px solid #d7e5f3;border-radius:6px;padding:5px 7px;color:var(--navy);font-size:12px;font-weight:900;}
   .linked-source{display:block;margin-top:3px;color:var(--blue);font-size:9.5px;font-weight:800;letter-spacing:.2px;}
   .linked-source.warn{color:#b36b00;}
   .list-block{margin-top:9px;}
@@ -204,7 +209,7 @@
     text-align:left;background:var(--navy);color:#fff;font-size:10.5px;text-transform:uppercase;
     letter-spacing:.3px;padding:8px 10px;white-space:nowrap;
   }
-  .summary-table td{padding:8px 10px;border-top:1px solid #eef1f6;color:var(--text);vertical-align:top;}
+  .summary-table td{padding:8px 10px;border-top:1px solid #eef1f6;color:var(--text);vertical-align:top;white-space:nowrap;}
   .summary-table tr:nth-child(even) td{background:#f8fafc;}
   .summary-table .empty-row td{color:var(--muted);font-style:italic;}
   .badge{display:inline-block;font-size:10.5px;font-weight:800;padding:2px 9px;border-radius:20px;white-space:nowrap;}
@@ -241,6 +246,11 @@
     30%,50%,70%{transform:translateX(-8px);} 40%,60%{transform:translateX(8px);}
   }
   #app{display:none;flex-direction:column;height:100%;}
+
+  @media(max-width:700px){
+    .contract-fields{grid-template-columns:1fr;}
+    .contract-fields .full{grid-column:auto;}
+  }
 
 </style>
 </head>
@@ -664,6 +674,75 @@
     return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   }
 
+  const moneyFormatter = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
+  const contractStatuses = ['Escopo Concluído','Em Execução','Em processo de TAC','Em Processo de Encerramento'];
+
+  function numericValue(value){
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 ? number : 0;
+  }
+
+  function hasNumericValue(value){
+    return value!==null && value!==undefined && value!=='' && Number.isFinite(Number(value));
+  }
+
+  function numericInputValue(value){
+    return hasNumericValue(value) ? numericValue(value) : '';
+  }
+
+  function formatMoney(value){
+    return hasNumericValue(value) ? moneyFormatter.format(numericValue(value)) : '—';
+  }
+
+  function formatDateBr(value){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(value||''))) return '—';
+    const [year,month,day] = value.split('-');
+    return `${day}/${month}/${year}`;
+  }
+
+  function formatMonthBr(value){
+    if(!/^\d{4}-\d{2}$/.test(String(value||''))) return '—';
+    const [year,month] = value.split('-');
+    return `${month}/${year}`;
+  }
+
+  function contractMetrics(contract){
+    const currentValue = numericValue(contract.valorContratualVigente);
+    const balance = numericValue(contract.saldoContratualAtual);
+    const balancePercent = currentValue > 0 && hasNumericValue(contract.saldoContratualAtual) ? (balance/currentValue)*100 : null;
+    const contractualDays = numericValue(contract.prazoContratualVigente);
+    let remainingDays = null;
+    if(/^\d{4}-\d{2}-\d{2}$/.test(String(contract.dataVencimento||''))){
+      const [year,month,day] = contract.dataVencimento.split('-').map(Number);
+      const due = new Date(year,month-1,day);
+      const now = new Date();
+      const today = new Date(now.getFullYear(),now.getMonth(),now.getDate());
+      remainingDays = Math.max(0,Math.ceil((due-today)/86400000));
+    }
+    const remainingPercent = remainingDays!==null && contractualDays>0 ? (remainingDays/contractualDays)*100 : null;
+    return {currentValue,balance,balancePercent,contractualDays,remainingDays,remainingPercent};
+  }
+
+  function formatPercent(value){
+    return value===null || !Number.isFinite(value) ? '—' : `${value.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})}%`;
+  }
+
+  function formatDays(value){
+    return hasNumericValue(value) ? `${numericValue(value).toLocaleString('pt-BR')} dias` : '—';
+  }
+
+  function wireFormControl(element, object, field, {numeric=false,onChange}={}){
+    const commit = ()=>{
+      object[field] = numeric ? (element.value==='' ? null : numericValue(element.value)) : element.value;
+      if(onChange) onChange();
+      scheduleSave();
+    };
+    element.addEventListener('focus', snapshot);
+    element.addEventListener('input', commit);
+    element.addEventListener('change', commit);
+    element.addEventListener('blur', ()=>save());
+  }
+
   // ---------- editable field helper (usado nas abas contratos/carros/governança) ----------
   function wireEditable(el, obj, field, onChange){
     el.addEventListener('pointerdown', e=>e.stopPropagation());
@@ -961,23 +1040,58 @@
   }
 
   // ---------- CONTRATOS ----------
+  function updateContractComputed(card,contract){
+    const metrics = contractMetrics(contract);
+    const balance = card.querySelector('[data-computed="saldo"]');
+    const deadline = card.querySelector('[data-computed="prazo"]');
+    if(balance) balance.textContent = `${formatMoney(contract.saldoContratualAtual)} · ${formatPercent(metrics.balancePercent)}`;
+    if(deadline) deadline.textContent = `${metrics.remainingDays===null?'—':metrics.remainingDays+' dias'} · ${formatPercent(metrics.remainingPercent)}`;
+  }
+
   function renderContratos(){
     const grid = document.getElementById('contratosGrid');
     grid.innerHTML = '';
     state.contratos.forEach(c=>{
+      const metrics = contractMetrics(c);
       const card = document.createElement('div');
-      card.className = 'info-card w220';
+      card.className = 'info-card wContract';
       card.innerHTML = `
         <div class="idel" title="Excluir contrato">×</div>
         <div class="ititle" contenteditable="true" data-ph="nome do contrato">${escapeHtml(c.nome||'')}</div>
-        <div class="field-row"><label>Contratada</label><div class="val" contenteditable="true" data-ph="empresa" data-f="contratada">${escapeHtml(c.contratada||'')}</div></div>
-        <div class="field-row"><label>Gestor do contrato</label><select class="val personsel" data-ref="gestor"></select><small class="linked-source">Vinculado à Hierarquia</small></div>
-        <div class="field-row"><label>Fiscal do contrato</label><select class="val personsel" data-ref="fiscal"></select><small class="linked-source">Vinculado à Hierarquia</small></div>
+        <div class="contract-fields">
+          <div class="field-row"><label>Contratada</label><div class="val" contenteditable="true" data-ph="empresa" data-f="contratada">${escapeHtml(c.contratada||'')}</div></div>
+          <div class="field-row"><label>Número SAP</label><input class="val contract-control" data-f="numeroSap" value="${escapeHtml(c.numeroSap||'')}"></div>
+          <div class="field-row"><label>Gestor do contrato</label><select class="val personsel" data-ref="gestor"></select><small class="linked-source">Vinculado à Hierarquia</small></div>
+          <div class="field-row"><label>Fiscal do contrato</label><select class="val personsel" data-ref="fiscal"></select><small class="linked-source">Vinculado à Hierarquia</small></div>
+          <div class="field-row"><label>Preposto da contratada</label><input class="val contract-control" data-f="prepostoContratada" value="${escapeHtml(c.prepostoContratada||'')}"></div>
+          <div class="field-row"><label>Aditivo vigente</label><input class="val contract-control" data-f="aditivoVigente" placeholder="Ex.: 3º Termo Aditivo" value="${escapeHtml(c.aditivoVigente||'')}"></div>
+          <div class="field-row"><label>Valor contratual original (R$)</label><input class="val contract-control numeric" type="number" min="0" step="0.01" data-f="valorContratualOriginal" value="${numericInputValue(c.valorContratualOriginal)}"></div>
+          <div class="field-row"><label>Valor contratual + aditivo (R$)</label><input class="val contract-control numeric" type="number" min="0" step="0.01" data-f="valorContratualVigente" value="${numericInputValue(c.valorContratualVigente)}"></div>
+          <div class="field-row"><label>Saldo contratual atual (R$)</label><input class="val contract-control numeric" type="number" min="0" step="0.01" data-f="saldoContratualAtual" value="${numericInputValue(c.saldoContratualAtual)}"></div>
+          <div class="field-row"><label>Saldo contratual atual</label><div class="computed-val" data-computed="saldo">${formatMoney(c.saldoContratualAtual)} · ${formatPercent(metrics.balancePercent)}</div></div>
+          <div class="field-row"><label>Data de vencimento</label><input class="val contract-control" type="date" data-f="dataVencimento" value="${escapeHtml(c.dataVencimento||'')}"></div>
+          <div class="field-row"><label>Status</label><select class="val contract-control" data-f="status"><option value="">— selecionar —</option>${contractStatuses.map(status=>`<option value="${escapeHtml(status)}" ${c.status===status?'selected':''}>${escapeHtml(status)}</option>`).join('')}</select></div>
+          <div class="field-row"><label>Prazo contratual original (dias)</label><input class="val contract-control numeric" type="number" min="0" step="1" data-f="prazoContratualOriginal" value="${numericInputValue(c.prazoContratualOriginal)}"></div>
+          <div class="field-row"><label>Prazo contratual vigente (dias)</label><input class="val contract-control numeric" type="number" min="0" step="1" data-f="prazoContratualVigente" value="${numericInputValue(c.prazoContratualVigente)}"></div>
+          <div class="field-row"><label>Prazo contratual faltante</label><div class="computed-val" data-computed="prazo">${metrics.remainingDays===null?'—':metrics.remainingDays+' dias'} · ${formatPercent(metrics.remainingPercent)}</div></div>
+          <div class="field-row"><label>Pleito em análise?</label><select class="val contract-control" data-f="pleitoEmAnalise"><option value="">— selecionar —</option><option value="Não" ${c.pleitoEmAnalise==='Não'?'selected':''}>Não</option><option value="Sim" ${c.pleitoEmAnalise==='Sim'?'selected':''}>Sim</option></select></div>
+          <div class="field-row"><label>Último BM pago</label><input class="val contract-control" data-f="ultimoBmPago" placeholder="Ex.: BM 12" value="${escapeHtml(c.ultimoBmPago||'')}"></div>
+          <div class="field-row"><label>Mês de referência do BM</label><input class="val contract-control" type="month" data-f="mesReferenciaBm" value="${escapeHtml(c.mesReferenciaBm||'')}"></div>
+        </div>
       `;
       const contractTitle = card.querySelector('.ititle');
       wireEditable(contractTitle, c, 'nome', refreshContractSummaries);
       contractTitle.addEventListener('blur', renderCarros);
       card.querySelectorAll('.val[contenteditable]').forEach(v=>wireEditable(v, c, v.dataset.f, renderContratosSummary));
+      card.querySelectorAll('.contract-control').forEach(control=>{
+        wireFormControl(control,c,control.dataset.f,{
+          numeric:control.classList.contains('numeric'),
+          onChange:()=>{
+            updateContractComputed(card,c);
+            refreshContractSummaries();
+          }
+        });
+      });
       card.querySelectorAll('.personsel').forEach(select=>{
         const ref = select.dataset.ref;
         const idField = `${ref}NodeId`;
@@ -1003,7 +1117,12 @@
     });
     grid.appendChild(makeAddCard('+ novo contrato', ()=>{
       snapshot();
-      state.contratos.push({id:uid('ct'), nome:'', contratada:'', gestorNodeId:'', fiscalNodeId:'', gestor:'', fiscal:''});
+      state.contratos.push({
+        id:uid('ct'), nome:'', contratada:'', numeroSap:'', gestorNodeId:'', fiscalNodeId:'', gestor:'', fiscal:'',
+        prepostoContratada:'', aditivoVigente:'', valorContratualOriginal:null, valorContratualVigente:null,
+        saldoContratualAtual:null, dataVencimento:'', status:'', prazoContratualOriginal:null,
+        prazoContratualVigente:null, pleitoEmAnalise:'', ultimoBmPago:'', mesReferenciaBm:''
+      });
       save(); renderContratos(); renderCarros();
       setTimeout(()=>{
         const els = grid.querySelectorAll('.ititle');
@@ -1020,13 +1139,30 @@
       table.innerHTML = `<tr><td class="empty-row">Nenhum contrato cadastrado ainda.</td></tr>`;
       return;
     }
-    let html = `<tr><th>Contrato</th><th>Contratada</th><th>Gestor</th><th>Fiscal</th></tr>`;
+    let html = `<tr><th>SAP</th><th>Contrato</th><th>Contratada</th><th>Status</th><th>Valor original</th><th>Valor vigente</th><th>Aditivo vigente</th><th>Vencimento</th><th>Saldo atual</th><th>Saldo %</th><th>Pleito</th><th>Último BM</th><th>Referência BM</th><th>Prazo original</th><th>Prazo vigente</th><th>Prazo faltante</th><th>Prazo %</th><th>Gestor</th><th>Fiscal</th><th>Preposto</th></tr>`;
     state.contratos.forEach(c=>{
+      const metrics = contractMetrics(c);
       html += `<tr>
+        <td>${escapeHtml(c.numeroSap||'—')}</td>
         <td>${escapeHtml(c.nome||'(sem nome)')}</td>
         <td>${escapeHtml(c.contratada||'—')}</td>
+        <td>${escapeHtml(c.status||'—')}</td>
+        <td>${formatMoney(c.valorContratualOriginal)}</td>
+        <td>${formatMoney(c.valorContratualVigente)}</td>
+        <td>${escapeHtml(c.aditivoVigente||'—')}</td>
+        <td>${formatDateBr(c.dataVencimento)}</td>
+        <td>${formatMoney(c.saldoContratualAtual)}</td>
+        <td>${formatPercent(metrics.balancePercent)}</td>
+        <td>${c.pleitoEmAnalise ? `<span class="badge ${c.pleitoEmAnalise==='Sim'?'warn':'ok'}">${escapeHtml(c.pleitoEmAnalise)}</span>` : '—'}</td>
+        <td>${escapeHtml(c.ultimoBmPago||'—')}</td>
+        <td>${formatMonthBr(c.mesReferenciaBm)}</td>
+        <td>${formatDays(c.prazoContratualOriginal)}</td>
+        <td>${formatDays(c.prazoContratualVigente)}</td>
+        <td>${metrics.remainingDays===null?'—':metrics.remainingDays.toLocaleString('pt-BR')+' dias'}</td>
+        <td>${formatPercent(metrics.remainingPercent)}</td>
         <td>${escapeHtml(personLabel(c.gestorNodeId, c.gestor))}</td>
         <td>${escapeHtml(personLabel(c.fiscalNodeId, c.fiscal))}</td>
+        <td>${escapeHtml(c.prepostoContratada||'—')}</td>
       </tr>`;
     });
     table.innerHTML = html;
