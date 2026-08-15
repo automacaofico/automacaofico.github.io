@@ -262,7 +262,9 @@
   </div>
   <div class="spacer"></div>
   <div class="toolbar">
-    <div class="save-indicator"><span class="save-dot" id="saveDot"></span><span id="saveText">salvo</span></div>
+    <div class="save-indicator"><span class="save-dot" id="saveDot"></span><span id="saveText">salvo neste navegador</span></div>
+    <button class="btn primary" id="btnSave">✓ Salvar alterações</button>
+    <button class="btn" id="btnReload">↻ Atualizar do servidor</button>
     <button class="btn" id="btnUndo" title="Ctrl+Z">↶ Desfazer</button>
     <button class="btn" id="btnLayout" title="Reorganiza os balões da hierarquia automaticamente">⇅ Reorganizar</button>
     <button class="btn" id="btnExport">⭳ Exportar JSON</button>
@@ -329,6 +331,125 @@
     'data:image/png;base64,' + document.getElementById('logoData').textContent.trim();
 
   const STORAGE_KEY = 'fico_organograma_v2';
+  const TOKEN_KEY = 'fico_organograma_token';
+  const API_BASE = /^(?:localhost|127\.0\.0\.1)$/.test(location.hostname)
+    ? 'http://127.0.0.1:8791'
+    : 'https://fico-tracking-api.automacaofico.workers.dev';
+  let syncToken = sessionStorage.getItem(TOKEN_KEY) || '';
+  let sharedRevision = 0;
+  let sharedReady = false;
+  let sharedDirty = false;
+  let sharedSaveTimer;
+  let sharedSaveInFlight = Promise.resolve();
+
+  async function api(path, options = {}){
+    const response = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: {
+        'content-type':'application/json',
+        ...(syncToken ? {authorization:`Bearer ${syncToken}`} : {}),
+        ...(options.headers || {})
+      },
+      cache:'no-store'
+    });
+    const data = await response.json().catch(()=>({}));
+    if(!response.ok){
+      const error = new Error(data.error || 'Não foi possível acessar o servidor.');
+      error.status = response.status;
+      error.data = data;
+      throw error;
+    }
+    return data;
+  }
+
+  function setSaveStatus(text, color, glow = color){
+    const dot = document.getElementById('saveDot');
+    document.getElementById('saveText').textContent = text;
+    dot.style.background = color;
+    dot.style.boxShadow = `0 0 6px ${glow}`;
+  }
+
+  async function loadShared(){
+    const data = await api('/api/v1/organogram/state');
+    sharedRevision = Number(data.revision || 0);
+    sharedReady = true;
+    sharedDirty = false;
+    if(data.state){
+      state = data.state;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      render();
+      setSaveStatus('sincronizado para todos', '#7CFC9A');
+    }else{
+      sharedDirty = true;
+      setSaveStatus('versão local · clique em Salvar', '#F89B32');
+    }
+    return data;
+  }
+
+  async function loginShared(password){
+    const response = await fetch(`${API_BASE}/api/v1/organogram/login`, {
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({password})
+    });
+    const data = await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(data.error || 'Não foi possível validar o acesso.');
+    syncToken = data.token;
+    sessionStorage.setItem(TOKEN_KEY, syncToken);
+    await loadShared();
+  }
+
+  async function resumeShared(){
+    if(!syncToken) return false;
+    try{
+      await loadShared();
+      return true;
+    }catch(error){
+      if(error.status === 401){
+        syncToken = '';
+        sessionStorage.removeItem(TOKEN_KEY);
+        return false;
+      }
+      sharedReady = false;
+      setSaveStatus('sem conexão · cópia local', '#F89B32');
+      return true;
+    }
+  }
+
+  function scheduleSharedSave(){
+    if(!sharedReady || !syncToken) return;
+    sharedDirty = true;
+    clearTimeout(sharedSaveTimer);
+    sharedSaveTimer = setTimeout(()=>flushSharedSave(), 700);
+  }
+
+  function flushSharedSave({force = false, keepalive = false} = {}){
+    clearTimeout(sharedSaveTimer);
+    if(!sharedReady || !syncToken || (!sharedDirty && !force)) return sharedSaveInFlight;
+    sharedDirty = false;
+    const stateToSave = JSON.parse(JSON.stringify(state));
+    sharedSaveInFlight = sharedSaveInFlight.then(async()=>{
+      setSaveStatus('salvando no servidor…', '#F89B32');
+      try{
+        const data = await api('/api/v1/organogram/state', {
+          method:'POST',
+          body:JSON.stringify({state:stateToSave, expectedRevision:sharedRevision}),
+          keepalive
+        });
+        sharedRevision = Number(data.revision);
+        setSaveStatus('salvo para todos', '#7CFC9A');
+      }catch(error){
+        if(error.status === 409){
+          sharedReady = false;
+          setSaveStatus('há uma versão mais nova · atualize', '#ff6b6b');
+          return;
+        }
+        sharedDirty = true;
+        setSaveStatus('sem conexão · salvo localmente', '#F89B32');
+      }
+    });
+    return sharedSaveInFlight;
+  }
 
   // ---------- dados iniciais (leitura best-effort do quadro branco da reunião) ----------
   function seedData(){
@@ -410,21 +531,39 @@
     if(history.length > 40) history.shift();
   }
 
-  function save(){
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    flashSaved();
+  function save(showFeedback = true){
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      scheduleSharedSave();
+      if(showFeedback && !sharedReady) flashSaved();
+      return true;
+    }catch(error){
+      showSaveError();
+      return false;
+    }
   }
 
-  let saveFlashTimer;
+  let saveFlashTimer, saveDebounceTimer;
+  function markSaving(){
+    setSaveStatus(sharedReady ? 'salvando no servidor…' : 'salvando neste navegador…', '#F89B32');
+  }
+
+  function scheduleSave(){
+    markSaving();
+    clearTimeout(saveDebounceTimer);
+    saveDebounceTimer = setTimeout(()=>save(), 250);
+  }
+
+  function showSaveError(){
+    clearTimeout(saveFlashTimer);
+    setSaveStatus('não foi possível salvar', '#ff6b6b');
+  }
+
   function flashSaved(){
-    const dot = document.getElementById('saveDot');
-    const txt = document.getElementById('saveText');
-    txt.textContent = 'salvando…';
-    dot.style.background = '#F89B32';
+    markSaving();
     clearTimeout(saveFlashTimer);
     saveFlashTimer = setTimeout(()=>{
-      txt.textContent = 'salvo';
-      dot.style.background = '#7CFC9A';
+      setSaveStatus('salvo neste navegador', '#7CFC9A');
     }, 350);
   }
 
@@ -448,6 +587,10 @@
   function wireEditable(el, obj, field){
     el.addEventListener('pointerdown', e=>e.stopPropagation());
     el.addEventListener('focus', ()=>snapshot());
+    el.addEventListener('input', ()=>{
+      obj[field] = el.textContent.trim();
+      scheduleSave();
+    });
     el.addEventListener('blur', ()=>{
       obj[field] = el.textContent.trim();
       save();
@@ -473,6 +616,7 @@
     const m = row.querySelector('.m');
     m.addEventListener('pointerdown', e=>e.stopPropagation());
     m.addEventListener('focus', ()=>snapshot());
+    m.addEventListener('input', ()=>onCommit(m.textContent.trim()));
     m.addEventListener('blur', ()=>onCommit(m.textContent.trim()));
     m.addEventListener('keydown', e=>{
       if(e.key==='Enter'){ e.preventDefault(); m.blur(); }
@@ -532,6 +676,11 @@
     el.querySelectorAll('[contenteditable]').forEach(fieldEl=>{
       fieldEl.addEventListener('pointerdown', e=>e.stopPropagation());
       fieldEl.addEventListener('focus', ()=>snapshot());
+      fieldEl.addEventListener('input', ()=>{
+        const node = byId(n.id);
+        node[fieldEl.dataset.field] = fieldEl.textContent.trim();
+        scheduleSave();
+      });
       fieldEl.addEventListener('blur', ()=>{
         const node = byId(n.id);
         node[fieldEl.dataset.field] = fieldEl.textContent.trim();
@@ -949,6 +1098,8 @@
         mp.addEventListener('keydown', e=>{
           if(e.key==='Tab'){ e.preventDefault(); mp.blur(); if(e.shiftKey) mn.focus(); }
         });
+        mn.addEventListener('input', ()=>{ r.nome = mn.textContent.trim(); scheduleSave(); });
+        mp.addEventListener('input', ()=>{ r.periodicidade = mp.textContent.trim(); scheduleSave(); });
         mn.addEventListener('blur', ()=>{ r.nome = mn.textContent.trim(); save(); });
         mp.addEventListener('blur', ()=>{ r.periodicidade = mp.textContent.trim(); save(); });
         row.querySelector('.rm').addEventListener('click', ()=>{
@@ -978,9 +1129,52 @@
 
   // ---------- subtitle ----------
   document.getElementById('subtitle').addEventListener('focus', ()=>snapshot());
+  document.getElementById('subtitle').addEventListener('input', e=>{
+    state.subtitle = e.target.textContent.trim();
+    scheduleSave();
+  });
   document.getElementById('subtitle').addEventListener('blur', e=>{
     state.subtitle = e.target.textContent.trim();
     save();
+  });
+
+  document.getElementById('btnSave').addEventListener('click', async()=>{
+    if(document.activeElement && document.activeElement.isContentEditable) document.activeElement.blur();
+    clearTimeout(saveDebounceTimer);
+    save(false);
+    sharedDirty = true;
+    await flushSharedSave({force:true});
+  });
+
+  document.getElementById('btnReload').addEventListener('click', async()=>{
+    if(sharedDirty && !confirm('Há alterações locais aguardando envio. Deseja substituí-las pela versão do servidor?')) return;
+    try{
+      await loadShared();
+    }catch(error){
+      if(error.status === 401){
+        syncToken = '';
+        sessionStorage.removeItem(TOKEN_KEY);
+        location.reload();
+        return;
+      }
+      setSaveStatus('não foi possível atualizar', '#ff6b6b');
+    }
+  });
+
+  // Garante a última gravação ao trocar de aba, minimizar ou fechar a página.
+  window.addEventListener('pagehide', ()=>{
+    save(false);
+    if(sharedReady){
+      sharedDirty = true;
+      flushSharedSave({force:true, keepalive:true});
+    }
+  });
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState === 'hidden') save(false);
+  });
+  window.addEventListener('online', ()=>{
+    if(syncToken && sharedReady) flushSharedSave({force:sharedDirty});
+    else if(syncToken) resumeShared();
   });
 
   // ---------- undo ----------
@@ -1059,6 +1253,7 @@
     });
   });
 
+  window.organogramSync = { login:loginShared, resume:resumeShared };
   render();
 })();
 </script>
@@ -1066,8 +1261,6 @@
 <script>
 (function(){
   'use strict';
-  var GATE_KEY = 'fico_organograma_unlocked';
-  var PASSWORD = '@Senha05';
 
   var gate = document.getElementById('gate');
   var app = document.getElementById('app');
@@ -1079,20 +1272,25 @@
     document.getElementById('logoImg').src : '';
 
   function unlock(){
-    sessionStorage.setItem(GATE_KEY, '1');
     gate.classList.add('hidden');
     app.style.display = 'flex';
   }
 
-  function tryEnter(){
-    if(pass.value === PASSWORD){
+  async function tryEnter(){
+    btn.disabled = true;
+    err.textContent = 'Validando acesso…';
+    try{
+      await window.organogramSync.login(pass.value);
       err.textContent = '';
+      pass.value = '';
       unlock();
-    } else {
-      err.textContent = 'Senha incorreta.';
+    }catch(error){
+      err.textContent = error.message || 'Não foi possível validar o acesso.';
       gate.classList.add('shake');
       setTimeout(function(){ gate.classList.remove('shake'); }, 350);
       pass.select();
+    }finally{
+      btn.disabled = false;
     }
   }
 
@@ -1101,11 +1299,10 @@
     if(e.key === 'Enter') tryEnter();
   });
 
-  if(sessionStorage.getItem(GATE_KEY) === '1'){
-    unlock();
-  } else {
-    pass.focus();
-  }
+  window.organogramSync.resume().then(function(active){
+    if(active) unlock();
+    else pass.focus();
+  });
 })();
 </script>
 </body>
