@@ -439,6 +439,7 @@ function normalizar(raw){
       pe.pend=pe.total-pe.exec;
       pe.cert=pe.tipos.reduce((s,t)=>s+t.cert,0);
       pe.naoCert=pe.tipos.reduce((s,t)=>s+t.naoCert,0);
+      pe.finalizado=pe.tipos.reduce((s,t)=>s+t.finSemImp+t.finCert,0);
       pe.km=base?base.km:''; pe.cronograma=base?base.cronograma:'';
       pe.principal=!!base&&base.empresaPrincipal===E.key;
       if(pe.principal){
@@ -453,6 +454,7 @@ function normalizar(raw){
     E.pendGeral=E.totalGeral-E.execGeral;
     E.certGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.cert,0);
     E.naoCertGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.naoCert,0);
+    E.finalizadoGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.finalizado,0);
   });
 
   const AL={geral:[],p1:[],p2:[],p3:[]};
@@ -519,15 +521,18 @@ function renderConsolidado(){
   const penGeral=totGeral-exeGeral;
   const mob=ks.reduce((s,k)=>s+PAC[k].mob,0), nec=ks.reduce((s,k)=>s+PAC[k].nec,0);
   const pctE=totGeral?(exeGeral/totGeral*100).toFixed(1):0, gapC=nec?Math.round((nec-mob)/nec*100):0;
+  const finGeral=empresas.reduce((s,e)=>s+e.finalizadoGeral,0);
+  const pctFin=totGeral?(finGeral/totGeral*100).toFixed(1):0;
   const certGeral=empresas.reduce((s,e)=>s+e.certGeral,0), naoCertGeral=empresas.reduce((s,e)=>s+e.naoCertGeral,0);
   const certTotal=certGeral+naoCertGeral;
   const pctCert=certTotal?(certGeral/certTotal*100).toFixed(1):0;
   const pctNaoCert=certTotal?(naoCertGeral/certTotal*100).toFixed(1):0;
 
   let h='<h2 class="secao">Visão geral — '+empresas.length+' empresas · '+ks.length+' pacotes</h2>'
-    +'<div class="kpis stagger">'
+    +'<div class="kpis stagger" style="grid-template-columns:repeat(5,1fr)">'
     +'<div class="kpi navy"><div class="rot">Pendências totais</div><div class="val">'+totGeral.toLocaleString('pt-BR')+'</div><div class="sub">Todas as empresas, incl. VALE</div></div>'
     +'<div class="kpi verde"><div class="rot">Executadas</div><div class="val">'+exeGeral.toLocaleString('pt-BR')+'</div><div class="sub">'+pctE+'% do total</div></div>'
+    +'<div class="kpi azul"><div class="rot">Finalizadas</div><div class="val">'+finGeral.toLocaleString('pt-BR')+'</div><div class="sub">'+pctFin+'% do total</div></div>'
     +'<div class="kpi laranja"><div class="rot">Pendências restantes</div><div class="val">'+penGeral.toLocaleString('pt-BR')+'</div><div class="sub">A tratar até o marco final</div></div>'
     +'<div class="kpi vermelho"><div class="rot">Efetivo mobilizado</div><div class="val">'+mob+' <small>/ '+nec+' nec.</small></div><div class="sub">Gap de '+(nec-mob)+' colaboradores ('+gapC+'%)</div></div>'
     +'</div>';
@@ -594,21 +599,24 @@ function renderBlocoPacote(empKey,k,pe,scls){
   let h='<h2 class="secao '+scls+'">Pacote 0'+k[1]+(pe.km?' — '+pe.km:'')+(pe.principal?' · Contratada principal':'')+'</h2>';
   if(pe.cronograma)h+='<div style="font-size:12px;color:var(--cinza-txt);margin:-6px 0 14px">'+pe.cronograma+'</div>';
 
+  const pctFinPe=pe.total?Math.round(pe.finalizado/pe.total*100):0;
   if(pe.principal){
     const pct=pe.total?Math.round(pe.exec/pe.total*100):0;
     const mobVal=pe.gap<=0?(''+pe.mob):(pe.mob+' <small>/ '+pe.nec+'</small>');
     const gapSub=pe.gap<=0?'Mobilização OK':('Gap de '+pe.gap+'% · '+pe.status_txt);
-    h+='<div class="kpis stagger">'
+    h+='<div class="kpis stagger" style="grid-template-columns:repeat(5,1fr)">'
       +'<div class="kpi navy"><div class="rot">Total do pacote</div><div class="val">'+pe.total+'</div><div class="sub">Pendências mapeadas</div></div>'
       +'<div class="kpi verde"><div class="rot">Executadas</div><div class="val">'+pe.exec+'</div><div class="sub">'+pct+'% de avanço</div></div>'
+      +'<div class="kpi azul"><div class="rot">Finalizadas</div><div class="val">'+pe.finalizado+'</div><div class="sub">'+pctFinPe+'% de avanço</div></div>'
       +'<div class="kpi vermelho"><div class="rot">Restantes</div><div class="val">'+pe.pend+'</div><div class="sub">A tratar até o marco</div></div>'
       +'<div class="kpi laranja"><div class="rot">Efetivo mobilizado</div><div class="val">'+mobVal+'</div><div class="sub">'+gapSub+'</div></div>'
       +'</div>';
   }else{
     const pct=pe.total?Math.round(pe.exec/pe.total*100):0;
-    h+='<div class="kpis stagger" style="grid-template-columns:repeat(3,1fr)">'
+    h+='<div class="kpis stagger" style="grid-template-columns:repeat(4,1fr)">'
       +'<div class="kpi navy"><div class="rot">Total neste pacote</div><div class="val">'+pe.total+'</div><div class="sub">Pendências mapeadas</div></div>'
       +'<div class="kpi verde"><div class="rot">Executadas</div><div class="val">'+pe.exec+'</div><div class="sub">'+pct+'% de avanço</div></div>'
+      +'<div class="kpi azul"><div class="rot">Finalizadas</div><div class="val">'+pe.finalizado+'</div><div class="sub">'+pctFinPe+'% de avanço</div></div>'
       +'<div class="kpi vermelho"><div class="rot">Restantes</div><div class="val">'+pe.pend+'</div><div class="sub">A tratar</div></div>'
       +'</div>';
   }
@@ -695,9 +703,11 @@ function renderEmpresa(key){
     +'<div class="pac-banner-km">Atua em '+pactoKeys.length+' pacote(s): '+pactoKeys.map(k=>'Pacote 0'+k[1]).join(', ')+'</div></div>'
     +'<div class="pac-banner-fico"><img src="data:image/png;base64,'+LOGO_FICO+'" alt="FICO"></div></div>';
 
-  h+='<div class="kpis stagger">'
+  const pctFinE=E.totalGeral?(E.finalizadoGeral/E.totalGeral*100).toFixed(1):0;
+  h+='<div class="kpis stagger" style="grid-template-columns:repeat(5,1fr)">'
     +'<div class="kpi navy"><div class="rot">Total</div><div class="val">'+E.totalGeral+'</div><div class="sub">Pendências mapeadas</div></div>'
     +'<div class="kpi verde"><div class="rot">Executadas</div><div class="val">'+E.execGeral+'</div><div class="sub">'+pctp+'% de avanço</div></div>'
+    +'<div class="kpi azul"><div class="rot">Finalizadas</div><div class="val">'+E.finalizadoGeral+'</div><div class="sub">'+pctFinE+'% de avanço</div></div>'
     +'<div class="kpi vermelho"><div class="rot">Restantes</div><div class="val">'+E.pendGeral+'</div><div class="sub">A tratar</div></div>'
     +'<div class="kpi laranja"><div class="rot">Pacotes</div><div class="val">'+pactoKeys.length+'</div><div class="sub">'+pactoKeys.map(k=>'P'+k[1]).join(' · ')+'</div></div>'
     +'</div>';
