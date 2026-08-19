@@ -536,11 +536,11 @@ function normalizar(raw){
   const ensureEmp=nome=>{ if(!EMP[nome])EMP[nome]={key:nome,nome,isVale:nome==='VALE',pacotes:{}}; return EMP[nome]; };
 
   raw.pendencias.forEach(row=>{
-    let pac,emp,tipo,tot,exe,obs,cert,naoCert,semCert,fisc,fund,impl,proto,semOrigem,finSemImp,finCert,pendExec,pendFin;
+    let pac,emp,tipo,tot,exe,cert,naoCert,semCert,fisc,fund,impl,proto,semOrigem,finSemImp,finCert,pendExec,pendFin;
     if(Array.isArray(row)){
-      pac=row[0];emp=row[1];tipo=row[2];tot=row[3];exe=row[4];obs=row[5];
+      pac=row[0];emp=row[1];tipo=row[2];tot=row[3];exe=row[4];
     }else{
-      pac=row.PACOTE;emp=row.EMPRESA;tipo=row.TIPO;tot=row.TOTAL;exe=row.EXECUTADO;obs=row.OBSERVACAO;
+      pac=row.PACOTE;emp=row.EMPRESA;tipo=row.TIPO;tot=row.TOTAL;exe=row.EXECUTADO;
       cert=row['CERTIFICAÇÃO'];naoCert=row['NÃO CERTIFICAÇÃO'];semCert=row['SEM CLASSIFICAÇÃO'];
       fisc=row['FISCALIZAÇÃO'];fund=row['FUNDIÁRIO'];impl=row['IMPLANTAÇÃO'];proto=row['PROTOCOLO'];semOrigem=row['SEM ORIGEM'];
       finSemImp=row['FINALIZADO (SEM IMPACTO)'];
@@ -554,7 +554,7 @@ function normalizar(raw){
     const e=(exe!=null&&exe!=='')?(+exe||0):(+finSemImp||0);
     const E=ensureEmp(empresa);
     if(!E.pacotes[k])E.pacotes[k]={k,tipos:[],total:0,exec:0};
-    E.pacotes[k].tipos.push({tipo,total:t,exec:e,pend:t-e,obs:obs||'',
+    E.pacotes[k].tipos.push({tipo,total:t,exec:e,pend:t-e,
       cert:+cert||0,naoCert:+naoCert||0,semCert:+semCert||0,
       fisc:+fisc||0,fund:+fund||0,impl:+impl||0,proto:+proto||0,semOrigem:+semOrigem||0,
       finSemImp:+finSemImp||0,finCert:+finCert||0,
@@ -707,7 +707,7 @@ function renderConsolidado(){
     const mime=LOGO_MIME[p.empresaPrincipal]||'png';
     const logo=logoImg?'<div class="empresa-logo-card"><img src="data:image/'+mime+';base64,'+logoImg+'" alt="'+p.empresaPrincipal+'"></div>':'';
     h+='<div class="comp-card '+k+'">'
-      +'<div class="cab"><div style="display:flex;align-items:center;gap:14px">'+logo+'<div><div class="nome">Pacote 0'+k[1]+'</div><div class="empresa">'+p.empresaPrincipal+'</div><div class="km">'+p.km+'</div></div></div><span class="semaforo sem-'+st.cls+'">'+st.lbl+'</span></div>'
+      +'<div class="cab"><div style="display:flex;align-items:center;gap:14px">'+logo+'<div><div class="nome">Pacote 0'+k[1]+'</div><div class="empresa">'+p.empresaPrincipal+'</div></div></div><span class="semaforo sem-'+st.cls+'">'+st.lbl+'</span></div>'
       +'<div class="corpo">'
       +'<div class="linha"><span class="lab">Equipe mobilizada</span><span class="num">'+mobTxt+'</span></div>'
       +'<div class="linha"><span class="lab">RNCs em campo</span><span class="num">'+p.rnc+'</span></div>'
@@ -728,7 +728,7 @@ function renderConsolidado(){
 }
 
 function renderBlocoPacote(empKey,k,pe,scls){
-  let h='<h2 class="secao '+scls+'">Pacote 0'+k[1]+(pe.km?' — '+pe.km:'')+(pe.principal?' · Contratada principal':'')+'</h2>';
+  let h='<h2 class="secao '+scls+'">Pacote 0'+k[1]+(pe.principal?' · Contratada principal':'')+'</h2>';
   if(pe.cronograma)h+='<div style="font-size:12px;color:var(--cinza-txt);margin:-6px 0 14px">'+pe.cronograma+'</div>';
 
   const pctFinPe=pe.total?Math.round(pe.finalizado/pe.total*100):0;
@@ -755,27 +755,24 @@ function renderBlocoPacote(empKey,k,pe,scls){
 
   h+='<div style="overflow-x:auto;margin-top:16px"><table class="tipos g-tabela"><thead>'
     +'<tr class="g-grupos"><th rowspan="2">Tipo</th><th rowspan="2">Total</th>'
-      +'<th colspan="3" class="g-certif">Certificação · confere com o Total</th>'
-      +'<th colspan="5" class="g-origem">Origem · confere com o Total</th>'
-      +'<th colspan="5" class="g-exec">Execução</th><th rowspan="2">Observação</th></tr>'
+      +'<th colspan="3" class="g-certif">Certificação</th>'
+      +'<th colspan="5" class="g-origem">Origem</th>'
+      +'<th colspan="5" class="g-exec">Execução</th></tr>'
     +'<tr class="g-sub">'
       +'<th class="num g-certif">Certif.</th><th class="num g-certif">Não certif.</th><th class="num g-certif g-vazio">S/ classif.</th>'
       +'<th class="num g-origem">Fiscaliz.</th><th class="num g-origem">Fundiário</th><th class="num g-origem">Implant.</th><th class="num g-origem">Protocolo</th><th class="num g-origem g-vazio">S/ origem</th>'
       +'<th class="num g-exec">Executado</th><th class="num g-exec">Finaliz. (s/ impacto)</th><th class="num g-exec">Finaliz. (certif.)</th><th class="num g-exec">Pend. execução</th><th class="num g-exec">Pend. finalização</th>'
     +'</tr></thead><tbody>';
   pe.tipos.forEach(t=>{
-    const obs=/MARCO/i.test(t.obs)?'<span class="marco">'+t.obs+'</span>':(t.obs?'<span class="obs">'+t.obs+'</span>':'—');
     h+='<tr><td>'+t.tipo+'</td><td class="num">'+t.total+'</td>'
       +'<td class="num g-certif">'+t.cert+'</td><td class="num g-certif">'+t.naoCert+'</td><td class="num g-certif g-vazio">'+t.semCert+'</td>'
       +'<td class="num g-origem">'+t.fisc+'</td><td class="num g-origem">'+t.fund+'</td><td class="num g-origem">'+t.impl+'</td><td class="num g-origem">'+t.proto+'</td><td class="num g-origem g-vazio">'+t.semOrigem+'</td>'
-      +'<td class="num g-exec">'+t.exec+'</td><td class="num g-exec">'+t.finSemImp+'</td><td class="num g-exec">'+t.finCert+'</td><td class="num g-exec">'+t.pendExec+'</td><td class="num g-exec">'+t.pendFin+'</td>'
-      +'<td>'+obs+'</td></tr>';
+      +'<td class="num g-exec">'+t.exec+'</td><td class="num g-exec">'+t.finSemImp+'</td><td class="num g-exec">'+t.finCert+'</td><td class="num g-exec">'+t.pendExec+'</td><td class="num g-exec">'+t.pendFin+'</td></tr>';
   });
   h+='<tr class="total-row"><td>TOTAL</td><td class="num">'+pe.total+'</td>'
     +'<td class="num g-certif">'+pe.cert+'</td><td class="num g-certif">'+pe.naoCert+'</td><td class="num g-certif g-vazio">'+pe.semCert+'</td>'
     +'<td class="num g-origem" colspan="4"></td><td class="num g-origem g-vazio"></td>'
-    +'<td class="num g-exec">'+pe.exec+'</td><td class="num g-exec" colspan="2"></td><td class="num g-exec">'+pe.pend+'</td><td class="num g-exec"></td>'
-    +'<td></td></tr>'
+    +'<td class="num g-exec">'+pe.exec+'</td><td class="num g-exec" colspan="2"></td><td class="num g-exec">'+pe.pend+'</td><td class="num g-exec"></td></tr>'
     +'</tbody></table></div>'
     +'<div class="g-legenda">✓ Certificação (Certif. + Não certif. + S/ classif.) e Origem (Fiscaliz. + Fundiário + Implant. + Protocolo + S/ origem) somam exatamente o Total em cada linha — "S/ classif." e "S/ origem" são as pendências sem essa coluna preenchida na planilha.</div>';
 
@@ -1149,7 +1146,7 @@ function pacoteCardHTML(k,lab,p){
     +'<h4>'+lab+'</h4>'
     +'<div class="ef-grid2">'
     +'<div><label>Empresa responsável</label><input type="text" data-f="EMPRESA" value="'+escAttr(p.EMPRESA)+'"></div>'
-    +'<div><label>KM</label><input type="text" data-f="KM" value="'+escAttr(p.KM)+'" placeholder="Ex.: KM 0 – 34+500"></div>'
+    +'<div><label>KM (uso interno, não aparece no painel)</label><input type="text" data-f="KM" value="'+escAttr(p.KM)+'" placeholder="Ex.: KM 0 – 34+500"></div>'
     +'</div>'
     +'<label>Cronograma</label><input type="text" data-f="CRONOGRAMA" value="'+escAttr(p.CRONOGRAMA)+'">'
     +'<div class="pacote-grid" style="margin-top:10px">'
