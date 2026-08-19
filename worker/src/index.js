@@ -5,6 +5,7 @@ import { createSession, requireSession } from './auth.js';
 import { DriveStore } from './google-drive.js';
 import { GitHubPublisher } from './github.js';
 import { VersionService } from './version-service.js';
+import { validateManualData } from './manual-data.js';
 
 export { VersionCoordinator };
 
@@ -89,6 +90,21 @@ async function forwardUpload(request, env, session) {
   return env.COORDINATOR.get(id).fetch('https://internal/internal/upload', { method: 'POST', body: form });
 }
 
+async function saveManualData(request, env, session, dashboardId) {
+  const dashboard = dashboardById(dashboardId);
+  if (!dashboard) throw new AppError('Dashboard desconhecido.', 404, 'DASHBOARD_NOT_FOUND');
+  if (!dashboard.manualData) throw new AppError('Este painel não tem dados manuais editáveis.', 404, 'MANUAL_DATA_NOT_SUPPORTED');
+  const body = await request.json();
+  const data = validateManualData(body.data);
+  const github = new GitHubPublisher(env);
+  const current = await github.currentOrNull(dashboard.manualData);
+  const when = new Date().toLocaleString('pt-BR', { timeZone: 'America/Fortaleza' });
+  const message = `Atualiza dados manuais · ${dashboard.label} · ${when}\n\nResponsável: ${session.sub}`;
+  const bytes = new TextEncoder().encode(JSON.stringify(data, null, 2));
+  const result = await github.update(dashboard.manualData, bytes, current?.sha, message);
+  return { ok: true, commit: result.commit?.sha || null, when };
+}
+
 async function forwardRestore(env, dashboard, versionId, user) {
   const id = env.COORDINATOR.idFromName(`dashboard:${dashboard.id}`);
   return env.COORDINATOR.get(id).fetch('https://internal/internal/restore', {
@@ -140,6 +156,11 @@ export default {
       if (url.pathname === '/api/v1/uploads' && request.method === 'POST') {
         const result = await forwardUpload(request, env, session);
         return new Response(result.body, { status: result.status, headers: { ...Object.fromEntries(result.headers), ...cors(request, env), 'Cache-Control': 'no-store' } });
+      }
+
+      const manualMatch = url.pathname.match(/^\/api\/v1\/dashboards\/([^/]+)\/manual$/);
+      if (manualMatch && request.method === 'POST') {
+        return response(request, env, await saveManualData(request, env, session, manualMatch[1]));
       }
 
       const versionsMatch = url.pathname.match(/^\/api\/v1\/dashboards\/([^/]+)\/versions$/);

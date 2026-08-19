@@ -29,13 +29,12 @@ export const DASHBOARDS = {
     label: 'Gestão de Pendências',
     aliases: ['pendenciasr1'],
     github: { owner: 'automacaofico', repo: 'pendenciasr1', path: 'Base_Pendencias_FICO.xlsx' },
-    requiredSheets: ['PACOTES', 'PENDENCIAS', 'META'],
+    // Dados que o dashboard precisa e a base bruta (EAP) não tem — mobilização, alertas,
+    // cenários e cabeçalho — ficam versionados à parte, editados pela própria página com senha.
+    manualData: { owner: 'automacaofico', repo: 'pendenciasr1', path: 'manual-data.json' },
+    requiredSheets: ['Banco de Dados'],
     sheets: {
-      PACOTES: TABLE(1, ['PACOTE'], ['PACOTE', 'EMPRESA', 'KM', 'STATUS_TXT']),
-      PENDENCIAS: TABLE(1, ['PACOTE', 'EMPRESA', 'TIPO'], ['PACOTE', 'EMPRESA', 'TIPO', 'TOTAL', 'EXECUTADO', ['PENDENTE', 'PENDENTE EXECUÇÃO']]),
-      CENARIOS: TABLE(1, ['PACOTE', 'N_EQUIPES'], ['PACOTE', 'N_EQUIPES', 'PEND_SEMANA']),
-      ALERTAS: TABLE(1, ['PACOTE', 'TIPO', 'TITULO'], ['PACOTE', 'TIPO', 'TITULO']),
-      META: TABLE(1, ['CHAVE'], ['CHAVE', 'VALOR'])
+      'Banco de Dados': TABLE(2, ['Id_Pendencia'], ['Id_Pendencia', 'Pacote', 'Empresa', 'Status_Pendencia', 'Certificação ?', 'Origem'])
     }
   },
   mapa_pendencias: {

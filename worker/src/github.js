@@ -45,6 +45,30 @@ export class GitHubPublisher {
     return { sha: metadata.sha, buffer: await rawResponse.arrayBuffer(), downloadUrl: metadata.download_url };
   }
 
+  // Como current(), mas devolve null em vez de lançar erro quando o arquivo ainda não existe
+  // (usado pelos dados manuais, cujo arquivo só é criado no primeiro salvamento).
+  async currentOrNull(target) {
+    const path = `/repos/${target.owner}/${target.repo}/contents/${encodePath(target.path)}`;
+    const response = await fetch(`https://api.github.com${path}`, {
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'fico-versioning-worker'
+      }
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      const detail = await response.text();
+      console.error('GitHub API error', response.status, detail.slice(0, 500));
+      throw new AppError('Falha ao consultar arquivo atual.', 502, 'GITHUB_ERROR');
+    }
+    const metadata = await response.json();
+    const rawResponse = await fetch(metadata.download_url, { headers: { Authorization: `Bearer ${this.token}` }, cache: 'no-store' });
+    if (!rawResponse.ok) throw new AppError('Não foi possível localizar o arquivo atual.', 502, 'CURRENT_FILE_UNAVAILABLE');
+    return { sha: metadata.sha, buffer: await rawResponse.arrayBuffer() };
+  }
+
   async update(target, buffer, sha, message) {
     const path = `/repos/${target.owner}/${target.repo}/contents/${encodePath(target.path)}`;
     return this.request(path, {
