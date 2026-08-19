@@ -242,6 +242,20 @@
   table.tipos tr.total-row td{background:linear-gradient(135deg,var(--navy),#24467a);color:#fff;font-weight:800;border:none}
   table.tipos .obs{color:var(--cinza-txt);font-size:11px;font-style:italic}
   table.tipos .marco{color:var(--vermelho);font-weight:800;font-size:10.5px;background:rgba(209,69,69,.1);padding:2px 8px;border-radius:8px}
+  table.g-tabela tr.g-grupos th{border-bottom:1px solid rgba(255,255,255,.4);text-align:center;font-size:9.5px;letter-spacing:.3px}
+  table.g-tabela tr.g-sub th{padding-top:7px;padding-bottom:7px}
+  table.g-tabela th.g-certif,table.g-tabela tr.g-grupos th.g-certif{background:#FBE9EC;color:#9A2F42}
+  table.g-tabela th.g-origem,table.g-tabela tr.g-grupos th.g-origem{background:#FEF0DE;color:#95590E}
+  table.g-tabela th.g-exec,table.g-tabela tr.g-grupos th.g-exec{background:#E3F3E8;color:#1F7A4D}
+  table.g-tabela td.g-certif{background:#FDF5F6}
+  table.g-tabela td.g-origem{background:#FFFAF2}
+  table.g-tabela td.g-exec{background:#F3FAF5}
+  table.g-tabela td.g-vazio,table.g-tabela th.g-vazio{color:var(--cinza-txt);font-style:italic;font-weight:500}
+  table.g-tabela tbody tr:hover td.g-certif{background:#FBEBED}
+  table.g-tabela tbody tr:hover td.g-origem{background:#FDF2E2}
+  table.g-tabela tbody tr:hover td.g-exec{background:#E9F6ED}
+  table.g-tabela tr.total-row td.g-certif,table.g-tabela tr.total-row td.g-origem,table.g-tabela tr.total-row td.g-exec{background:linear-gradient(135deg,var(--navy),#24467a)}
+  .g-legenda{font-size:11px;color:var(--cinza-txt);margin-top:8px;line-height:1.5}
 
   /* ============ ALERTAS ============ */
   .alertas{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
@@ -522,13 +536,14 @@ function normalizar(raw){
   const ensureEmp=nome=>{ if(!EMP[nome])EMP[nome]={key:nome,nome,isVale:nome==='VALE',pacotes:{}}; return EMP[nome]; };
 
   raw.pendencias.forEach(row=>{
-    let pac,emp,tipo,tot,exe,obs,cert,naoCert,fisc,fund,impl,proto,finSemImp,finCert,pendExec,pendFin;
+    let pac,emp,tipo,tot,exe,obs,cert,naoCert,semCert,fisc,fund,impl,proto,semOrigem,finSemImp,finCert,pendExec,pendFin;
     if(Array.isArray(row)){
       pac=row[0];emp=row[1];tipo=row[2];tot=row[3];exe=row[4];obs=row[5];
     }else{
       pac=row.PACOTE;emp=row.EMPRESA;tipo=row.TIPO;tot=row.TOTAL;exe=row.EXECUTADO;obs=row.OBSERVACAO;
-      cert=row['CERTIFICAÇÃO'];naoCert=row['NÃO CERTIFICAÇÃO'];fisc=row['FISCALIZAÇÃO'];fund=row['FUNDIÁRIO'];
-      impl=row['IMPLANTAÇÃO'];proto=row['PROTOCOLO'];finSemImp=row['FINALIZADO (SEM IMPACTO)'];
+      cert=row['CERTIFICAÇÃO'];naoCert=row['NÃO CERTIFICAÇÃO'];semCert=row['SEM CLASSIFICAÇÃO'];
+      fisc=row['FISCALIZAÇÃO'];fund=row['FUNDIÁRIO'];impl=row['IMPLANTAÇÃO'];proto=row['PROTOCOLO'];semOrigem=row['SEM ORIGEM'];
+      finSemImp=row['FINALIZADO (SEM IMPACTO)'];
       finCert=row['FINALIZADO (CERTIFICAÇÃO)'];pendExec=row['PENDENTE EXECUÇÃO'];pendFin=row['PENDENTE FINALIZAÇÃO'];
     }
     const k=KEY(pac); if(!k)return;
@@ -540,7 +555,8 @@ function normalizar(raw){
     const E=ensureEmp(empresa);
     if(!E.pacotes[k])E.pacotes[k]={k,tipos:[],total:0,exec:0};
     E.pacotes[k].tipos.push({tipo,total:t,exec:e,pend:t-e,obs:obs||'',
-      cert:+cert||0,naoCert:+naoCert||0,fisc:+fisc||0,fund:+fund||0,impl:+impl||0,proto:+proto||0,
+      cert:+cert||0,naoCert:+naoCert||0,semCert:+semCert||0,
+      fisc:+fisc||0,fund:+fund||0,impl:+impl||0,proto:+proto||0,semOrigem:+semOrigem||0,
       finSemImp:+finSemImp||0,finCert:+finCert||0,
       pendExec:(pendExec!=null&&pendExec!==''?+pendExec:t-e),
       pendFin:(pendFin!=null&&pendFin!==''?+pendFin:t-e)});
@@ -552,6 +568,8 @@ function normalizar(raw){
       const pe=E.pacotes[k], base=PAC[k];
       pe.cert=pe.tipos.reduce((s,t)=>s+t.cert,0);
       pe.naoCert=pe.tipos.reduce((s,t)=>s+t.naoCert,0);
+      pe.semCert=pe.tipos.reduce((s,t)=>s+t.semCert,0);
+      pe.semOrigem=pe.tipos.reduce((s,t)=>s+t.semOrigem,0);
       pe.finalizado=pe.tipos.reduce((s,t)=>s+t.finSemImp+t.finCert,0);
       pe.pend=pe.total-pe.finalizado; // "Restantes" = total − Finalizado (coluna T · Status_Pendencia)
       pe.km=base?base.km:''; pe.cronograma=base?base.cronograma:'';
@@ -735,22 +753,31 @@ function renderBlocoPacote(empKey,k,pe,scls){
       +'</div>';
   }
 
-  h+='<div style="overflow-x:auto;margin-top:16px"><table class="tipos"><thead><tr>'
-    +'<th>Tipo</th><th class="num">Total</th><th class="num">Certif.</th><th class="num">Não certif.</th>'
-    +'<th class="num">Fiscaliz.</th><th class="num">Fundiário</th><th class="num">Implant.</th><th class="num">Protocolo</th>'
-    +'<th class="num">Executado</th><th class="num">Finaliz. (s/ impacto)</th><th class="num">Finaliz. (certif.)</th>'
-    +'<th class="num">Pend. execução</th><th class="num">Pend. finalização</th><th>Observação</th>'
+  h+='<div style="overflow-x:auto;margin-top:16px"><table class="tipos g-tabela"><thead>'
+    +'<tr class="g-grupos"><th rowspan="2">Tipo</th><th rowspan="2">Total</th>'
+      +'<th colspan="3" class="g-certif">Certificação · confere com o Total</th>'
+      +'<th colspan="5" class="g-origem">Origem · confere com o Total</th>'
+      +'<th colspan="5" class="g-exec">Execução</th><th rowspan="2">Observação</th></tr>'
+    +'<tr class="g-sub">'
+      +'<th class="num g-certif">Certif.</th><th class="num g-certif">Não certif.</th><th class="num g-certif g-vazio">S/ classif.</th>'
+      +'<th class="num g-origem">Fiscaliz.</th><th class="num g-origem">Fundiário</th><th class="num g-origem">Implant.</th><th class="num g-origem">Protocolo</th><th class="num g-origem g-vazio">S/ origem</th>'
+      +'<th class="num g-exec">Executado</th><th class="num g-exec">Finaliz. (s/ impacto)</th><th class="num g-exec">Finaliz. (certif.)</th><th class="num g-exec">Pend. execução</th><th class="num g-exec">Pend. finalização</th>'
     +'</tr></thead><tbody>';
   pe.tipos.forEach(t=>{
     const obs=/MARCO/i.test(t.obs)?'<span class="marco">'+t.obs+'</span>':(t.obs?'<span class="obs">'+t.obs+'</span>':'—');
-    h+='<tr><td>'+t.tipo+'</td><td class="num">'+t.total+'</td><td class="num">'+t.cert+'</td><td class="num">'+t.naoCert+'</td>'
-      +'<td class="num">'+t.fisc+'</td><td class="num">'+t.fund+'</td><td class="num">'+t.impl+'</td><td class="num">'+t.proto+'</td>'
-      +'<td class="num">'+t.exec+'</td><td class="num">'+t.finSemImp+'</td><td class="num">'+t.finCert+'</td>'
-      +'<td class="num">'+t.pendExec+'</td><td class="num">'+t.pendFin+'</td><td>'+obs+'</td></tr>';
+    h+='<tr><td>'+t.tipo+'</td><td class="num">'+t.total+'</td>'
+      +'<td class="num g-certif">'+t.cert+'</td><td class="num g-certif">'+t.naoCert+'</td><td class="num g-certif g-vazio">'+t.semCert+'</td>'
+      +'<td class="num g-origem">'+t.fisc+'</td><td class="num g-origem">'+t.fund+'</td><td class="num g-origem">'+t.impl+'</td><td class="num g-origem">'+t.proto+'</td><td class="num g-origem g-vazio">'+t.semOrigem+'</td>'
+      +'<td class="num g-exec">'+t.exec+'</td><td class="num g-exec">'+t.finSemImp+'</td><td class="num g-exec">'+t.finCert+'</td><td class="num g-exec">'+t.pendExec+'</td><td class="num g-exec">'+t.pendFin+'</td>'
+      +'<td>'+obs+'</td></tr>';
   });
-  h+='<tr class="total-row"><td>TOTAL</td><td class="num">'+pe.total+'</td><td class="num">'+pe.cert+'</td><td class="num">'+pe.naoCert+'</td><td></td><td></td><td></td><td></td>'
-    +'<td class="num">'+pe.exec+'</td><td></td><td></td><td class="num">'+pe.pend+'</td><td></td><td></td></tr>'
-    +'</tbody></table></div>';
+  h+='<tr class="total-row"><td>TOTAL</td><td class="num">'+pe.total+'</td>'
+    +'<td class="num g-certif">'+pe.cert+'</td><td class="num g-certif">'+pe.naoCert+'</td><td class="num g-certif g-vazio">'+pe.semCert+'</td>'
+    +'<td class="num g-origem" colspan="4"></td><td class="num g-origem g-vazio"></td>'
+    +'<td class="num g-exec">'+pe.exec+'</td><td class="num g-exec" colspan="2"></td><td class="num g-exec">'+pe.pend+'</td><td class="num g-exec"></td>'
+    +'<td></td></tr>'
+    +'</tbody></table></div>'
+    +'<div class="g-legenda">✓ Certificação (Certif. + Não certif. + S/ classif.) e Origem (Fiscaliz. + Fundiário + Implant. + Protocolo + S/ origem) somam exatamente o Total em cada linha — "S/ classif." e "S/ origem" são as pendências sem essa coluna preenchida na planilha.</div>';
 
   h+='<div class="grid-3" style="margin-top:16px">'
     +'<div class="card"><h3>Executado × Pendente por tipo</h3><div id="g_'+slug(empKey)+'_'+k+'t" class="grafico"></div></div>'
@@ -963,7 +990,8 @@ function aggregarBancoDeDados(rows,campoResp){
     const tipo=tituloCase(r['Punch List'])||'(sem classificação)';
     const key=pac+'¦'+empresa+'¦'+tipo;
     if(!grupos[key])grupos[key]={PACOTE:pac,EMPRESA:empresa,TIPO:tipo,TOTAL:0,EXECUTADO:0,
-      'CERTIFICAÇÃO':0,'NÃO CERTIFICAÇÃO':0,'FISCALIZAÇÃO':0,'FUNDIÁRIO':0,'IMPLANTAÇÃO':0,'PROTOCOLO':0,
+      'CERTIFICAÇÃO':0,'NÃO CERTIFICAÇÃO':0,'SEM CLASSIFICAÇÃO':0,
+      'FISCALIZAÇÃO':0,'FUNDIÁRIO':0,'IMPLANTAÇÃO':0,'PROTOCOLO':0,'SEM ORIGEM':0,
       'FINALIZADO (SEM IMPACTO)':0,'FINALIZADO (CERTIFICAÇÃO)':0,'PENDENTE EXECUÇÃO':0,'PENDENTE FINALIZAÇÃO':0};
     const g=grupos[key];
     g.TOTAL++;
@@ -973,13 +1001,17 @@ function aggregarBancoDeDados(rows,campoResp){
     const executado=esc(r['Status_Encerramento']).trim().toUpperCase()==='CONCLUÍDO'; // coluna AB
     const cert=esc(r['Certificação ?']).trim().toUpperCase(); // coluna B
     if(executado)g.EXECUTADO++;
+    // "Sem classificação"/"Sem origem" cobrem linhas em branco na planilha — somados aos demais,
+    // sempre fecham 100% com o Total (é a própria checagem, não só uma promessa visual).
     if(cert==='CERTIFICAÇÃO')g['CERTIFICAÇÃO']++;
     else if(cert==='NÃO CERTIFICAÇÃO')g['NÃO CERTIFICAÇÃO']++;
+    else g['SEM CLASSIFICAÇÃO']++;
     const origem=esc(r['Origem']).trim().toUpperCase();
     if(origem==='FISCALIZAÇÃO')g['FISCALIZAÇÃO']++;
     else if(origem==='FUNDIÁRIO')g['FUNDIÁRIO']++;
     else if(origem.indexOf('IMPLANTAÇÃO')===0)g['IMPLANTAÇÃO']++;
     else if(origem==='PROTOCOLO')g['PROTOCOLO']++;
+    else g['SEM ORIGEM']++;
     // Finalizado (s/ impacto) × (certificação): cruza coluna T (finalizado) com coluna B (certificação).
     if(finalizado){
       if(cert==='CERTIFICAÇÃO')g['FINALIZADO (CERTIFICAÇÃO)']++; else g['FINALIZADO (SEM IMPACTO)']++;
