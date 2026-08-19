@@ -493,6 +493,54 @@ function kpiStrat(fin,pend,total){
     +'<div class="kpi-strat-leg"><span><i class="dot dot-fin"></i>Finalizadas '+fin.toLocaleString('pt-BR')+' ('+pctFinL+'%)</span>'
     +'<span><i class="dot dot-pend"></i>Restantes '+pend.toLocaleString('pt-BR')+' ('+(100-pctFinL)+'%)</span></div></div>';
 }
+
+// Funde vários arrays de "tipos" (um por pacote/empresa) num só, somando por nome de tipo —
+// usado pra montar a tabela consolidada (todas as empresas juntas) a partir das mesmas linhas
+// já calculadas por empresa/pacote, sem reprocessar a planilha.
+function agregarTipos(listaDeTipos){
+  const map={};
+  listaDeTipos.forEach(t=>{
+    if(!map[t.tipo])map[t.tipo]={tipo:t.tipo,total:0,cert:0,naoCert:0,semCert:0,fisc:0,fund:0,impl:0,proto:0,semOrigem:0,exec:0,finSemImp:0,finCert:0,pendExec:0,pendFin:0};
+    const m=map[t.tipo];
+    m.total+=t.total; m.cert+=t.cert; m.naoCert+=t.naoCert; m.semCert+=t.semCert;
+    m.fisc+=t.fisc; m.fund+=t.fund; m.impl+=t.impl; m.proto+=t.proto; m.semOrigem+=t.semOrigem;
+    m.exec+=t.exec; m.finSemImp+=t.finSemImp; m.finCert+=t.finCert; m.pendExec+=t.pendExec; m.pendFin+=t.pendFin;
+  });
+  return Object.values(map).sort((a,b)=>b.total-a.total);
+}
+
+// Tabela de detalhe por Tipo (Certificação × Origem × Execução) — usada tanto por pacote/empresa
+// quanto, somada, no Consolidado. Calcula os totais a partir do próprio array recebido.
+function tabelaTiposHTML(tipos){
+  const total=tipos.reduce((s,t)=>s+t.total,0);
+  const cert=tipos.reduce((s,t)=>s+t.cert,0), naoCert=tipos.reduce((s,t)=>s+t.naoCert,0), semCert=tipos.reduce((s,t)=>s+t.semCert,0);
+  const exec=tipos.reduce((s,t)=>s+t.exec,0);
+  const finalizado=tipos.reduce((s,t)=>s+t.finSemImp+t.finCert,0);
+  const pend=total-finalizado;
+  let h='<div style="overflow-x:auto;margin-top:16px"><table class="tipos g-tabela"><thead>'
+    +'<tr class="g-grupos"><th rowspan="2">Tipo</th><th rowspan="2">Total</th>'
+      +'<th colspan="3" class="g-certif">Certificação</th>'
+      +'<th colspan="5" class="g-origem">Origem</th>'
+      +'<th colspan="5" class="g-exec">Execução</th></tr>'
+    +'<tr class="g-sub">'
+      +'<th class="num g-certif">Certif.</th><th class="num g-certif">Não certif.</th><th class="num g-certif g-vazio">S/ classif.</th>'
+      +'<th class="num g-origem">Fiscaliz.</th><th class="num g-origem">Fundiário</th><th class="num g-origem">Implant.</th><th class="num g-origem">Protocolo</th><th class="num g-origem g-vazio">S/ origem</th>'
+      +'<th class="num g-exec">Executado</th><th class="num g-exec">Finaliz. (s/ impacto)</th><th class="num g-exec">Finaliz. (certif.)</th><th class="num g-exec">Pend. execução</th><th class="num g-exec">Pend. finalização</th>'
+    +'</tr></thead><tbody>';
+  tipos.forEach(t=>{
+    h+='<tr><td>'+t.tipo+'</td><td class="num">'+t.total+'</td>'
+      +'<td class="num g-certif">'+t.cert+'</td><td class="num g-certif">'+t.naoCert+'</td><td class="num g-certif g-vazio">'+t.semCert+'</td>'
+      +'<td class="num g-origem">'+t.fisc+'</td><td class="num g-origem">'+t.fund+'</td><td class="num g-origem">'+t.impl+'</td><td class="num g-origem">'+t.proto+'</td><td class="num g-origem g-vazio">'+t.semOrigem+'</td>'
+      +'<td class="num g-exec">'+t.exec+'</td><td class="num g-exec">'+t.finSemImp+'</td><td class="num g-exec">'+t.finCert+'</td><td class="num g-exec">'+t.pendExec+'</td><td class="num g-exec">'+t.pendFin+'</td></tr>';
+  });
+  h+='<tr class="total-row"><td>TOTAL</td><td class="num">'+total+'</td>'
+    +'<td class="num g-certif">'+cert+'</td><td class="num g-certif">'+naoCert+'</td><td class="num g-certif g-vazio">'+semCert+'</td>'
+    +'<td class="num g-origem" colspan="4"></td><td class="num g-origem g-vazio"></td>'
+    +'<td class="num g-exec">'+exec+'</td><td class="num g-exec" colspan="2"></td><td class="num g-exec">'+pend+'</td><td class="num g-exec"></td></tr>'
+    +'</tbody></table></div>'
+    +'<div class="g-legenda">✓ Certificação (Certif. + Não certif. + S/ classif.) e Origem (Fiscaliz. + Fundiário + Implant. + Protocolo + S/ origem) somam exatamente o Total em cada linha — "S/ classif." e "S/ origem" são as pendências sem essa coluna preenchida na planilha.</div>';
+  return h;
+}
 function fillGrad(cls){return{verde:'linear-gradient(90deg,var(--verde),#3fb862)',amarelo:'linear-gradient(90deg,var(--amarelo),#ffd85c)',vermelho:'linear-gradient(90deg,var(--vermelho),#e56b6b)'}[cls];}
 const ICO={CRITICO:'▲',AVISO:'▲',INFO:'●'};
 const ALCLS={CRITICO:'crit',AVISO:'aviso',INFO:'info'};
@@ -697,6 +745,9 @@ function renderConsolidado(){
     +'<div class="kpi navy"><div class="rot">Total classificado</div><div class="val">'+certTotal.toLocaleString('pt-BR')+'</div><div class="sub">Base para o gráfico ao lado</div></div>'
     +'</div>';
 
+  h+='<h2 class="secao">Detalhamento por tipo · todos os responsáveis</h2>'
+    +tabelaTiposHTML(agregarTipos(empresas.flatMap(E=>Object.values(E.pacotes).flatMap(pe=>pe.tipos))));
+
   h+='<h2 class="secao">Comparativo por '+ROTULO_VISAO[visaoAtual].toLowerCase()+'</h2><div class="comp-pacotes stagger">';
   empresas.forEach(E=>{
     const pctp=E.totalGeral?Math.round(E.execGeral/E.totalGeral*100):0;
@@ -775,28 +826,7 @@ function renderBlocoPacote(empKey,k,pe,scls){
       +'</div>';
   }
 
-  h+='<div style="overflow-x:auto;margin-top:16px"><table class="tipos g-tabela"><thead>'
-    +'<tr class="g-grupos"><th rowspan="2">Tipo</th><th rowspan="2">Total</th>'
-      +'<th colspan="3" class="g-certif">Certificação</th>'
-      +'<th colspan="5" class="g-origem">Origem</th>'
-      +'<th colspan="5" class="g-exec">Execução</th></tr>'
-    +'<tr class="g-sub">'
-      +'<th class="num g-certif">Certif.</th><th class="num g-certif">Não certif.</th><th class="num g-certif g-vazio">S/ classif.</th>'
-      +'<th class="num g-origem">Fiscaliz.</th><th class="num g-origem">Fundiário</th><th class="num g-origem">Implant.</th><th class="num g-origem">Protocolo</th><th class="num g-origem g-vazio">S/ origem</th>'
-      +'<th class="num g-exec">Executado</th><th class="num g-exec">Finaliz. (s/ impacto)</th><th class="num g-exec">Finaliz. (certif.)</th><th class="num g-exec">Pend. execução</th><th class="num g-exec">Pend. finalização</th>'
-    +'</tr></thead><tbody>';
-  pe.tipos.forEach(t=>{
-    h+='<tr><td>'+t.tipo+'</td><td class="num">'+t.total+'</td>'
-      +'<td class="num g-certif">'+t.cert+'</td><td class="num g-certif">'+t.naoCert+'</td><td class="num g-certif g-vazio">'+t.semCert+'</td>'
-      +'<td class="num g-origem">'+t.fisc+'</td><td class="num g-origem">'+t.fund+'</td><td class="num g-origem">'+t.impl+'</td><td class="num g-origem">'+t.proto+'</td><td class="num g-origem g-vazio">'+t.semOrigem+'</td>'
-      +'<td class="num g-exec">'+t.exec+'</td><td class="num g-exec">'+t.finSemImp+'</td><td class="num g-exec">'+t.finCert+'</td><td class="num g-exec">'+t.pendExec+'</td><td class="num g-exec">'+t.pendFin+'</td></tr>';
-  });
-  h+='<tr class="total-row"><td>TOTAL</td><td class="num">'+pe.total+'</td>'
-    +'<td class="num g-certif">'+pe.cert+'</td><td class="num g-certif">'+pe.naoCert+'</td><td class="num g-certif g-vazio">'+pe.semCert+'</td>'
-    +'<td class="num g-origem" colspan="4"></td><td class="num g-origem g-vazio"></td>'
-    +'<td class="num g-exec">'+pe.exec+'</td><td class="num g-exec" colspan="2"></td><td class="num g-exec">'+pe.pend+'</td><td class="num g-exec"></td></tr>'
-    +'</tbody></table></div>'
-    +'<div class="g-legenda">✓ Certificação (Certif. + Não certif. + S/ classif.) e Origem (Fiscaliz. + Fundiário + Implant. + Protocolo + S/ origem) somam exatamente o Total em cada linha — "S/ classif." e "S/ origem" são as pendências sem essa coluna preenchida na planilha.</div>';
+  h+=tabelaTiposHTML(pe.tipos);
 
   h+='<div class="grid-3" style="margin-top:16px">'
     +'<div class="card"><h3>Executado × Pendente por tipo</h3><div id="g_'+slug(empKey)+'_'+k+'t" class="grafico"></div></div>'
