@@ -550,10 +550,10 @@ function normalizar(raw){
   Object.values(EMP).forEach(E=>{
     Object.keys(E.pacotes).forEach(k=>{
       const pe=E.pacotes[k], base=PAC[k];
-      pe.pend=pe.total-pe.exec;
       pe.cert=pe.tipos.reduce((s,t)=>s+t.cert,0);
       pe.naoCert=pe.tipos.reduce((s,t)=>s+t.naoCert,0);
       pe.finalizado=pe.tipos.reduce((s,t)=>s+t.finSemImp+t.finCert,0);
+      pe.pend=pe.total-pe.finalizado; // "Restantes" = total − Finalizado (coluna T · Status_Pendencia)
       pe.km=base?base.km:''; pe.cronograma=base?base.cronograma:'';
       pe.principal=!!base&&base.empresaPrincipal===E.key;
       if(pe.principal){
@@ -565,10 +565,10 @@ function normalizar(raw){
     });
     E.totalGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.total,0);
     E.execGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.exec,0);
-    E.pendGeral=E.totalGeral-E.execGeral;
     E.certGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.cert,0);
     E.naoCertGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.naoCert,0);
     E.finalizadoGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.finalizado,0);
+    E.pendGeral=E.totalGeral-E.finalizadoGeral;
   });
 
   const AL={geral:[],p1:[],p2:[],p3:[]};
@@ -632,10 +632,10 @@ function renderConsolidado(){
   const empresas=D.EMP_ORDER.map(k=>D.EMP[k]);
   const totGeral=empresas.reduce((s,e)=>s+e.totalGeral,0);
   const exeGeral=empresas.reduce((s,e)=>s+e.execGeral,0);
-  const penGeral=totGeral-exeGeral;
+  const finGeral=empresas.reduce((s,e)=>s+e.finalizadoGeral,0);
+  const penGeral=totGeral-finGeral; // "Restantes" = total − Finalizado (coluna T · Status_Pendencia)
   const mob=ks.reduce((s,k)=>s+PAC[k].mob,0), nec=ks.reduce((s,k)=>s+PAC[k].nec,0);
   const pctE=totGeral?(exeGeral/totGeral*100).toFixed(1):0, gapC=nec?Math.round((nec-mob)/nec*100):0;
-  const finGeral=empresas.reduce((s,e)=>s+e.finalizadoGeral,0);
   const pctFin=totGeral?(finGeral/totGeral*100).toFixed(1):0;
   const certGeral=empresas.reduce((s,e)=>s+e.certGeral,0), naoCertGeral=empresas.reduce((s,e)=>s+e.naoCertGeral,0);
   const certTotal=certGeral+naoCertGeral;
@@ -967,8 +967,11 @@ function aggregarBancoDeDados(rows,campoResp){
       'FINALIZADO (SEM IMPACTO)':0,'FINALIZADO (CERTIFICAÇÃO)':0,'PENDENTE EXECUÇÃO':0,'PENDENTE FINALIZAÇÃO':0};
     const g=grupos[key];
     g.TOTAL++;
-    const executado=esc(r['Status_Pendencia']).trim().toUpperCase()==='ENCERRADO';
-    const cert=esc(r['Certificação ?']).trim().toUpperCase();
+    // Executado (coluna AB · Status_Encerramento) e Finalizado (coluna T · Status_Pendencia) são
+    // filtros independentes — cada um conta a partir da sua própria coluna, não um do outro.
+    const finalizado=esc(r['Status_Pendencia']).trim().toUpperCase()==='ENCERRADO'; // coluna T
+    const executado=esc(r['Status_Encerramento']).trim().toUpperCase()==='CONCLUÍDO'; // coluna AB
+    const cert=esc(r['Certificação ?']).trim().toUpperCase(); // coluna B
     if(executado)g.EXECUTADO++;
     if(cert==='CERTIFICAÇÃO')g['CERTIFICAÇÃO']++;
     else if(cert==='NÃO CERTIFICAÇÃO')g['NÃO CERTIFICAÇÃO']++;
@@ -977,11 +980,13 @@ function aggregarBancoDeDados(rows,campoResp){
     else if(origem==='FUNDIÁRIO')g['FUNDIÁRIO']++;
     else if(origem.indexOf('IMPLANTAÇÃO')===0)g['IMPLANTAÇÃO']++;
     else if(origem==='PROTOCOLO')g['PROTOCOLO']++;
-    if(executado){
+    // Finalizado (s/ impacto) × (certificação): cruza coluna T (finalizado) com coluna B (certificação).
+    if(finalizado){
       if(cert==='CERTIFICAÇÃO')g['FINALIZADO (CERTIFICAÇÃO)']++; else g['FINALIZADO (SEM IMPACTO)']++;
     }else{
-      g['PENDENTE EXECUÇÃO']++; // a base bruta não distingue "em execução" de "aguardando finalização"
+      g['PENDENTE FINALIZAÇÃO']++;
     }
+    if(!executado)g['PENDENTE EXECUÇÃO']++;
   });
   return Object.values(grupos);
 }
