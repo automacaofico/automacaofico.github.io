@@ -294,13 +294,37 @@
   }
 .edit-btn{background:transparent;border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:999px;padding:5px 12px;font-size:12px;cursor:pointer;margin-top:6px}
 .edit-btn:hover{background:rgba(255,255,255,.12)}
+.view-toggle-bar{display:flex;align-items:center;justify-content:center;gap:12px;background:var(--branco);border-bottom:1px solid var(--cinza-borda);padding:12px 20px;flex-wrap:wrap}
+.view-toggle-lab{font-size:13px;font-weight:600;color:var(--cinza-txt)}
+.view-toggle{display:inline-flex;background:var(--cinza-bg);border-radius:999px;padding:4px;gap:4px}
+.view-toggle button{border:none;background:transparent;padding:8px 20px;border-radius:999px;font-size:13px;font-weight:700;color:var(--cinza-txt);cursor:pointer;transition:background .15s,color .15s}
+.view-toggle button.ativa{background:var(--navy);color:#fff;box-shadow:var(--sh-sm)}
+.view-toggle button:not(.ativa):hover{background:rgba(20,42,76,.08)}
 .edit-overlay{position:fixed;inset:0;background:rgba(20,42,76,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px}
 .edit-modal{background:var(--branco);border-radius:14px;box-shadow:var(--sh-lg);max-width:720px;width:100%;max-height:88vh;overflow:auto;padding:24px}
 .edit-modal h2{margin:0 0 6px;color:var(--navy);font-size:19px}
 .edit-hint{color:var(--cinza-txt);font-size:13px;margin:0 0 16px}
 .edit-modal label{display:block;font-size:12px;font-weight:600;color:var(--cinza-txt);margin:12px 0 4px}
 .edit-modal input[type=password],.edit-modal input[type=text]{width:100%;padding:9px 12px;border:1px solid var(--cinza-borda);border-radius:8px;font-size:14px}
-#editJson{width:100%;min-height:46vh;font-family:ui-monospace,Consolas,monospace;font-size:12.5px;padding:12px;border:1px solid var(--cinza-borda);border-radius:8px;box-sizing:border-box;white-space:pre;resize:vertical}
+.ef-secao{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:26px 0 4px;padding-top:16px;border-top:1px solid var(--cinza-borda);color:var(--navy);font-size:15px}
+.ef-secao:first-of-type{margin-top:8px;padding-top:0;border-top:none}
+.ef-ajuda{color:var(--cinza-txt);font-size:12px;margin:0 0 10px}
+.ef-grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+.ef-add{background:var(--navy);color:#fff;border:none;border-radius:999px;padding:6px 14px;font-size:12px;cursor:pointer;white-space:nowrap}
+.ef-add:hover{background:var(--navy2)}
+.pacote-card{border:1px solid var(--cinza-borda);border-radius:10px;padding:14px 16px;margin-bottom:14px;background:var(--cinza-bg)}
+.pacote-card h4{margin:0 0 10px;color:var(--navy);font-size:14px}
+.pacote-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0 14px}
+.pacote-grid label,.pacote-card>label{font-size:11px}
+.alerta-card,.cenario-row{border:1px solid var(--cinza-borda);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--cinza-bg);position:relative}
+.alerta-card .ef-grid2{margin-top:2px}
+.cenario-row{display:grid;grid-template-columns:repeat(6,1fr) auto;gap:8px;align-items:end}
+.cenario-row label{font-size:10px;white-space:nowrap}
+.cenario-row .cb-wrap{display:flex;align-items:center;gap:4px;font-size:11px;padding-bottom:9px}
+.ef-remove{background:transparent;border:1px solid var(--vermelho);color:var(--vermelho);border-radius:999px;width:26px;height:26px;font-size:14px;line-height:1;cursor:pointer;position:absolute;top:10px;right:10px}
+.cenario-row .ef-remove{position:static;align-self:center}
+.edit-modal select,.edit-modal textarea{width:100%;padding:9px 12px;border:1px solid var(--cinza-borda);border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box}
+.edit-modal textarea{min-height:60px;resize:vertical}
 .edit-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}
 .edit-actions button{padding:9px 18px;border-radius:8px;border:1px solid var(--cinza-borda);background:var(--branco);cursor:pointer;font-size:13px}
 .edit-actions button.primary{background:var(--navy);color:#fff;border-color:var(--navy)}
@@ -333,6 +357,14 @@
   </div>
 </header>
 
+<div class="view-toggle-bar">
+  <span class="view-toggle-lab">Ver pendências por:</span>
+  <div class="view-toggle">
+    <button class="ativa" data-visao="clp" onclick="mudarVisao('clp')">Responsável CLP</button>
+    <button data-visao="execucao" onclick="mudarVisao('execucao')">Responsável Execução</button>
+  </div>
+</div>
+
 <div id="editOverlay" class="edit-overlay" style="display:none">
   <div class="edit-modal">
     <h2>Editar dados manuais</h2>
@@ -349,8 +381,35 @@
       <div id="editLoginStatus" class="edit-status"></div>
     </div>
     <div id="editFormBox" style="display:none">
-      <label for="editJson">Dados (JSON) — meta, pacotes, cenarios, alertas</label>
-      <textarea id="editJson" spellcheck="false"></textarea>
+
+      <h3 class="ef-secao">Cabeçalho do painel</h3>
+      <div class="ef-grid2">
+        <div><label>Título</label><input type="text" id="efTitulo"></div>
+        <div><label>Subtítulo</label><input type="text" id="efSubtitulo"></div>
+        <div><label>Data de referência</label><input type="text" id="efDataRef" placeholder="Ex.: 19/08/2026"></div>
+        <div><label>Cadência de atualização</label><input type="text" id="efCadencia" placeholder="Ex.: Atualização semanal"></div>
+      </div>
+      <label>Premissa de dimensionamento</label>
+      <input type="text" id="efPremissa">
+      <label>Marco final (texto livre)</label>
+      <input type="text" id="efMarcoFinal" placeholder="Ex.: 15/10/2026 — Hidro e TAC 05 (Pacote 01)">
+
+      <h3 class="ef-secao">Mobilização por pacote</h3>
+      <p class="ef-ajuda">Esses números não vêm da planilha — preencha o que cada pacote tem em campo hoje.</p>
+      <div id="efPacotes"></div>
+
+      <h3 class="ef-secao">Alertas
+        <button type="button" class="ef-add" onclick="adicionarAlerta()">+ Adicionar alerta</button>
+      </h3>
+      <p class="ef-ajuda">Os avisos que aparecem no topo do painel e em cada pacote.</p>
+      <div id="alertasLista"></div>
+
+      <h3 class="ef-secao">Cenários de equipe
+        <button type="button" class="ef-add" onclick="adicionarCenario()">+ Adicionar cenário</button>
+      </h3>
+      <p class="ef-ajuda">Opcional — simulações de "quantas equipes precisam para zerar o pacote".</p>
+      <div id="cenariosLista"></div>
+
       <div class="edit-actions">
         <button type="button" onclick="fecharEdicao()">Cancelar</button>
         <button type="button" class="primary" onclick="salvarEdicao()">Salvar e publicar</button>
@@ -583,7 +642,7 @@ function renderConsolidado(){
   const pctCert=certTotal?(certGeral/certTotal*100).toFixed(1):0;
   const pctNaoCert=certTotal?(naoCertGeral/certTotal*100).toFixed(1):0;
 
-  let h='<h2 class="secao">Visão geral — '+empresas.length+' empresas · '+ks.length+' pacotes</h2>'
+  let h='<h2 class="secao">Visão geral · '+ROTULO_VISAO[visaoAtual]+' — '+empresas.length+' responsáveis · '+ks.length+' pacotes</h2>'
     +'<div class="kpis stagger" style="grid-template-columns:repeat(5,1fr)">'
     +'<div class="kpi navy"><div class="rot">Pendências totais</div><div class="val">'+totGeral.toLocaleString('pt-BR')+'</div><div class="sub">Todas as empresas, incl. VALE</div></div>'
     +'<div class="kpi verde"><div class="rot">Executadas</div><div class="val">'+exeGeral.toLocaleString('pt-BR')+'</div><div class="sub">'+pctE+'% do total</div></div>'
@@ -598,7 +657,7 @@ function renderConsolidado(){
     +'<div class="kpi navy"><div class="rot">Total classificado</div><div class="val">'+certTotal.toLocaleString('pt-BR')+'</div><div class="sub">Base para o gráfico ao lado</div></div>'
     +'</div>';
 
-  h+='<h2 class="secao">Comparativo por empresa</h2><div class="comp-pacotes stagger">';
+  h+='<h2 class="secao">Comparativo por '+ROTULO_VISAO[visaoAtual].toLowerCase()+'</h2><div class="comp-pacotes stagger">';
   empresas.forEach(E=>{
     const pctp=E.totalGeral?Math.round(E.execGeral/E.totalGeral*100):0;
     const src=logoSrc(E.isVale?'__VALE__':E.key);
@@ -883,13 +942,25 @@ function mostrar(id,btn){
 // não existem nessa base e vêm de um arquivo separado (manual-data.json), editável
 // direto nesta página (senha) através do worker.
 // ============================================================
-function aggregarBancoDeDados(rows){
+// As duas óticas do painel: "CLP" usa a coluna Empresa (responsável pelo CLP/contrato) e
+// "Execução" usa a coluna Executante (quem está tocando o serviço em campo). Em ambas, a
+// classificação da pendência passou a vir da coluna "Punch List" (não mais "Tipo de Pendencia").
+const CAMPO_RESPONSAVEL={clp:'Empresa',execucao:'Executante'};
+const ROTULO_VISAO={clp:'Responsável CLP',execucao:'Responsável Execução'};
+let visaoAtual='clp';
+
+function tituloCase(s){
+  return String(s||'').trim().toLowerCase().replace(/(^|\s|;)([a-zà-ú])/g,(m,sep,ch)=>sep+ch.toUpperCase());
+}
+
+function aggregarBancoDeDados(rows,campoResp){
   const PAC_NUM={1:'P1',2:'P2',3:'P3'};
+  const campo=campoResp||'Empresa';
   const grupos={};
   rows.forEach(r=>{
     const pac=PAC_NUM[+r['Pacote']]; if(!pac)return; // ignora linhas sem pacote válido (1/2/3)
-    const empresa=canonEmpresa(r['Empresa']); if(!empresa)return;
-    const tipo=esc(r['Tipo de Pendencia']).trim()||'(sem tipo)';
+    const empresa=canonEmpresa(r[campo]); if(!empresa)return;
+    const tipo=tituloCase(r['Punch List'])||'(sem classificação)';
     const key=pac+'¦'+empresa+'¦'+tipo;
     if(!grupos[key])grupos[key]={PACOTE:pac,EMPRESA:empresa,TIPO:tipo,TOTAL:0,EXECUTADO:0,
       'CERTIFICAÇÃO':0,'NÃO CERTIFICAÇÃO':0,'FISCALIZAÇÃO':0,'FUNDIÁRIO':0,'IMPLANTAÇÃO':0,'PROTOCOLO':0,
@@ -915,16 +986,32 @@ function aggregarBancoDeDados(rows){
   return Object.values(grupos);
 }
 
+let ultimasLinhasBanco=null;
+
 function parseWorkbook(wb,manual){
   const rows=wb.Sheets['Banco de Dados']?XLSX.utils.sheet_to_json(wb.Sheets['Banco de Dados'],{range:1,defval:null}):[];
   if(!rows.length)throw new Error('aba "Banco de Dados" ausente ou vazia');
-  const pendencias=aggregarBancoDeDados(rows);
+  ultimasLinhasBanco=rows;
+  return montarD(rows,manual);
+}
+
+function montarD(rows,manual){
+  const pendencias=aggregarBancoDeDados(rows,CAMPO_RESPONSAVEL[visaoAtual]);
   const m=manual||{};
   const meta=Object.keys(m.meta||{}).length?m.meta:FALLBACK.meta;
   const pacotes=(m.pacotes&&m.pacotes.length)?m.pacotes:FALLBACK.pacotes;
   const cenarios=m.cenarios||FALLBACK.cenarios;
   const alertas=m.alertas||FALLBACK.alertas;
   return normalizar({meta,pacotes,pendencias,cenarios,alertas});
+}
+
+// Troca de ótica (CLP × Execução): reagrupa as mesmas linhas já carregadas, sem rebuscar nada.
+function mudarVisao(v){
+  if(v===visaoAtual||!ultimasLinhasBanco)return;
+  visaoAtual=v;
+  document.querySelectorAll('.view-toggle button').forEach(b=>b.classList.toggle('ativa',b.dataset.visao===v));
+  D=montarD(ultimasLinhasBanco,ultimoManual);
+  renderAll();
 }
 
 async function buscarManual(){
@@ -985,7 +1072,7 @@ async function entrarEdicao(){
     tokenEdicao=data.token;
     localStorage.setItem('fico_pend_usuario',usuario);
     const base=ultimoManual&&Object.keys(ultimoManual).length?ultimoManual:{meta:FALLBACK.meta,pacotes:FALLBACK.pacotes,cenarios:FALLBACK.cenarios,alertas:FALLBACK.alertas};
-    document.getElementById('editJson').value=JSON.stringify(base,null,2);
+    preencherFormulario(base);
     document.getElementById('editLoginBox').style.display='none';
     document.getElementById('editFormBox').style.display='block';
     document.getElementById('editSaveStatus').textContent='';
@@ -994,8 +1081,8 @@ async function entrarEdicao(){
 async function salvarEdicao(){
   const st=document.getElementById('editSaveStatus');
   let data;
-  try{data=JSON.parse(document.getElementById('editJson').value);}
-  catch(e){st.className='edit-status err';st.textContent='⚠️ JSON inválido: '+e.message;return;}
+  try{data=coletarFormulario();}
+  catch(e){st.className='edit-status err';st.textContent='⚠️ '+e.message;return;}
   if(!tokenEdicao){st.className='edit-status err';st.textContent='⚠️ Sessão expirada, entre novamente.';return;}
   st.className='edit-status busy';st.textContent='🔄 Salvando...';
   try{
@@ -1008,6 +1095,162 @@ async function salvarEdicao(){
     await tentarFetch();
     setTimeout(fecharEdicao,1200);
   }catch(e){st.className='edit-status err';st.textContent='⚠️ '+e.message;}
+}
+
+// ============================================================
+// Formulário amigável (sem JSON à vista) para quem não programa.
+// ============================================================
+function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function escHtml(s){return escAttr(s);}
+
+const PACOTES_FORM=[{k:'P1',lab:'Pacote 01'},{k:'P2',lab:'Pacote 02'},{k:'P3',lab:'Pacote 03'}];
+let alertaSeq=0, cenarioSeq=0;
+
+function pacoteCardHTML(k,lab,p){
+  p=p||{};
+  return '<div class="pacote-card" data-pacote="'+k+'">'
+    +'<h4>'+lab+'</h4>'
+    +'<div class="ef-grid2">'
+    +'<div><label>Empresa responsável</label><input type="text" data-f="EMPRESA" value="'+escAttr(p.EMPRESA)+'"></div>'
+    +'<div><label>KM</label><input type="text" data-f="KM" value="'+escAttr(p.KM)+'" placeholder="Ex.: KM 0 – 34+500"></div>'
+    +'</div>'
+    +'<label>Cronograma</label><input type="text" data-f="CRONOGRAMA" value="'+escAttr(p.CRONOGRAMA)+'">'
+    +'<div class="pacote-grid" style="margin-top:10px">'
+    +'<div><label>Encarregados</label><input type="number" min="0" data-f="ENCARREGADOS" value="'+escAttr(p.ENCARREGADOS??0)+'"></div>'
+    +'<div><label>Oficiais</label><input type="number" min="0" data-f="OFICIAIS" value="'+escAttr(p.OFICIAIS??0)+'"></div>'
+    +'<div><label>Serventes</label><input type="number" min="0" data-f="SERVENTES" value="'+escAttr(p.SERVENTES??0)+'"></div>'
+    +'<div><label>Total mobilizado</label><input type="number" min="0" data-f="MOBILIZADO" value="'+escAttr(p.MOBILIZADO??0)+'"></div>'
+    +'<div><label>Total necessário</label><input type="number" min="0" data-f="NECESSARIO" value="'+escAttr(p.NECESSARIO??0)+'"></div>'
+    +'<div><label>RNCs em campo</label><input type="number" min="0" data-f="RNC" value="'+escAttr(p.RNC??0)+'"></div>'
+    +'</div>'
+    +'<div class="ef-grid2" style="margin-top:10px">'
+    +'<div><label>Situação da mobilização</label><input type="text" data-f="STATUS_TXT" value="'+escAttr(p.STATUS_TXT)+'" placeholder="Ex.: Atenção / Mobilização crítica"></div>'
+    +'<div><label>Semana de início (nº)</label><input type="number" min="0" data-f="START_SEMANA" value="'+escAttr(p.START_SEMANA??0)+'"></div>'
+    +'<div><label>Rótulo do dado extra</label><input type="text" data-f="EXTRA_LABEL" value="'+escAttr(p.EXTRA_LABEL)+'" placeholder="Ex.: Marco final"></div>'
+    +'<div><label>Valor do dado extra</label><input type="text" data-f="EXTRA_VALUE" value="'+escAttr(p.EXTRA_VALUE)+'" placeholder="Ex.: 15/10/2026"></div>'
+    +'</div>'
+    +'<label>Nota (aparece embaixo da mobilização)</label><textarea data-f="MOB_NOTA">'+escHtml(p.MOB_NOTA)+'</textarea>'
+    +'</div>';
+}
+
+function alertaCardHTML(id,a){
+  a=a||{};
+  const pac=a.PACOTE||'GERAL', tipo=a.TIPO||'INFO';
+  const opt=(val,atual,label)=>'<option value="'+val+'"'+(val===atual?' selected':'')+'>'+label+'</option>';
+  return '<div class="alerta-card" data-id="'+id+'">'
+    +'<button type="button" class="ef-remove" title="Remover alerta" onclick="removerAlerta('+id+')">✕</button>'
+    +'<div class="ef-grid2">'
+    +'<div><label>Onde aparece</label><select data-f="PACOTE">'
+      +opt('GERAL',pac,'Geral (topo do painel)')+opt('P1',pac,'Pacote 01')+opt('P2',pac,'Pacote 02')+opt('P3',pac,'Pacote 03')
+    +'</select></div>'
+    +'<div><label>Gravidade</label><select data-f="TIPO">'
+      +opt('CRITICO',tipo,'🔴 Crítico')+opt('AVISO',tipo,'🟡 Aviso')+opt('INFO',tipo,'🔵 Informativo')
+    +'</select></div>'
+    +'</div>'
+    +'<label>Título</label><input type="text" data-f="TITULO" value="'+escAttr(a.TITULO)+'">'
+    +'<label>Texto</label><textarea data-f="TEXTO">'+escHtml(a.TEXTO)+'</textarea>'
+    +'</div>';
+}
+function adicionarAlerta(a){
+  const id=++alertaSeq;
+  document.getElementById('alertasLista').insertAdjacentHTML('beforeend',alertaCardHTML(id,a));
+}
+function removerAlerta(id){
+  const el=document.querySelector('.alerta-card[data-id="'+id+'"]'); if(el)el.remove();
+}
+
+function cenarioRowHTML(id,c){
+  c=c||{};
+  const pac=c.PACOTE||'P1';
+  const opt=(val,atual)=>'<option value="'+val+'"'+(val===atual?' selected':'')+'>'+val+'</option>';
+  return '<div class="cenario-row" data-id="'+id+'">'
+    +'<div><label>Pacote</label><select data-f="PACOTE">'+opt('P1',pac)+opt('P2',pac)+opt('P3',pac)+'</select></div>'
+    +'<div><label>Nº equipes</label><input type="number" min="0" data-f="N_EQUIPES" value="'+escAttr(c.N_EQUIPES??1)+'"></div>'
+    +'<div><label>Pend./semana</label><input type="number" step="0.01" data-f="PEND_SEMANA" value="'+escAttr(c.PEND_SEMANA??0)+'"></div>'
+    +'<div><label>Pend./dia</label><input type="number" step="0.01" data-f="PEND_DIA" value="'+escAttr(c.PEND_DIA??0)+'"></div>'
+    +'<div><label>Colaboradores</label><input type="number" step="0.01" data-f="COLABORADORES" value="'+escAttr(c.COLABORADORES??0)+'"></div>'
+    +'<div><label>Nota</label><input type="text" data-f="NOTA" value="'+escAttr(c.NOTA)+'"></div>'
+    +'<button type="button" class="ef-remove" title="Remover cenário" onclick="removerCenario('+id+')">✕</button>'
+    +'<div class="cb-wrap"><label><input type="checkbox" data-f="ATUAL" '+(String(c.ATUAL).toUpperCase()==='SIM'?'checked':'')+'> Cenário atual</label></div>'
+    +'<div class="cb-wrap"><label><input type="checkbox" data-f="NECESSARIO_FLAG" '+(String(c.NECESSARIO).toUpperCase()==='SIM'?'checked':'')+'> É o necessário</label></div>'
+    +'</div>';
+}
+function adicionarCenario(c){
+  const id=++cenarioSeq;
+  document.getElementById('cenariosLista').insertAdjacentHTML('beforeend',cenarioRowHTML(id,c));
+}
+function removerCenario(id){
+  const el=document.querySelector('.cenario-row[data-id="'+id+'"]'); if(el)el.remove();
+}
+
+function preencherFormulario(base){
+  const m=base.meta||{};
+  document.getElementById('efTitulo').value=m.TITULO||'';
+  document.getElementById('efSubtitulo').value=m.SUBTITULO||'';
+  document.getElementById('efDataRef').value=String(m.DATA_REFERENCIA||'').trim();
+  document.getElementById('efCadencia').value=m.CADENCIA||'';
+  document.getElementById('efPremissa').value=m.PREMISSA||'';
+  document.getElementById('efMarcoFinal').value=m.MARCO_FINAL||'';
+
+  const pacotesPorChave={};
+  (base.pacotes||[]).forEach(p=>{ if(p&&p.KM)pacotesPorChave[String(p.PACOTE).toUpperCase()]=p; });
+  document.getElementById('efPacotes').innerHTML=PACOTES_FORM.map(pf=>pacoteCardHTML(pf.k,pf.lab,pacotesPorChave[pf.k])).join('');
+
+  alertaSeq=0; document.getElementById('alertasLista').innerHTML='';
+  (base.alertas||[]).forEach(a=>adicionarAlerta(a));
+
+  cenarioSeq=0; document.getElementById('cenariosLista').innerHTML='';
+  (base.cenarios||[]).forEach(c=>{ if(c&&c.N_EQUIPES)adicionarCenario(c); });
+}
+
+function coletarFormulario(){
+  const meta={
+    TITULO:document.getElementById('efTitulo').value.trim(),
+    SUBTITULO:document.getElementById('efSubtitulo').value.trim(),
+    DATA_REFERENCIA:document.getElementById('efDataRef').value.trim(),
+    CADENCIA:document.getElementById('efCadencia').value.trim(),
+    PREMISSA:document.getElementById('efPremissa').value.trim(),
+    MARCO_FINAL:document.getElementById('efMarcoFinal').value.trim()
+  };
+  if(!meta.TITULO)throw new Error('Preencha o título do painel.');
+  if(!meta.DATA_REFERENCIA)throw new Error('Preencha a data de referência.');
+
+  const pacotes=[];
+  document.querySelectorAll('#efPacotes .pacote-card').forEach(card=>{
+    const g=f=>card.querySelector('[data-f="'+f+'"]');
+    const empresa=g('EMPRESA').value.trim(), km=g('KM').value.trim();
+    if(!empresa)throw new Error('Preencha a empresa responsável de todos os pacotes.');
+    if(!km)throw new Error('Preencha o KM do '+PACOTES_FORM.find(pf=>pf.k===card.dataset.pacote).lab+' (sem isso a mobilização dele some do painel).');
+    pacotes.push({
+      PACOTE:card.dataset.pacote, EMPRESA:empresa,
+      KM:km, CRONOGRAMA:g('CRONOGRAMA').value.trim(),
+      ENCARREGADOS:+g('ENCARREGADOS').value||0, OFICIAIS:+g('OFICIAIS').value||0, SERVENTES:+g('SERVENTES').value||0,
+      MOBILIZADO:+g('MOBILIZADO').value||0, NECESSARIO:+g('NECESSARIO').value||0, RNC:+g('RNC').value||0,
+      STATUS_TXT:g('STATUS_TXT').value.trim(), START_SEMANA:+g('START_SEMANA').value||0,
+      EXTRA_LABEL:g('EXTRA_LABEL').value.trim(), EXTRA_VALUE:g('EXTRA_VALUE').value.trim(),
+      MOB_NOTA:g('MOB_NOTA').value.trim()
+    });
+  });
+
+  const alertas=[];
+  document.querySelectorAll('#alertasLista .alerta-card').forEach(card=>{
+    const g=f=>card.querySelector('[data-f="'+f+'"]');
+    const titulo=g('TITULO').value.trim();
+    if(!titulo)throw new Error('Todo alerta precisa de um título (ou remova o alerta em branco).');
+    alertas.push({PACOTE:g('PACOTE').value,TIPO:g('TIPO').value,TITULO:titulo,TEXTO:g('TEXTO').value.trim()});
+  });
+
+  const cenarios=[];
+  document.querySelectorAll('#cenariosLista .cenario-row').forEach(row=>{
+    const g=f=>row.querySelector('[data-f="'+f+'"]');
+    const c={PACOTE:g('PACOTE').value,N_EQUIPES:+g('N_EQUIPES').value||0,PEND_SEMANA:+g('PEND_SEMANA').value||0,
+      PEND_DIA:+g('PEND_DIA').value||0,COLABORADORES:+g('COLABORADORES').value||0,NOTA:g('NOTA').value.trim()};
+    if(g('ATUAL').checked)c.ATUAL='SIM';
+    if(g('NECESSARIO_FLAG').checked)c.NECESSARIO='SIM';
+    cenarios.push(c);
+  });
+
+  return {meta,pacotes,cenarios,alertas};
 }
 
 D=normalizar(FALLBACK);
