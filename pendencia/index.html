@@ -485,6 +485,14 @@ const KEY=p=>({P1:'p1',P2:'p2',P3:'p3'}[String(p).trim().toUpperCase()]);
 const num=v=>{v=parseFloat(String(v).replace(',','.'));return isNaN(v)?0:v;};
 const esc=s=>String(s==null?'':s);
 function statusFromGap(g){ if(g<=0)return{cls:'verde',lbl:'Mob. OK'}; if(g<=30)return{cls:'amarelo',lbl:'Gap '+g+'%'}; return{cls:'vermelho',lbl:'Gap '+g+'%'}; }
+// Mini barra "Finalizadas × Restantes" usada dentro dos cards de Impacto na Certificação
+// (geral e por responsável) — estratifica o total por status em vez de só mostrar a soma.
+function kpiStrat(fin,pend,total){
+  const pctFinL=total?Math.round(fin/total*100):0;
+  return '<div class="kpi-strat"><div class="kpi-strat-bar"><div class="f" style="width:'+pctFinL+'%"></div></div>'
+    +'<div class="kpi-strat-leg"><span><i class="dot dot-fin"></i>Finalizadas '+fin.toLocaleString('pt-BR')+' ('+pctFinL+'%)</span>'
+    +'<span><i class="dot dot-pend"></i>Restantes '+pend.toLocaleString('pt-BR')+' ('+(100-pctFinL)+'%)</span></div></div>';
+}
 function fillGrad(cls){return{verde:'linear-gradient(90deg,var(--verde),#3fb862)',amarelo:'linear-gradient(90deg,var(--amarelo),#ffd85c)',vermelho:'linear-gradient(90deg,var(--vermelho),#e56b6b)'}[cls];}
 const ICO={CRITICO:'▲',AVISO:'▲',INFO:'●'};
 const ALCLS={CRITICO:'crit',AVISO:'aviso',INFO:'info'};
@@ -673,12 +681,6 @@ function renderConsolidado(){
   // Estratificação: de quem impacta/não impacta certificação, quanto já está Finalizado (coluna T) x Restante.
   const certFinGeral=empresas.reduce((s,e)=>s+e.finCertGeral,0), certPendGeral=certGeral-certFinGeral;
   const naoCertFinGeral=empresas.reduce((s,e)=>s+e.finSemImpGeral,0), naoCertPendGeral=naoCertGeral-naoCertFinGeral;
-  const kpiStrat=(fin,pend,total)=>{
-    const pctFinL=total?Math.round(fin/total*100):0;
-    return '<div class="kpi-strat"><div class="kpi-strat-bar"><div class="f" style="width:'+pctFinL+'%"></div></div>'
-      +'<div class="kpi-strat-leg"><span><i class="dot dot-fin"></i>Finalizadas '+fin.toLocaleString('pt-BR')+' ('+pctFinL+'%)</span>'
-      +'<span><i class="dot dot-pend"></i>Restantes '+pend.toLocaleString('pt-BR')+' ('+(100-pctFinL)+'%)</span></div></div>';
-  };
 
   let h='<h2 class="secao">Visão geral · '+ROTULO_VISAO[visaoAtual]+' — '+empresas.length+' responsáveis · '+ks.length+' pacotes</h2>'
     +'<div class="kpis stagger" style="grid-template-columns:repeat(5,1fr)">'
@@ -873,10 +875,11 @@ function renderEmpresa(key){
   {
     const certTot=E.certGeral+E.naoCertGeral, pctCertE=certTot?(E.certGeral/certTot*100).toFixed(1):0;
     const pctNaoCertE=certTot?(E.naoCertGeral/certTot*100).toFixed(1):0;
+    const certPendE=E.certGeral-E.finCertGeral, naoCertPendE=E.naoCertGeral-E.finSemImpGeral;
     h+='<h2 class="secao '+scls+'">Impacto na certificação</h2><div class="grid-2">'
       +'<div class="kpis stagger" style="grid-template-columns:1fr;align-content:start;gap:16px">'
-      +'<div class="kpi vermelho"><div class="rot">Impactam certificação</div><div class="val">'+E.certGeral+'</div><div class="sub">'+pctCertE+'% do total classificado</div></div>'
-      +'<div class="kpi azul"><div class="rot">Não impactam certificação</div><div class="val">'+E.naoCertGeral+'</div><div class="sub">'+pctNaoCertE+'% do total classificado</div></div>'
+      +'<div class="kpi vermelho"><div class="rot">Impactam certificação</div><div class="val">'+E.certGeral+'</div><div class="sub">'+pctCertE+'% do total classificado</div>'+kpiStrat(E.finCertGeral,certPendE,E.certGeral)+'</div>'
+      +'<div class="kpi azul"><div class="rot">Não impactam certificação</div><div class="val">'+E.naoCertGeral+'</div><div class="sub">'+pctNaoCertE+'% do total classificado</div>'+kpiStrat(E.finSemImpGeral,naoCertPendE,E.naoCertGeral)+'</div>'
       +'</div>'
       +'<div class="card"><h3>Certificação × Não certificação</h3><div id="g_cert_'+slug(key)+'" class="grafico"></div></div>'
       +'</div>';
