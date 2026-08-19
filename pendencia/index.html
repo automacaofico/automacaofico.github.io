@@ -118,6 +118,13 @@
     font-variant-numeric:tabular-nums}
   .kpi .val small{font-size:15px;color:var(--cinza-txt);font-weight:600}
   .kpi .sub{font-size:11px;color:var(--cinza-txt);margin-top:8px;position:relative;z-index:2;font-weight:500}
+  .kpi-strat{position:relative;z-index:2;margin-top:12px;padding-top:12px;border-top:1px solid var(--cinza-borda)}
+  .kpi-strat-bar{height:8px;border-radius:5px;background:var(--cinza-borda);overflow:hidden}
+  .kpi-strat-bar .f{height:100%;background:linear-gradient(90deg,var(--azul),#4A90D9);border-radius:5px}
+  .kpi-strat-leg{display:flex;justify-content:space-between;gap:8px;margin-top:7px;font-size:10.5px;color:var(--cinza-txt);font-weight:600}
+  .kpi-strat-leg .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}
+  .dot-fin{background:var(--azul)}
+  .dot-pend{background:var(--cinza-borda);border:1px solid #b9c3d2}
 
   /* ============ COMP PACOTES ============ */
   /* ============ ABA VALE — identidade visual do cliente ============ */
@@ -570,7 +577,9 @@ function normalizar(raw){
       pe.naoCert=pe.tipos.reduce((s,t)=>s+t.naoCert,0);
       pe.semCert=pe.tipos.reduce((s,t)=>s+t.semCert,0);
       pe.semOrigem=pe.tipos.reduce((s,t)=>s+t.semOrigem,0);
-      pe.finalizado=pe.tipos.reduce((s,t)=>s+t.finSemImp+t.finCert,0);
+      pe.finCert=pe.tipos.reduce((s,t)=>s+t.finCert,0); // finalizadas que impactam certificação
+      pe.finSemImp=pe.tipos.reduce((s,t)=>s+t.finSemImp,0); // finalizadas que não impactam
+      pe.finalizado=pe.finSemImp+pe.finCert;
       pe.pend=pe.total-pe.finalizado; // "Restantes" = total − Finalizado (coluna T · Status_Pendencia)
       pe.km=base?base.km:''; pe.cronograma=base?base.cronograma:'';
       pe.principal=!!base&&base.empresaPrincipal===E.key;
@@ -585,6 +594,8 @@ function normalizar(raw){
     E.execGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.exec,0);
     E.certGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.cert,0);
     E.naoCertGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.naoCert,0);
+    E.finCertGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.finCert,0);
+    E.finSemImpGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.finSemImp,0);
     E.finalizadoGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.finalizado,0);
     E.pendGeral=E.totalGeral-E.finalizadoGeral;
   });
@@ -659,6 +670,15 @@ function renderConsolidado(){
   const certTotal=certGeral+naoCertGeral;
   const pctCert=certTotal?(certGeral/certTotal*100).toFixed(1):0;
   const pctNaoCert=certTotal?(naoCertGeral/certTotal*100).toFixed(1):0;
+  // Estratificação: de quem impacta/não impacta certificação, quanto já está Finalizado (coluna T) x Restante.
+  const certFinGeral=empresas.reduce((s,e)=>s+e.finCertGeral,0), certPendGeral=certGeral-certFinGeral;
+  const naoCertFinGeral=empresas.reduce((s,e)=>s+e.finSemImpGeral,0), naoCertPendGeral=naoCertGeral-naoCertFinGeral;
+  const kpiStrat=(fin,pend,total)=>{
+    const pctFinL=total?Math.round(fin/total*100):0;
+    return '<div class="kpi-strat"><div class="kpi-strat-bar"><div class="f" style="width:'+pctFinL+'%"></div></div>'
+      +'<div class="kpi-strat-leg"><span><i class="dot dot-fin"></i>Finalizadas '+fin.toLocaleString('pt-BR')+' ('+pctFinL+'%)</span>'
+      +'<span><i class="dot dot-pend"></i>Restantes '+pend.toLocaleString('pt-BR')+' ('+(100-pctFinL)+'%)</span></div></div>';
+  };
 
   let h='<h2 class="secao">Visão geral · '+ROTULO_VISAO[visaoAtual]+' — '+empresas.length+' responsáveis · '+ks.length+' pacotes</h2>'
     +'<div class="kpis stagger" style="grid-template-columns:repeat(5,1fr)">'
@@ -670,8 +690,8 @@ function renderConsolidado(){
     +'</div>';
 
   h+='<h2 class="secao vermelho">Impacto na certificação</h2><div class="kpis stagger" style="grid-template-columns:repeat(3,1fr)">'
-    +'<div class="kpi vermelho"><div class="rot">Impactam certificação</div><div class="val">'+certGeral.toLocaleString('pt-BR')+'</div><div class="sub">'+pctCert+'% do total classificado</div></div>'
-    +'<div class="kpi azul"><div class="rot">Não impactam certificação</div><div class="val">'+naoCertGeral.toLocaleString('pt-BR')+'</div><div class="sub">'+pctNaoCert+'% do total classificado</div></div>'
+    +'<div class="kpi vermelho"><div class="rot">Impactam certificação</div><div class="val">'+certGeral.toLocaleString('pt-BR')+'</div><div class="sub">'+pctCert+'% do total classificado</div>'+kpiStrat(certFinGeral,certPendGeral,certGeral)+'</div>'
+    +'<div class="kpi azul"><div class="rot">Não impactam certificação</div><div class="val">'+naoCertGeral.toLocaleString('pt-BR')+'</div><div class="sub">'+pctNaoCert+'% do total classificado</div>'+kpiStrat(naoCertFinGeral,naoCertPendGeral,naoCertGeral)+'</div>'
     +'<div class="kpi navy"><div class="rot">Total classificado</div><div class="val">'+certTotal.toLocaleString('pt-BR')+'</div><div class="sub">Base para o gráfico ao lado</div></div>'
     +'</div>';
 
