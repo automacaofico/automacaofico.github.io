@@ -156,3 +156,17 @@ dialog form{border-radius:0}
   body{background:#fff}
   .card,.kpis article,.history-kpis article,dialog{box-shadow:none!important}
 }
+
+/* Movimento operacional: realça mudanças, sem atrasar decisões. */
+.motion-toggle{display:inline-flex;align-items:center;gap:7px;color:var(--muted);font-size:8px;letter-spacing:.08em;cursor:pointer;white-space:nowrap}
+.motion-toggle input{appearance:none;display:inline-block;width:32px;height:18px;margin:0;border:0;border-radius:99px;background:#b9c7d1;padding:0;position:relative;cursor:pointer;transition:background .18s ease}
+.motion-toggle input::after{content:"";position:absolute;top:3px;left:3px;width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 1px 3px #05243d44;transition:transform .18s ease}
+.motion-toggle input:checked{background:var(--orange)}
+.motion-toggle input:checked::after{transform:translateX(14px)}
+.motion-toggle input:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.map-card{transform-origin:center top}
+dialog[open]::backdrop{animation:cco-backdrop-in .24s ease-out both}
+dialog[open] form,dialog[open]>.dialog-head{will-change:transform,opacity}
+@keyframes cco-backdrop-in{from{opacity:0}to{opacity:1}}
+html[data-motion="reduced"] *,html[data-motion="reduced"] *::before,html[data-motion="reduced"] *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}
+@media(max-width:760px){.motion-toggle span{display:none}.motion-toggle{gap:0}.motion-toggle input{width:30px}.session{gap:7px}}

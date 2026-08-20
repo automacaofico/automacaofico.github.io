@@ -2,6 +2,7 @@ import { createSafetyAudio } from '../safety-audio.js?v=20260811-5';
 import { addInfrastructureLayers } from '../rail-infrastructure-map.js?v=20260811-2';
 import { availableLines, lineCoordinates, LINE_LABELS } from '../rail-infrastructure.js?v=20260811-2';
 import { RAIL_PACKAGES, packageAt, packageCollection } from '../rail-packages.js?v=20260811-1';
+import { createCcoMotion } from './motion.js?v=20260820-1';
 
 const API = /^(?:localhost|127\.0\.0\.1)$/.test(location.hostname)
   ? 'http://127.0.0.1:8791'
@@ -30,11 +31,13 @@ const elements = {
 let sessionToken = sessionStorage.getItem('ficoCcoToken') || '', state = null, axis = [], map, kmPopup, operationPopup, equipmentPopup, basemap = 'street', equipmentMarkers = new Map(), packageMarkers = [];
 let loading = false, editingLdl = null, editingCirculation = null, lastCriticalSignature = '', lastWarningSignature = '', lastCriticalSoundAt = 0;
 const safetyAudio = createSafetyAudio(elements.sound, 'ficoCcoSafetySound');
+const ccoMotion = createCcoMotion({ toggle: $('reduce-motion-toggle') });
 
 function notify(element, text, success = false) {
   element.textContent = text;
   element.hidden = !text;
   element.classList.toggle('success', success);
+  ccoMotion.notice(element, success);
 }
 function date(value) { return value ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : '—'; }
 function isoLocal(value) { const d = new Date(value); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
@@ -80,6 +83,7 @@ function addCompositionRow(container, item = {}) {
   const syncCargo = () => { const loaded = row.querySelector('[data-load-status]').value === 'loaded', input = row.querySelector('[data-cargo]'); input.disabled = !loaded; input.required = loaded; if (!loaded) input.value = ''; updateCompositionEditor(container); };
   row.querySelector('[data-load-status]').addEventListener('change', syncCargo); row.querySelector('[data-wagon-count]').addEventListener('input', () => updateCompositionEditor(container)); row.querySelector('.remove-consist').onclick = () => { row.remove(); updateCompositionEditor(container); };
   container.append(row); syncCargo();
+  ccoMotion.added(row);
 }
 
 function renderCompositionEditor(container, composition = []) {
@@ -113,6 +117,7 @@ function addEquipmentMemberRow(container, item = {}) {
   row.querySelector('[data-member-role]').addEventListener('change', () => updateEquipmentFormationEditor(container));
   row.querySelector('.remove-equipment').onclick = () => { row.remove(); updateEquipmentFormationEditor(container); };
   container.append(row); updateEquipmentFormationEditor(container);
+  ccoMotion.added(row);
 }
 
 function renderEquipmentFormationEditor(container, members = []) {
@@ -280,6 +285,7 @@ function focusMapOperation(item, kind) {
   mapCard?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   mapCard?.classList.remove('map-focus-pulse');
   requestAnimationFrame(() => mapCard?.classList.add('map-focus-pulse'));
+  ccoMotion.mapFocus();
   window.setTimeout(() => {
     map.resize();
     map.fitBounds(bounds, { padding: window.innerWidth < 700 ? 55 : 110, maxZoom: 14, duration: 850 });
@@ -505,7 +511,7 @@ function openEditLdl(item) {
   elements.ldlEditWorkforce.value = item.workforce_count; elements.ldlEditStart.value = isoLocal(Date.parse(item.requested_start)); elements.ldlEditEnd.value = isoLocal(Date.parse(item.requested_end)); elements.ldlEditDescription.value = item.work_description; elements.ldlEditReason.value = '';
   updateTrackContext('edit-ldl');
   for (const checkbox of document.querySelectorAll('[name="edit-ldl-line"]')) checkbox.checked = item.lines.includes(checkbox.value);
-  elements.ldlEditDialog.showModal();
+  ccoMotion.dialog(elements.ldlEditDialog);
 }
 
 function showLdlAudit(item) {
@@ -527,7 +533,7 @@ function showLdlAudit(item) {
     elements.ldlAuditEvents.append(card);
   }
   if (!events.length) elements.ldlAuditEvents.innerHTML = '<div class="empty">Nenhum evento encontrado para esta LDL.</div>';
-  elements.ldlAuditDialog.showModal();
+  ccoMotion.dialog(elements.ldlAuditDialog);
 }
 
 function openEditCirculation(item) {
@@ -535,7 +541,7 @@ function openEditCirculation(item) {
   elements.circEditEquipment.value = item.equipment_id; elements.circEditOperator.value = item.operator_registration || ''; elements.circEditLine.value = item.line_id; elements.circEditDirection.value = item.direction;
   renderEquipmentFormationEditor(elements.circEditEquipmentList, item.equipmentMembers || []);
   const isDecreasing = item.direction === 'decrescente'; elements.circEditKmStart.value = formatKm(isDecreasing ? item.km_end : item.km_start); elements.circEditKmEnd.value = formatKm(isDecreasing ? item.km_start : item.km_end); elements.circEditStart.value = isoLocal(Date.parse(item.planned_start)); elements.circEditEnd.value = isoLocal(Date.parse(item.planned_end)); renderCompositionEditor(elements.circEditCompositionList, item.composition || []); elements.circEditRestrictions.value = item.restrictions || ''; elements.circEditReason.value = '';
-  updateTrackContext('edit-circulation'); elements.circEditLine.value = item.line_id; elements.circEditDialog.showModal();
+  updateTrackContext('edit-circulation'); elements.circEditLine.value = item.line_id; ccoMotion.dialog(elements.circEditDialog);
 }
 
 function showCirculationAudit(item) {
@@ -557,7 +563,7 @@ function showCirculationAudit(item) {
     elements.circAuditEvents.append(card);
   }
   if (!events.length) elements.circAuditEvents.innerHTML = '<div class="empty">Nenhum evento encontrado para esta circulação.</div>';
-  elements.circAuditDialog.showModal();
+  ccoMotion.dialog(elements.circAuditDialog);
 }
 
 function record(item, kind) {
@@ -619,7 +625,7 @@ function render() {
   elements.ldlList.replaceChildren(); for (const item of ldls) elements.ldlList.append(record(item, 'ldl')); if (!ldls.length) elements.ldlList.innerHTML = '<div class="empty">Nenhuma LDL em aberto.</div>';
   elements.circulationList.replaceChildren(); for (const item of circulations) elements.circulationList.append(record(item, 'circulation')); if (!circulations.length) elements.circulationList.innerHTML = '<div class="empty">Nenhuma circulação autorizada.</div>';
   elements.permissiveList.replaceChildren(); for (const item of permissives) elements.permissiveList.append(record(item, 'permissive')); if (!permissives.length) elements.permissiveList.innerHTML = '<div class="empty">Nenhuma operação permissiva ativa.</div>';
-  elements.freshness.textContent = `Atualizado em ${date(state.serverTime)} · ciclo automático/5 s`; populateSelects(); renderHistory(); renderSafetyEvents(); renderMap();
+  elements.freshness.textContent = `Atualizado em ${date(state.serverTime)} · ciclo automático/5 s`; populateSelects(); renderHistory(); renderSafetyEvents(); renderMap(); ccoMotion.kpis(); ccoMotion.records();
 }
 
 async function load() {
@@ -629,7 +635,7 @@ async function load() {
   finally { loading = false; }
 }
 function showLogin() { sessionToken = ''; sessionStorage.removeItem('ficoCcoToken'); elements.login.hidden = false; elements.app.hidden = true; elements.logout.hidden = true; elements.controller.textContent = 'AGUARDANDO ACESSO'; }
-function showApp() { elements.login.hidden = true; elements.app.hidden = false; elements.logout.hidden = false; setTimeout(() => map?.resize(), 0); }
+function showApp() { elements.login.hidden = true; elements.app.hidden = false; elements.logout.hidden = false; setTimeout(() => { map?.resize(); ccoMotion.revealApp(); }, 0); }
 
 async function closeRecord(id, kind, action) {
   const isCancel = action === 'cancel', note = isCancel ? prompt('Informe a justificativa obrigatória do cancelamento:') : prompt(kind === 'ldl' ? 'Observação da devolução (opcional):' : kind === 'permissive' ? 'Observação do encerramento permissivo (opcional):' : 'Observação da conclusão (opcional):', '');
@@ -673,7 +679,7 @@ elements.circAuditExport.onclick = () => {
   const csv = '\ufeff' + rows.map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"','""')}"`).join(';')).join('\r\n'), url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })), link = document.createElement('a'); link.href = url; link.download = `auditoria-circulacoes-${new Date().toISOString().slice(0,10)}.csv`; link.click(); URL.revokeObjectURL(url);
 };
 
-document.querySelectorAll('[data-open]').forEach((button) => button.onclick = () => { const dialog = $(button.dataset.open), now = Date.now(); if (dialog.id === 'ldl-dialog') { elements.ldlStart.value = isoLocal(now); elements.ldlEnd.value = isoLocal(now + 4 * 3600000); updateTrackContext('ldl'); } else if (dialog.id === 'circulation-dialog') { elements.circStart.value = isoLocal(now); elements.circEnd.value = isoLocal(now + 2 * 3600000); updateTrackContext('circulation'); updateCompositionEditor(elements.circCompositionList); } else { elements.permStart.value = isoLocal(now); elements.permEnd.value = isoLocal(now + 2 * 3600000); updateTrackContext('permissive'); renderPermissiveConflicts(); } dialog.showModal(); });
+document.querySelectorAll('[data-open]').forEach((button) => button.onclick = () => { const dialog = $(button.dataset.open), now = Date.now(); if (dialog.id === 'ldl-dialog') { elements.ldlStart.value = isoLocal(now); elements.ldlEnd.value = isoLocal(now + 4 * 3600000); updateTrackContext('ldl'); } else if (dialog.id === 'circulation-dialog') { elements.circStart.value = isoLocal(now); elements.circEnd.value = isoLocal(now + 2 * 3600000); updateTrackContext('circulation'); updateCompositionEditor(elements.circCompositionList); } else { elements.permStart.value = isoLocal(now); elements.permEnd.value = isoLocal(now + 2 * 3600000); updateTrackContext('permissive'); renderPermissiveConflicts(); } ccoMotion.dialog(dialog); });
 document.querySelectorAll('[data-close]').forEach((button) => button.onclick = () => button.closest('dialog').close());
 elements.circAddEquipment.onclick = () => addEquipmentMemberRow(elements.circEquipmentList);
 elements.circEditAddEquipment.onclick = () => addEquipmentMemberRow(elements.circEditEquipmentList);
