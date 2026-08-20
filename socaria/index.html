@@ -127,7 +127,7 @@ tbody tr:hover{background:var(--blue-subtle)}
 .ai-panel{background:linear-gradient(135deg,#f8fbff,#edf5ff);border:1px solid #c9def5;border-radius:var(--radius);padding:18px 22px;margin-bottom:20px;position:relative}
 .ai-header{display:flex;align-items:center;gap:10px;font-weight:800;font-size:15px;color:var(--blue);margin-bottom:12px}
 .ai-badge{background:linear-gradient(135deg,#7928ca,#ff0080);color:#fff;font-size:11px;padding:3px 8px;border-radius:6px;text-transform:uppercase;font-weight:800}
-.ai-insights-list{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.ai-insights-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
 .insight-item{background:#fff;border:1px solid var(--border);border-left:4px solid var(--blue-light);border-radius:8px;padding:12px 14px;font-size:13px}
 .insight-item.danger{border-left-color:var(--red)}
 .insight-item.warning{border-left-color:var(--orange)}
@@ -437,7 +437,7 @@ tbody tr:hover{background:var(--blue-subtle)}
           <p style="font-size:14px;color:var(--text);margin-bottom:14px">
             O motor cognitivo analisa a correlação entre <b>Disponibilidade Física</b>, <b>Produtividade Ativa</b> e a <b>Meta Semanal Vigente (<span id="intelMetaDisplay">35.000</span> m)</b>, calculando com precisão o que é necessário para recuperar ou manter o ritmo.
           </p>
-          <div class="ai-insights-list" id="aiDetailedAnalysis" style="grid-template-columns:1fr 1fr"></div>
+          <div class="ai-insights-list" id="aiDetailedAnalysis"></div>
         </div>
       </div>
 
@@ -1027,6 +1027,75 @@ function calcDF(rows, machs = [...activeMachs]){
   return (activeOpportunities / totalOpportunities) * 100;
 }
 
+// ---------------------------------------------------------------------------
+// Estatística real sobre os dados (não é IA generativa: é regressão linear,
+// correlação de Pearson e detecção de anomalia por z-score, tudo recalculado
+// a cada mudança nos lançamentos).
+// ---------------------------------------------------------------------------
+function linearRegression(points){
+  const n = points.length;
+  if(n < 2) return { slope: 0, intercept: points[0] ? points[0].y : 0, r2: 0 };
+  let sx = 0, sy = 0, sxy = 0, sxx = 0;
+  points.forEach(p => { sx += p.x; sy += p.y; sxy += p.x * p.y; sxx += p.x * p.x; });
+  const denom = (n * sxx - sx * sx);
+  const slope = denom !== 0 ? (n * sxy - sx * sy) / denom : 0;
+  const intercept = (sy - slope * sx) / n;
+  const meanY = sy / n;
+  let ssTot = 0, ssRes = 0;
+  points.forEach(p => {
+    const pred = slope * p.x + intercept;
+    ssTot += (p.y - meanY) ** 2;
+    ssRes += (p.y - pred) ** 2;
+  });
+  const r2 = ssTot !== 0 ? 1 - ssRes / ssTot : 0;
+  return { slope, intercept, r2 };
+}
+
+function pearsonCorrelation(xs, ys){
+  const n = xs.length;
+  if(n < 2) return 0;
+  const mx = xs.reduce((a, b) => a + b, 0) / n;
+  const my = ys.reduce((a, b) => a + b, 0) / n;
+  let num = 0, dx2 = 0, dy2 = 0;
+  for(let i = 0; i < n; i++){
+    const dx = xs[i] - mx, dy = ys[i] - my;
+    num += dx * dy; dx2 += dx * dx; dy2 += dy * dy;
+  }
+  const den = Math.sqrt(dx2 * dy2);
+  return den === 0 ? 0 : num / den;
+}
+
+function weeklySeries(rows){
+  const map = {};
+  rows.forEach(r => {
+    const s = r.SEMANA || 1;
+    if(!map[s]) map[s] = { s, total: 0, activeDays: 0, possibleDays: 0 };
+    map[s].total += (r.PLASSER || 0) + (r.MATISA || 0) + (r.HARSCO || 0);
+    MACHINES.forEach(m => {
+      map[s].possibleDays += 1;
+      if((r[m] || 0) > 0) map[s].activeDays += 1;
+    });
+  });
+  return Object.values(map).sort((a, b) => a.s - b.s);
+}
+
+function detectAnomalies(rows){
+  const anomalies = [];
+  MACHINES.forEach(m => {
+    const history = appRows.map(r => r[m] || 0).filter(v => v > 0);
+    if(history.length < 5) return;
+    const mean = history.reduce((a, b) => a + b, 0) / history.length;
+    const std = Math.sqrt(history.reduce((s, v) => s + (v - mean) ** 2, 0) / history.length);
+    if(std === 0) return;
+    const lastActive = [...rows].reverse().find(r => (r[m] || 0) > 0);
+    if(!lastActive) return;
+    const val = lastActive[m];
+    const z = (val - mean) / std;
+    if(Math.abs(z) >= 1.5) anomalies.push({ m, date: lastActive.dateBR, val, z, mean, std });
+  });
+  return anomalies.sort((a, b) => Math.abs(b.z) - Math.abs(a.z));
+}
+
 function refreshAll(){
   updateHeaderBadges();
   const rows = getFilteredRows();
@@ -1280,6 +1349,22 @@ function renderAIInsights(rows){
     text: gapWeekly > 0 ? `Para atingir ${fmt(targetSettings.weeklyTarget)} m/sem em ${targetSettings.diasSemana} dias, é necessário adicionar +${fmt(reqDaily)} m/dia na soma das máquinas ativas.` : `Ritmo de meta atingido com sucesso!`
   });
 
+  const anomalies = detectAnomalies(rows);
+  if(anomalies.length){
+    const a = anomalies[0];
+    insights.push({
+      type: a.z > 0 ? 'success' : 'danger',
+      title: `Anomalia detectada: ${a.m} em ${a.date}`,
+      text: `${fmt(a.val)} m está ${a.z > 0 ? 'muito acima' : 'muito abaixo'} da média histórica dessa máquina (${fmt(a.mean)} m ± ${fmt(a.std)} m, z=${a.z.toFixed(1)}). ${a.z > 0 ? 'Vale entender o que permitiu esse desempenho para tentar replicar.' : 'Vale investigar a causa dessa queda pontual.'}`
+    });
+  } else {
+    insights.push({
+      type: 'success',
+      title: 'Sem anomalias relevantes',
+      text: 'Nenhum lançamento recente se desvia de forma estatisticamente significativa (z-score ≥ 1,5) do histórico de cada máquina.'
+    });
+  }
+
   $('aiQuickInsights').innerHTML = insights.map(i => `
     <div class="insight-item ${i.type}">
       <div class="insight-title">${i.title}</div>
@@ -1293,21 +1378,87 @@ function renderDetailedIntelligence(){
   let machStats = MACHINES.map(m => {
     let vals = rows.map(r => r[m] || 0);
     let tot = vals.reduce((a,b) => a+b, 0);
-    let prod = vals.filter(v => v>0).length;
+    let activeVals = vals.filter(v => v>0);
+    let prod = activeVals.length;
     let avg = prod ? tot/prod : 0;
-    let df = (prod / rows.length) * 100;
+    let df = rows.length ? (prod / rows.length) * 100 : 0;
     let max = Math.max(...vals, 0);
-    return { m, tot, prod, avg, df, max };
+    let std = prod ? Math.sqrt(activeVals.reduce((s,v) => s + (v-avg)**2, 0) / prod) : 0;
+    let cv = avg ? (std / avg) * 100 : 0;
+    return { m, tot, prod, avg, df, max, std, cv };
   });
 
+  const weeks = weeklySeries(rows);
+  const target = targetSettings.weeklyTarget || 35000;
+
+  // 1) Tendência real: regressão linear sobre o total semanal.
+  let trendText, trendOk = true;
+  if(weeks.length < 2){
+    trendText = 'Ainda não há semanas suficientes para calcular uma tendência confiável.';
+  } else {
+    const reg = linearRegression(weeks.map((w,i) => ({ x: i+1, y: w.total })));
+    if(reg.slope > 1){
+      const lastTotal = weeks[weeks.length-1].total;
+      const weeksToTarget = lastTotal >= target ? 0 : Math.max(1, Math.ceil((target - reg.intercept - reg.slope*weeks.length) / reg.slope));
+      trendText = `Regressão linear sobre ${weeks.length} semanas (R²=${reg.r2.toFixed(2)}): crescimento de ${fmt(reg.slope)} m/semana. Mantido esse ritmo, a meta de ${fmt(target)} m/semana seria atingida em ${weeksToTarget <= 0 ? 'já foi atingida' : `aproximadamente ${weeksToTarget} semana(s)`}.`;
+    } else if(reg.slope < -1){
+      trendOk = false;
+      trendText = `Regressão linear sobre ${weeks.length} semanas (R²=${reg.r2.toFixed(2)}): QUEDA de ${fmt(Math.abs(reg.slope))} m/semana. No ritmo atual a distância para a meta de ${fmt(target)} m/semana está aumentando — é necessário reverter a tendência antes de qualquer projeção de prazo.`;
+    } else {
+      trendText = `Produção semanal estável nas últimas ${weeks.length} semanas (variação de ${fmt(reg.slope)} m/semana, R²=${reg.r2.toFixed(2)}) — sem tendência clara de alta ou queda.`;
+    }
+  }
+
+  // 2) Correlação real (Pearson) entre DF semanal e produção semanal.
+  let corrText, corrOk = true;
+  if(weeks.length < 3){
+    corrText = 'Ainda não há semanas suficientes para calcular a correlação entre DF e produção com confiança.';
+  } else {
+    const dfSeries = weeks.map(w => w.possibleDays ? (w.activeDays/w.possibleDays)*100 : 0);
+    const totalSeries = weeks.map(w => w.total);
+    const corr = pearsonCorrelation(dfSeries, totalSeries);
+    const absCorr = Math.abs(corr);
+    const strength = absCorr >= 0.7 ? 'forte' : absCorr >= 0.4 ? 'moderada' : 'fraca';
+    corrOk = corr >= 0.4;
+    corrText = corrOk
+      ? `Correlação ${strength} entre Disponibilidade Física e produção semanal (r=${corr.toFixed(2)}): aumentar a DF tende a se traduzir diretamente em mais metros socados — manter as máquinas disponíveis é a alavanca mais direta.`
+      : `Correlação ${strength} entre Disponibilidade Física e produção semanal (r=${corr.toFixed(2)}): elevar a DF sozinha não está se traduzindo proporcionalmente em mais produção — o gargalo provável está no rendimento por dia efetivamente trabalhado, não na disponibilidade.`;
+  }
+
+  // 3) Evolução real da DF (metade inicial vs metade final do período, sem números fixos).
+  const half = Math.floor(weeks.length / 2);
+  function halfDF(ws){
+    const activeDays = ws.reduce((s,w) => s + w.activeDays, 0);
+    const possibleDays = ws.reduce((s,w) => s + w.possibleDays, 0);
+    return possibleDays ? (activeDays/possibleDays)*100 : 0;
+  }
+  const dfFirstHalf = halfDF(weeks.slice(0, half));
+  const dfSecondHalf = halfDF(weeks.slice(half));
+  const dfDelta = dfSecondHalf - dfFirstHalf;
+  const dfText = weeks.length < 2
+    ? 'Ainda não há semanas suficientes para comparar a evolução da DF.'
+    : `A DF evoluiu de ${dfFirstHalf.toFixed(1)}% na primeira metade do período (${weeks.slice(0,half).length} semana(s)) para ${dfSecondHalf.toFixed(1)}% na segunda metade (${weeks.slice(half).length} semana(s)) — variação de ${dfDelta>=0?'+':''}${dfDelta.toFixed(1)} p.p.`;
+
+  // 4) Consistência real por equipamento (coeficiente de variação dos dias ativos).
+  const cvText = machStats.map(ms => `${ms.m}: CV=${prodOrDash(ms)}`).join(' · ');
+  function prodOrDash(ms){ return ms.prod ? ms.cv.toFixed(0) + '%' : '—'; }
+
   let htmlDet = `
-    <div class="insight-item success">
-      <div class="insight-title">1. Diagnóstico de Capacidade Comprovada</div>
-      <p>A base de dados de 48 dias comprova que os 3 equipamentos atingem picos diários superiores a 2.000 m/dia (Plasser: ${fmt(machStats[0].max)}m, Matisa: ${fmt(machStats[1].max)}m, Harsco: ${fmt(machStats[2].max)}m). No entanto, a média ativa consolidada está em torno de 1.300 m/dia, demonstrando que a melhoria na taxa de utilização diária e janela de linha é o caminho mais rápido para bater a meta.</p>
+    <div class="insight-item ${trendOk ? 'success' : 'danger'}">
+      <div class="insight-title">1. Tendência de Produção (regressão linear)</div>
+      <p>${trendText}</p>
     </div>
-    <div class="insight-item warning">
-      <div class="insight-title">2. Gestão de Disponibilidade Física</div>
-      <p>A Disponibilidade Física média das máquinas evoluiu de 70,8% nas primeiras 4 semanas para 87,5% nas últimas 4 semanas (+16,7 p.p.). O desafio operacional atual é converter essa alta disponibilidade em maior metragem socada por dia trabalhado.</p>
+    <div class="insight-item ${corrOk ? 'success' : 'warning'}">
+      <div class="insight-title">2. Correlação: Disponibilidade Física × Produção</div>
+      <p>${corrText}</p>
+    </div>
+    <div class="insight-item ${dfDelta >= 0 ? 'success' : 'danger'}">
+      <div class="insight-title">3. Evolução da Disponibilidade Física</div>
+      <p>${dfText}</p>
+    </div>
+    <div class="insight-item">
+      <div class="insight-title">4. Consistência por Equipamento (coeficiente de variação)</div>
+      <p>${cvText} — quanto menor o CV, mais previsível é a produção diária daquela máquina quando ativa.</p>
     </div>
   `;
   $('aiDetailedAnalysis').innerHTML = htmlDet;
@@ -1329,11 +1480,17 @@ function renderDetailedIntelligence(){
   matrixHtml += `</div>`;
   $('matrixAnalysis').innerHTML = matrixHtml;
 
+  // Plano de ação: os dois primeiros itens apontam para a máquina real mais
+  // fraca em cada métrica (não é texto fixo — muda conforme os dados mudam).
+  const weakestDF = [...machStats].sort((a,b) => a.df - b.df)[0];
+  const machsWithData = machStats.filter(ms => ms.prod > 0);
+  const weakestAvg = machsWithData.length ? [...machsWithData].sort((a,b) => a.avg - b.avg)[0] : null;
+
   $('actionPlanList').innerHTML = `
     <ol style="padding-left:18px;font-size:13px;line-height:1.8;color:var(--text)">
-      <li><b>Apontamento de Horas nos Próximos Dias:</b> A partir de agora, registre as horas de trabalho e motivos de parada no diário para mapear exatamente as causas de perda de janela de via.</li>
-      <li><b>Janela Efetiva de Linha:</b> Alinhar com o CCO blocos contínuos de socaria na jornada de 07h às 17h para maximizar os metros por dia ativo.</li>
-      <li><b>Sincronismo com Distribuição de Lastro:</b> Garantir que a via esteja descarregada e regulada antes da entrada da socadora na frente.</li>
+      <li><b>Foco em disponibilidade:</b> ${weakestDF.m} tem a menor DF do grupo (${weakestDF.df.toFixed(1)}%) — priorizar liberação de via/manutenção para essa máquina eleva os dias produtivos.</li>
+      ${weakestAvg ? `<li><b>Foco em rendimento:</b> ${weakestAvg.m} tem a menor média ativa entre os dias em que operou (${fmt(weakestAvg.avg)} m/dia) — investigar se é limitação mecânica, geometria da via ou logística de apoio.</li>` : ''}
+      <li><b>Janela Efetiva de Linha:</b> Alinhar com o CCO blocos contínuos de socaria na jornada de ${targetSettings.jornadaHoras}h/dia para maximizar os metros por dia ativo.</li>
       <li><b>Ajuste de Meta:</b> Mantenha a meta atualizada no botão "Configurar Metas" conforme o avanço físico do cronograma da FICO.</li>
     </ol>
   `;
