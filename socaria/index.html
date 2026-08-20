@@ -858,6 +858,7 @@ let targetSettings = {
 let appRows = [];
 let period = 7;
 let activeMachs = new Set(MACHINES);
+const chartHitboxes = { dailyChart: [], dfProdChart: [], weeklyChart: [], simChart: [] };
 
 // ---------------------------------------------------------------------------
 // Base compartilhada (Cloudflare Worker + D1): esta é a única fonte oficial
@@ -1496,6 +1497,54 @@ function renderDetailedIntelligence(){
   `;
 }
 
+function ensureChartTooltip(){
+  let tip = document.getElementById('chartTooltip');
+  if(!tip){
+    tip = document.createElement('div');
+    tip.id = 'chartTooltip';
+    tip.style.cssText = 'position:fixed;pointer-events:none;z-index:10000;background:#11263c;color:#fff;padding:8px 12px;border-radius:8px;font-size:12px;line-height:1.6;box-shadow:0 8px 20px rgba(0,0,0,.25);display:none;white-space:nowrap';
+    document.body.appendChild(tip);
+  }
+  return tip;
+}
+
+function showChartTooltip(clientX, clientY, html){
+  const tip = ensureChartTooltip();
+  tip.innerHTML = html;
+  tip.style.display = 'block';
+  let left = clientX + 14;
+  let top = clientY + 14;
+  const rect = tip.getBoundingClientRect();
+  if(left + rect.width > window.innerWidth - 8) left = clientX - rect.width - 14;
+  if(top + rect.height > window.innerHeight - 8) top = clientY - rect.height - 14;
+  tip.style.left = Math.max(4, left) + 'px';
+  tip.style.top = Math.max(4, top) + 'px';
+}
+
+function hideChartTooltip(){
+  const tip = document.getElementById('chartTooltip');
+  if(tip) tip.style.display = 'none';
+}
+
+function bindChartHover(canvas, hitboxKey){
+  if(!canvas || canvas.dataset.hoverBound) return;
+  canvas.dataset.hoverBound = '1';
+  canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const hit = (chartHitboxes[hitboxKey] || []).find(b => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h);
+    if(hit){
+      showChartTooltip(e.clientX, e.clientY, hit.html);
+      canvas.style.cursor = 'pointer';
+    } else {
+      hideChartTooltip();
+      canvas.style.cursor = 'default';
+    }
+  });
+  canvas.addEventListener('mouseleave', () => { hideChartTooltip(); canvas.style.cursor = 'default'; });
+}
+
 function setupCanvas(canvas){
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
@@ -1557,6 +1606,8 @@ function renderDailyChart(rows){
   ctx.clearRect(0, 0, w, h);
   drawAxes(ctx, w, h, pad, maxVal, labels, 'm');
 
+  chartHitboxes.dailyChart = [];
+
   if(!soloMach){
     let bw = Math.max(4, ((w - pad.l - pad.r) / rows.length) * 0.65);
     rows.forEach((r, i) => {
@@ -1568,6 +1619,12 @@ function renderDailyChart(rows){
         let bh = (v / maxVal) * (h - pad.t - pad.b);
         ctx.fillStyle = COLORS[m];
         ctx.fillRect(cx - bw/2, curY - bh, bw, bh);
+        if(bh > 0){
+          chartHitboxes.dailyChart.push({
+            x: cx - bw/2, y: curY - bh, w: bw, h: bh,
+            html: `<b>${r.dateBR || r.dateShort}</b><br>${m}: <b>${fmt(v)} m</b>`
+          });
+        }
         curY -= bh;
       });
     });
@@ -1595,8 +1652,14 @@ function renderDailyChart(rows){
       ctx.beginPath();
       ctx.arc(x, y, 4, 0, Math.PI * 2);
       ctx.fill();
+      chartHitboxes.dailyChart.push({
+        x: x - 8, y: y - 8, w: 16, h: 16,
+        html: `<b>${r.dateBR || r.dateShort}</b><br>${m}: <b>${fmt(v)} m</b>`
+      });
     });
   }
+
+  bindChartHover(canvas, 'dailyChart');
 }
 
 function renderDFProdChart(rows){
@@ -1617,6 +1680,7 @@ function renderDFProdChart(rows){
   ctx.clearRect(0, 0, w, h);
   drawAxes(ctx, w, h, pad, 2500, [], 'm');
 
+  chartHitboxes.dfProdChart = [];
   let bw = 38;
   data.forEach((d, i) => {
     let cx = pad.l + (w - pad.l - pad.r) * (i + 0.5) / 3;
@@ -1633,7 +1697,14 @@ function renderDFProdChart(rows){
     ctx.fillText(`DF ${d.df.toFixed(0)}%`, cx - 18, y - 4);
 
     drawMachineLogo(ctx, d.m, cx, h - pad.b + 6, 64, 18);
+
+    chartHitboxes.dfProdChart.push({
+      x: cx - bw/2, y: pad.t, w: bw, h: (h - pad.b) - pad.t,
+      html: `<b>${d.m}</b><br>Média ativa: <b>${fmt(d.avg)} m/dia</b><br>DF: <b>${d.df.toFixed(1)}%</b>`
+    });
   });
+
+  bindChartHover(canvas, 'dfProdChart');
 }
 
 function renderWeeklyChart(){
@@ -1670,6 +1741,7 @@ function renderWeeklyChart(){
   ctx.font = 'bold 11px Segoe UI';
   ctx.fillText(`Meta: ${fmt(targetSettings.weeklyTarget)} m/sem`, w - pad.r - 140, targetY - 6);
 
+  chartHitboxes.weeklyChart = [];
   let bw = Math.max(12, ((w - pad.l - pad.r) / weeks.length) * 0.55);
   weeks.forEach((wk, i) => {
     let cx = pad.l + (w - pad.l - pad.r) * (i + 0.5) / weeks.length;
@@ -1682,7 +1754,15 @@ function renderWeeklyChart(){
     ctx.fillStyle = '#11263c';
     ctx.font = 'bold 11px Segoe UI';
     ctx.fillText(fmt(wk.total), cx - 18, y - 8);
+
+    const adherence = targetSettings.weeklyTarget ? (wk.total / targetSettings.weeklyTarget) * 100 : 0;
+    chartHitboxes.weeklyChart.push({
+      x: cx - bw/2, y: pad.t, w: bw, h: (h - pad.b) - pad.t,
+      html: `<b>Semana ${wk.s}</b><br>Produção: <b>${fmt(wk.total)} m</b><br>Aderência à meta: <b>${adherence.toFixed(1)}%</b>`
+    });
   });
+
+  bindChartHover(canvas, 'weeklyChart');
 }
 
 function renderRankingTable(rows){
@@ -1916,6 +1996,7 @@ function runSimulation(){
     { label: 'TOTAL', val: totalWeekly, color: '#11263c' }
   ];
 
+  chartHitboxes.simChart = [];
   let bw = 36;
   items.forEach((it, i) => {
     let cx = pad.l + (w - pad.l - pad.r) * (i + 0.5) / 4;
@@ -1926,6 +2007,11 @@ function runSimulation(){
     ctx.fillStyle = '#11263c';
     ctx.font = 'bold 11px Segoe UI';
     ctx.fillText(fmt(it.val), cx - 18, y - 6);
+
+    chartHitboxes.simChart.push({
+      x: cx - bw/2, y: pad.t, w: bw, h: (h - pad.b) - pad.t,
+      html: `<b>${it.label}</b><br>Produção semanal simulada: <b>${fmt(it.val)} m</b>`
+    });
 
     if(MACHINES.includes(it.label)){
       drawMachineLogo(ctx, it.label, cx, h - pad.b + 6, 56, 16);
@@ -1944,6 +2030,8 @@ function runSimulation(){
   ctx.lineTo(w - pad.r, targetY);
   ctx.stroke();
   ctx.setLineDash([]);
+
+  bindChartHover(canvas, 'simChart');
 }
 
 function resetSimulatorDefaults(){
