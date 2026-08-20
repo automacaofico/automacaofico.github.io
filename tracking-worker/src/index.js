@@ -3,6 +3,7 @@ import { summarizeGpsMovement } from './motion.js';
 import { routeCco } from './cco.js';
 import { routeRadar } from './radar.js';
 import { routeOrganogram } from './organogram.js';
+import { routeSocaria } from './socaria.js';
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
 
@@ -854,6 +855,8 @@ async function route(request, env) {
   if (ccoResponse) return ccoResponse;
   const organogramResponse = await routeOrganogram(request, env);
   if (organogramResponse) return organogramResponse;
+  const socariaResponse = await routeSocaria(request, env);
+  if (socariaResponse) return socariaResponse;
   if (request.method === 'GET' && url.pathname === '/health') return reply(request, { ok: true, service: 'fico-tracking-api', time: new Date().toISOString() });
   if (request.method === 'POST' && url.pathname === '/api/v1/activate') return activate(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/operators') return registerOperator(request, env);
