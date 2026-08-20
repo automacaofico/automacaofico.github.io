@@ -6,14 +6,14 @@ test('line 01 is available throughout the trunk', () => {
   assert.equal(lineRangeAvailable('line01', 0, 292260), true);
 });
 
-test('line 02 is available inside yards and existing DTOs', () => {
+test('line 02 is available inside yards and current DTOs', () => {
   assert.equal(lineRangeAvailable('line02', 4000, 6500), true);
-  assert.equal(lineRangeAvailable('line02', 19700, 20200), true);
   assert.equal(lineRangeAvailable('line02', 110700, 112700), true);
 });
 
 test('line 02 is rejected in single track and across topology limits', () => {
   assert.equal(lineRangeAvailable('line02', 7000, 8000), false);
+  assert.equal(lineRangeAvailable('line02', 19700, 20200), false);
   assert.equal(lineRangeAvailable('line02', 19000, 20500), false);
   assert.equal(lineRangeAvailable('line02', 131260, 132000), false);
 });

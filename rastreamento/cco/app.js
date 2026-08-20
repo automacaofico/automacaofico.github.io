@@ -131,13 +131,15 @@ function updateTrackContext(kind) {
     : kind === 'edit-ldl'
       ? { start: elements.ldlEditKmStart, end: elements.ldlEditKmEnd, context: elements.ldlEditTrackContext, select: null, checkboxes: '[name="edit-ldl-line"]' }
     : kind === 'circulation'
-      ? { start: elements.circKmStart, end: elements.circKmEnd, context: elements.circTrackContext, select: elements.circLine }
+      ? { start: elements.circKmStart, end: elements.circKmEnd, context: elements.circTrackContext, select: elements.circLine, directional: true }
       : kind === 'edit-circulation'
-        ? { start: elements.circEditKmStart, end: elements.circEditKmEnd, context: elements.circEditTrackContext, select: elements.circEditLine }
+        ? { start: elements.circEditKmStart, end: elements.circEditKmEnd, context: elements.circEditTrackContext, select: elements.circEditLine, directional: true }
       : { start: elements.permKmStart, end: elements.permKmEnd, context: elements.permTrackContext, select: elements.permLine };
   const start = parseKm(config.start.value), end = parseKm(config.end.value);
-  const availability = start === null || end === null || end <= start ? { lines: ['line01'], structures: [], partialStructures: [] } : availableLines(start, end);
-  const validInterval = start !== null && end !== null && end > start;
+  const intervalStart = config.directional && start !== null && end !== null ? Math.min(start, end) : start;
+  const intervalEnd = config.directional && start !== null && end !== null ? Math.max(start, end) : end;
+  const availability = intervalStart === null || intervalEnd === null || intervalEnd <= intervalStart ? { lines: ['line01'], structures: [], partialStructures: [] } : availableLines(intervalStart, intervalEnd);
+  const validInterval = intervalStart !== null && intervalEnd !== null && intervalEnd > intervalStart;
   if (!validInterval) config.context.textContent = 'Informe o trecho para verificar as linhas disponíveis.';
   else if (availability.structures.length) config.context.textContent = `Disponíveis neste trecho: ${availability.lines.map(lineLabel).join(' · ')}. Estrutura: ${availability.structures.map((item) => `${item.name}${item.provisional ? ' (provisória)' : ''}`).join(' + ')}.`;
   else if (availability.partialStructures.length && config.select?.value === 'line01') config.context.textContent = `Linha 01 disponível em todo o trecho. O percurso cruza ${availability.partialStructures.map((item) => item.name).join(' + ')}; Linha 02 e linhas especiais só podem ser usadas dentro de seus limites.`;
@@ -532,7 +534,7 @@ function openEditCirculation(item) {
   editingCirculation = item; notify(elements.circEditMessage, ''); elements.circEditCode.textContent = displayCode(item, 'CIRC');
   elements.circEditEquipment.value = item.equipment_id; elements.circEditOperator.value = item.operator_registration || ''; elements.circEditLine.value = item.line_id; elements.circEditDirection.value = item.direction;
   renderEquipmentFormationEditor(elements.circEditEquipmentList, item.equipmentMembers || []);
-  elements.circEditKmStart.value = formatKm(item.km_start); elements.circEditKmEnd.value = formatKm(item.km_end); elements.circEditStart.value = isoLocal(Date.parse(item.planned_start)); elements.circEditEnd.value = isoLocal(Date.parse(item.planned_end)); renderCompositionEditor(elements.circEditCompositionList, item.composition || []); elements.circEditRestrictions.value = item.restrictions || ''; elements.circEditReason.value = '';
+  const isDecreasing = item.direction === 'decrescente'; elements.circEditKmStart.value = formatKm(isDecreasing ? item.km_end : item.km_start); elements.circEditKmEnd.value = formatKm(isDecreasing ? item.km_start : item.km_end); elements.circEditStart.value = isoLocal(Date.parse(item.planned_start)); elements.circEditEnd.value = isoLocal(Date.parse(item.planned_end)); renderCompositionEditor(elements.circEditCompositionList, item.composition || []); elements.circEditRestrictions.value = item.restrictions || ''; elements.circEditReason.value = '';
   updateTrackContext('edit-circulation'); elements.circEditLine.value = item.line_id; elements.circEditDialog.showModal();
 }
 
