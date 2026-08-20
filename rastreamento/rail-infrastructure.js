@@ -8,7 +8,6 @@ export const LINE_LABELS = {
 
 export const DOUBLE_TRACKS = [
   { id: 'patio01', name: 'Pátio 01', kind: 'yard', start: 3880, end: 6929, provisional: false },
-  { id: 'dto01', name: 'DTO 01', kind: 'dto', start: 19699, end: 20299, provisional: true },
   { id: 'patio03', name: 'Pátio 03', kind: 'yard', start: 32182, end: 34217, provisional: false },
   { id: 'dto02', name: 'DTO 02', kind: 'dto', start: 47902, end: 48502, provisional: true },
   { id: 'patio05', name: 'Pátio 05', kind: 'yard', start: 59878, end: 61914, provisional: false },

@@ -41,6 +41,18 @@ function numeric(value) { const number = Number(value); return Number.isFinite(n
 function activeAuthorized(env, value) { return Boolean(env.OPERATOR_ADMIN_PASSWORD) && String(value || '') === env.OPERATOR_ADMIN_PASSWORD; }
 const WAGON_TYPES = ['HNS', 'HNT', 'PET', 'PNT', 'PES'];
 
+export function normalizeCirculationRange(originKm, destinationKm, direction) {
+  const origin = numeric(originKm), destination = numeric(destinationKm);
+  const isDirectionValid = ['crescente', 'decrescente', 'manobra'].includes(direction);
+  const isOrderValid = direction === 'crescente'
+    ? destination > origin
+    : direction === 'decrescente'
+      ? destination < origin
+      : destination !== origin;
+  if (origin === null || destination === null || origin < 0 || destination < 0 || !isDirectionValid || !isOrderValid) return { ok: false };
+  return { ok: true, kmStart: Math.min(origin, destination), kmEnd: Math.max(origin, destination) };
+}
+
 export function normalizeComposition(value) {
   if (!Array.isArray(value)) return { ok: false, items: [], error: 'A composição do trem deve ser enviada como uma lista.' };
   if (value.length > 50) return { ok: false, items: [], error: 'A composição aceita no máximo 50 grupos de vagões.' };
@@ -84,7 +96,7 @@ function groupEquipmentMembers(rows) {
   return grouped;
 }
 
-const DOUBLE_TRACK_RANGES = [[3880,6929],[19699,20299],[32182,34217],[47902,48502],[59878,61914],[72242,72842],[84222,86207],[101202,101802],[110662,112737],[120192,120792]];
+const DOUBLE_TRACK_RANGES = [[3880,6929],[32182,34217],[47902,48502],[59878,61914],[72242,72842],[84222,86207],[101202,101802],[110662,112737],[120192,120792]];
 const SPECIAL_TRACK_RANGES = { south_loop: [0,2734], line_egp: [5520,6084], welding_yard: [6099,6538] };
 const OPERATIONAL_LINES = ['line01', 'line02', ...Object.keys(SPECIAL_TRACK_RANGES)];
 export function lineRangeAvailable(line, kmStart, kmEnd) {
@@ -430,10 +442,12 @@ async function updateLdl(request, env, controller) {
 
 async function createCirculation(request, env, controller) {
   const body = await request.json().catch(() => ({})), equipmentId = code(body.equipmentId), operatorRegistration = code(body.operatorRegistration), line = clean(body.line);
-  const kmStart = numeric(body.kmStart), kmEnd = numeric(body.kmEnd), start = iso(body.start), end = iso(body.end), direction = body.direction, restrictions = clean(body.restrictions, 500);
+  const start = iso(body.start), end = iso(body.end), direction = body.direction, restrictions = clean(body.restrictions, 500);
+  const range = normalizeCirculationRange(body.kmStart, body.kmEnd, direction);
   const composition = normalizeComposition(body.composition || []);
   const equipmentMembers = normalizeEquipmentMembers(Array.isArray(body.equipmentMembers) ? body.equipmentMembers : (body.helperEquipmentId ? [{ equipmentId: body.helperEquipmentId, operationalRole: 'traction_auxiliary' }] : []), equipmentId);
-  if (!equipmentId || !OPERATIONAL_LINES.includes(line) || kmStart === null || kmEnd === null || kmStart < 0 || kmEnd <= kmStart || !start || !end || end <= start || !['crescente', 'decrescente', 'manobra'].includes(direction)) return reply(request, { ok: false, error: 'Revise equipamento, linha, KM, horários e sentido.' }, 400);
+  if (!equipmentId || !OPERATIONAL_LINES.includes(line) || !range.ok || !start || !end || end <= start) return reply(request, { ok: false, error: 'Revise equipamento, linha, KM, horários e sentido.' }, 400);
+  const { kmStart, kmEnd } = range;
   if (!composition.ok) return reply(request, { ok: false, error: composition.error }, 400);
   if (!equipmentMembers.ok) return reply(request, { ok: false, error: equipmentMembers.error }, 400);
   if (!lineRangeAvailable(line, kmStart, kmEnd)) return reply(request, { ok: false, error: 'A linha selecionada não existe em todo o trecho informado. Divida a circulação conforme os limites da infraestrutura.' }, 400);
@@ -458,11 +472,13 @@ async function createCirculation(request, env, controller) {
 
 async function updateCirculation(request, env, controller) {
   const body = await request.json().catch(() => ({})), id = clean(body.id, 80), equipmentId = code(body.equipmentId), operatorRegistration = code(body.operatorRegistration), line = clean(body.line);
-  const kmStart = numeric(body.kmStart), kmEnd = numeric(body.kmEnd), start = iso(body.start), end = iso(body.end), direction = body.direction;
+  const start = iso(body.start), end = iso(body.end), direction = body.direction;
+  const range = normalizeCirculationRange(body.kmStart, body.kmEnd, direction);
   const restrictions = clean(body.restrictions, 500), reason = clean(body.reason, 500), expectedRevision = Math.round(numeric(body.expectedRevision) ?? -1);
   const composition = normalizeComposition(body.composition || []);
   const equipmentMembers = normalizeEquipmentMembers(Array.isArray(body.equipmentMembers) ? body.equipmentMembers : (body.helperEquipmentId ? [{ equipmentId: body.helperEquipmentId, operationalRole: 'traction_auxiliary' }] : []), equipmentId);
-  if (!id || !equipmentId || !OPERATIONAL_LINES.includes(line) || kmStart === null || kmEnd === null || kmStart < 0 || kmEnd <= kmStart || !start || !end || end <= start || !['crescente', 'decrescente', 'manobra'].includes(direction) || reason.length < 8 || expectedRevision < 0) return reply(request, { ok: false, error: 'Revise equipamento, operador, linha, KM, horÃ¡rios, sentido e justificativa da alteraÃ§Ã£o.' }, 400);
+  if (!id || !equipmentId || !OPERATIONAL_LINES.includes(line) || !range.ok || !start || !end || end <= start || reason.length < 8 || expectedRevision < 0) return reply(request, { ok: false, error: 'Revise equipamento, operador, linha, KM, horários, sentido e justificativa da alteração.' }, 400);
+  const { kmStart, kmEnd } = range;
   if (!composition.ok) return reply(request, { ok: false, error: composition.error }, 400);
   if (!equipmentMembers.ok) return reply(request, { ok: false, error: equipmentMembers.error }, 400);
   const current = await env.DB.prepare('SELECT * FROM circulations WHERE id=?').bind(id).first();
