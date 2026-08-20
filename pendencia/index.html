@@ -141,7 +141,7 @@
     letter-spacing:.6px;text-transform:uppercase;color:#00615E;background:#ECB11F;
     padding:4px 10px;border-radius:20px;margin-bottom:8px}
 
-  .comp-pacotes{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  .comp-pacotes{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px}
   .comp-card{background:#fff;border-radius:18px;box-shadow:var(--sh-md);overflow:hidden;
     transition:transform .3s cubic-bezier(.16,1,.3,1),box-shadow .3s;border:1px solid rgba(225,230,238,.6)}
   .comp-card:hover{transform:translateY(-5px);box-shadow:var(--sh-lg)}
@@ -321,6 +321,8 @@
 .view-toggle button{border:none;background:transparent;padding:8px 20px;border-radius:999px;font-size:13px;font-weight:700;color:var(--cinza-txt);cursor:pointer;transition:background .15s,color .15s}
 .view-toggle button.ativa{background:var(--navy);color:#fff;box-shadow:var(--sh-sm)}
 .view-toggle button:not(.ativa):hover{background:rgba(20,42,76,.08)}
+.regional-select{border:1px solid var(--cinza-borda);border-radius:999px;padding:9px 30px 9px 16px;font-size:13px;font-weight:700;color:var(--navy);background:var(--branco);cursor:pointer;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23142a4c'><path d='M5 7l5 6 5-6z'/></svg>");background-repeat:no-repeat;background-position:right 10px center;background-size:14px}
+.regional-select:hover{background-color:rgba(20,42,76,.04)}
 .edit-overlay{position:fixed;inset:0;background:rgba(20,42,76,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px}
 .edit-modal{background:var(--branco);border-radius:14px;box-shadow:var(--sh-lg);max-width:720px;width:100%;max-height:88vh;overflow:auto;padding:24px}
 .edit-modal h2{margin:0 0 6px;color:var(--navy);font-size:19px}
@@ -384,6 +386,12 @@
     <button class="ativa" data-visao="clp" onclick="mudarVisao('clp')">Responsável CLP</button>
     <button data-visao="execucao" onclick="mudarVisao('execucao')">Responsável Execução</button>
   </div>
+  <span class="view-toggle-lab" style="margin-left:10px">Regional:</span>
+  <select id="regionalSelect" class="regional-select" onchange="mudarRegional(this.value)">
+    <option value="r1" selected>Regional 01</option>
+    <option value="r2">Regional 02</option>
+    <option value="todas">Todas</option>
+  </select>
 </div>
 
 <div id="editOverlay" class="edit-overlay" style="display:none">
@@ -481,7 +489,9 @@ const CORES_VALE={verde:'#007E7A',amarelo:'#ECB11F',aqua:'#0ABB98',cereja:'#C030
 const charts={};
 let D=null;
 
-const KEY=p=>({P1:'p1',P2:'p2',P3:'p3'}[String(p).trim().toUpperCase()]);
+const KEY=p=>({P1:'p1',P2:'p2',P3:'p3',P5:'p5',P1A:'p1a',P1B:'p1b',P1C:'p1c'}[String(p).trim().toUpperCase()]);
+const LABEL_PACOTE={p1:'Pacote 01',p2:'Pacote 02',p3:'Pacote 03',p5:'Pacote 05',p1a:'Pacote 01A',p1b:'Pacote 01B',p1c:'Pacote 01C'};
+const labelPacote=k=>LABEL_PACOTE[k]||('Pacote '+k);
 const num=v=>{v=parseFloat(String(v).replace(',','.'));return isNaN(v)?0:v;};
 const esc=s=>String(s==null?'':s);
 function statusFromGap(g){ if(g<=0)return{cls:'verde',lbl:'Mob. OK'}; if(g<=30)return{cls:'amarelo',lbl:'Gap '+g+'%'}; return{cls:'vermelho',lbl:'Gap '+g+'%'}; }
@@ -576,6 +586,7 @@ function normalizar(raw){
   const PAC={};
   raw.pacotes.forEach(p=>{
     const k=KEY(p.PACOTE); if(!k)return;
+    if(!passaRegional(String(p.PACOTE).trim().toUpperCase()))return; // trava mobilização na regional selecionada
     if(!p.KM)return; // linhas extras (só PACOTE+EMPRESA) apenas registram participação, não definem o pacote
     const nec=+p.NECESSARIO||0, mob=+p.MOBILIZADO||0;
     PAC[k]={key:k,empresaPrincipal:esc(p.EMPRESA).trim().toUpperCase(),km:p.KM,cronograma:p.CRONOGRAMA,
@@ -656,19 +667,21 @@ function normalizar(raw){
     E.pendGeral=E.totalGeral-E.finalizadoGeral;
   });
 
-  const AL={geral:[],p1:[],p2:[],p3:[]};
+  const AL={geral:[],p1:[],p2:[],p3:[],p5:[],p1a:[],p1b:[],p1c:[]};
   raw.alertas.forEach(row=>{
     let pac,tp,tit,txt;
     if(Array.isArray(row)){pac=row[0];tp=row[1];tit=row[2];txt=row[3];}
     else{pac=row.PACOTE;tp=row.TIPO;tit=row.TITULO;txt=row.TEXTO;}
-    const key=String(pac).trim().toUpperCase()==='GERAL'?'geral':KEY(pac);
+    const pacU=String(pac).trim().toUpperCase();
+    const key=pacU==='GERAL'?'geral':KEY(pac);
     if(!AL[key])return;
+    if(key!=='geral'&&!passaRegional(pacU))return; // trava alertas por pacote na regional selecionada
     AL[key].push({tp:String(tp).trim().toUpperCase(),tit:esc(tit),txt:esc(txt)});
   });
 
   // ordem das abas: contratadas principais na ordem P1→P2→P3, depois as demais
   // empresas em ordem alfabética, e por fim a VALE (tratada como mais uma "empresa").
-  const principaisOrdem=['p1','p2','p3'].map(k=>PAC[k]&&PAC[k].empresaPrincipal).filter(Boolean);
+  const principaisOrdem=['p1','p1a','p1b','p1c','p2','p3','p5'].map(k=>PAC[k]&&PAC[k].empresaPrincipal).filter(Boolean);
   const todas=Object.keys(EMP);
   const secundarias=todas.filter(e=>principaisOrdem.indexOf(e)===-1&&e!=='VALE').sort((a,b)=>a.localeCompare(b,'pt-BR'));
   let ordemFinal=principaisOrdem.filter(e=>EMP[e]).concat(secundarias);
@@ -713,7 +726,7 @@ function alertasHTML(lista){
 }
 
 function renderConsolidado(){
-  const PAC=D.PAC, ks=['p1','p2','p3'].filter(k=>PAC[k]);
+  const PAC=D.PAC, ks=['p1','p1a','p1b','p1c','p2','p3','p5'].filter(k=>PAC[k]);
   const empresas=D.EMP_ORDER.map(k=>D.EMP[k]);
   const totGeral=empresas.reduce((s,e)=>s+e.totalGeral,0);
   const exeGeral=empresas.reduce((s,e)=>s+e.execGeral,0);
@@ -755,7 +768,7 @@ function renderConsolidado(){
     const logoImg=E.isVale?LOGO_VALE:(LOGOS[E.key]||'');
     const mime=E.isVale?'png':(LOGO_MIME[E.key]||'png');
     const logo=logoImg?'<div class="empresa-logo-card"><img src="data:image/'+mime+';base64,'+logoImg+'" alt="'+E.nome+'"></div>':'';
-    const pacotesLista=Object.keys(E.pacotes).sort().map(k=>'Pacote 0'+k[1]).join(' · ')||'—';
+    const pacotesLista=Object.keys(E.pacotes).sort().map(k=>labelPacote(k)).join(' · ')||'—';
     const cabBg=E.isVale?'linear-gradient(135deg,#007E7A,#00615E)':'linear-gradient(135deg,var(--navy),#24467a)';
     const gcls=pctp>=70?'verde':(pctp>=40?'amarelo':'vermelho');
     h+='<div class="comp-card">'
@@ -780,7 +793,7 @@ function renderConsolidado(){
     const mime=LOGO_MIME[p.empresaPrincipal]||'png';
     const logo=logoImg?'<div class="empresa-logo-card"><img src="data:image/'+mime+';base64,'+logoImg+'" alt="'+p.empresaPrincipal+'"></div>':'';
     h+='<div class="comp-card '+k+'">'
-      +'<div class="cab"><div style="display:flex;align-items:center;gap:14px">'+logo+'<div><div class="nome">Pacote 0'+k[1]+'</div><div class="empresa">'+p.empresaPrincipal+'</div></div></div><span class="semaforo sem-'+st.cls+'">'+st.lbl+'</span></div>'
+      +'<div class="cab"><div style="display:flex;align-items:center;gap:14px">'+logo+'<div><div class="nome">'+labelPacote(k)+'</div><div class="empresa">'+p.empresaPrincipal+'</div></div></div><span class="semaforo sem-'+st.cls+'">'+st.lbl+'</span></div>'
       +'<div class="corpo">'
       +'<div class="linha"><span class="lab">Equipe mobilizada</span><span class="num">'+mobTxt+'</span></div>'
       +'<div class="linha"><span class="lab">RNCs em campo</span><span class="num">'+p.rnc+'</span></div>'
@@ -801,7 +814,7 @@ function renderConsolidado(){
 }
 
 function renderBlocoPacote(empKey,k,pe,scls){
-  let h='<h2 class="secao '+scls+'">Pacote 0'+k[1]+(pe.principal?' · Contratada principal':'')+'</h2>';
+  let h='<h2 class="secao '+scls+'">'+labelPacote(k)+(pe.principal?' · Contratada principal':'')+'</h2>';
   if(pe.cronograma)h+='<div style="font-size:12px;color:var(--cinza-txt);margin:-6px 0 14px">'+pe.cronograma+'</div>';
 
   const pctFinPe=pe.total?Math.round(pe.finalizado/pe.total*100):0;
@@ -890,7 +903,7 @@ function renderEmpresa(key){
 
   let h='<div class="pac-banner" style="background:'+gradPrincipal+'">'+logo
     +'<div class="pac-banner-txt"><div class="pac-banner-nome">'+nomeExibicao(key)+'</div>'
-    +'<div class="pac-banner-km">Atua em '+pactoKeys.length+' pacote(s): '+pactoKeys.map(k=>'Pacote 0'+k[1]).join(', ')+'</div></div>'
+    +'<div class="pac-banner-km">Atua em '+pactoKeys.length+' pacote(s): '+pactoKeys.map(k=>labelPacote(k)).join(', ')+'</div></div>'
     +'<div class="pac-banner-fico"><img src="data:image/png;base64,'+LOGO_FICO+'" alt="FICO"></div></div>';
 
   const pctFinE=E.totalGeral?(E.finalizadoGeral/E.totalGeral*100).toFixed(1):0;
@@ -899,7 +912,7 @@ function renderEmpresa(key){
     +'<div class="kpi verde"><div class="rot">Executadas</div><div class="val">'+E.execGeral+'</div><div class="sub">'+pctp+'% de avanço</div></div>'
     +'<div class="kpi azul"><div class="rot">Finalizadas</div><div class="val">'+E.finalizadoGeral+'</div><div class="sub">'+pctFinE+'% de avanço</div></div>'
     +'<div class="kpi vermelho"><div class="rot">Restantes</div><div class="val">'+E.pendGeral+'</div><div class="sub">A tratar</div></div>'
-    +'<div class="kpi laranja"><div class="rot">Pacotes</div><div class="val">'+pactoKeys.length+'</div><div class="sub">'+pactoKeys.map(k=>'P'+k[1]).join(' · ')+'</div></div>'
+    +'<div class="kpi laranja"><div class="rot">Pacotes</div><div class="val">'+pactoKeys.length+'</div><div class="sub">'+pactoKeys.map(k=>k.toUpperCase()).join(' · ')+'</div></div>'
     +'</div>';
 
   {
@@ -924,11 +937,11 @@ function initChart(id){const el=document.getElementById(id);if(!el)return null;i
 function baseGrid(){return{left:'9%',right:'5%',top:'12%',bottom:'20%'};}
 
 function renderCharts(){
-  const PAC=D.PAC, ks=['p1','p2','p3'].filter(k=>PAC[k]);
+  const PAC=D.PAC, ks=['p1','p1a','p1b','p1c','p2','p3','p5'].filter(k=>PAC[k]);
 
   const ce=initChart('g_ce');
   if(ce)ce.setOption({tooltip:{trigger:'axis'},legend:{data:['Mobilizado','Necessário'],bottom:0,textStyle:{fontSize:11}},grid:baseGrid(),
-    xAxis:{type:'category',data:ks.map(k=>'Pacote 0'+k[1]+' · '+PAC[k].empresaPrincipal),axisLabel:{fontSize:10,color:CORES.navy}},
+    xAxis:{type:'category',data:ks.map(k=>labelPacote(k)+' · '+PAC[k].empresaPrincipal),axisLabel:{fontSize:10,color:CORES.navy}},
     yAxis:{type:'value',axisLabel:{fontSize:10,color:'#8898B0'},splitLine:{lineStyle:{color:'#EEF'}}},
     series:[{name:'Mobilizado',type:'bar',color:CORES.azul,barWidth:'32%',itemStyle:{borderRadius:[6,6,0,0]},label:{show:true,position:'top',fontSize:11,color:CORES.navy,fontWeight:'bold'},data:ks.map(k=>PAC[k].mob)},
       {name:'Necessário',type:'bar',color:CORES.laranja,barWidth:'32%',itemStyle:{borderRadius:[6,6,0,0]},label:{show:true,position:'top',fontSize:11,color:CORES.navy,fontWeight:'bold'},data:ks.map(k=>PAC[k].nec)}]});
@@ -960,7 +973,7 @@ function renderCharts(){
   const corK={p1:CORES.azul,p2:CORES.laranja,p3:CORES.verde};
   const series=ks.map((k,idx)=>{
     const cenAtual=(PAC[k].cenarios||[]).find(c=>c.atual)||(PAC[k].cenarios||[])[0]||{ps:'0'};
-    const s={name:'Pacote 0'+k[1]+' · '+PAC[k].empresaPrincipal,type:'line',color:corK[k],smooth:true,symbol:'circle',symbolSize:6,lineStyle:{width:3},areaStyle:{opacity:.08},data:acc(num(cenAtual.ps),PAC[k].start)};
+    const s={name:labelPacote(k)+' · '+PAC[k].empresaPrincipal,type:'line',color:corK[k],smooth:true,symbol:'circle',symbolSize:6,lineStyle:{width:3},areaStyle:{opacity:.08},data:acc(num(cenAtual.ps),PAC[k].start)};
     if(idx===ks.length-1)s.markLine={silent:true,symbol:'none',lineStyle:{color:CORES.vermelho,type:'dashed',width:2},label:{formatter:'Marco final',color:CORES.vermelho,fontSize:11,fontWeight:'bold'},data:[{xAxis:'Marco'}]};
     return s;
   });
@@ -1025,17 +1038,30 @@ function mostrar(id,btn){
 const CAMPO_RESPONSAVEL={clp:'Empresa',execucao:'Executante'};
 const ROTULO_VISAO={clp:'Responsável CLP',execucao:'Responsável Execução'};
 let visaoAtual='clp';
+let regionalAtual='r1';
 
 function tituloCase(s){
   return String(s||'').trim().toLowerCase().replace(/(^|\s|;)([a-zà-ú])/g,(m,sep,ch)=>sep+ch.toUpperCase());
 }
 
+// A coluna "Pacote" vem como 1/2/3/5, ou "1A"/"1B" (pacotes próprios, não dobrados no 1).
+function normPacote(v){
+  return String(v==null?'':v).trim().toUpperCase()||null;
+}
+
+// Regional 01 = Pacotes 1, 1A, 1B, 1C, 2 e 3. Qualquer outro pacote (ex.: 5) é Regional 02.
+// A seleção de regional trava todo o painel (KPIs, abas, gráficos) nessa lista de pacotes.
+const REGIONAL_1_PACOTES=new Set(['P1','P1A','P1B','P1C','P2','P3']);
+const regionalDoPacote=pac=>REGIONAL_1_PACOTES.has(pac)?'r1':'r2';
+const passaRegional=pac=>regionalAtual==='todas'||regionalDoPacote(pac)===regionalAtual;
+
 function aggregarBancoDeDados(rows,campoResp){
-  const PAC_NUM={1:'P1',2:'P2',3:'P3'};
+  const PAC_NUM={1:'P1',2:'P2',3:'P3',5:'P5','1A':'P1A','1B':'P1B','1C':'P1C'};
   const campo=campoResp||'Empresa';
   const grupos={};
   rows.forEach(r=>{
-    const pac=PAC_NUM[+r['Pacote']]; if(!pac)return; // ignora linhas sem pacote válido (1/2/3)
+    const pac=PAC_NUM[normPacote(r['Pacote'])]; if(!pac)return; // ignora linhas sem pacote válido (1/2/3/5/1A/1B/1C)
+    if(!passaRegional(pac))return; // trava a visão na regional selecionada ('todas' não filtra)
     const empresa=canonEmpresa(r[campo]); if(!empresa)return;
     const tipo=tituloCase(r['Punch List'])||'(sem classificação)';
     const key=pac+'¦'+empresa+'¦'+tipo;
@@ -1097,6 +1123,14 @@ function mudarVisao(v){
   if(v===visaoAtual||!ultimasLinhasBanco)return;
   visaoAtual=v;
   document.querySelectorAll('.view-toggle button').forEach(b=>b.classList.toggle('ativa',b.dataset.visao===v));
+  D=montarD(ultimasLinhasBanco,ultimoManual);
+  renderAll();
+}
+
+// Trava o painel inteiro (KPIs, abas por empresa, gráficos) na regional escolhida.
+function mudarRegional(v){
+  if(v===regionalAtual||!ultimasLinhasBanco)return;
+  regionalAtual=v;
   D=montarD(ultimasLinhasBanco,ultimoManual);
   renderAll();
 }
@@ -1190,7 +1224,7 @@ async function salvarEdicao(){
 function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function escHtml(s){return escAttr(s);}
 
-const PACOTES_FORM=[{k:'P1',lab:'Pacote 01'},{k:'P2',lab:'Pacote 02'},{k:'P3',lab:'Pacote 03'}];
+const PACOTES_FORM=[{k:'P1',lab:'Pacote 01'},{k:'P1A',lab:'Pacote 01A'},{k:'P1B',lab:'Pacote 01B'},{k:'P1C',lab:'Pacote 01C'},{k:'P2',lab:'Pacote 02'},{k:'P3',lab:'Pacote 03'},{k:'P5',lab:'Pacote 05'}];
 let alertaSeq=0, cenarioSeq=0;
 
 function pacoteCardHTML(k,lab,p){
@@ -1228,7 +1262,7 @@ function alertaCardHTML(id,a){
     +'<button type="button" class="ef-remove" title="Remover alerta" onclick="removerAlerta('+id+')">✕</button>'
     +'<div class="ef-grid2">'
     +'<div><label>Onde aparece</label><select data-f="PACOTE">'
-      +opt('GERAL',pac,'Geral (topo do painel)')+opt('P1',pac,'Pacote 01')+opt('P2',pac,'Pacote 02')+opt('P3',pac,'Pacote 03')
+      +opt('GERAL',pac,'Geral (topo do painel)')+opt('P1',pac,'Pacote 01')+opt('P1A',pac,'Pacote 01A')+opt('P1B',pac,'Pacote 01B')+opt('P1C',pac,'Pacote 01C')+opt('P2',pac,'Pacote 02')+opt('P3',pac,'Pacote 03')+opt('P5',pac,'Pacote 05')
     +'</select></div>'
     +'<div><label>Gravidade</label><select data-f="TIPO">'
       +opt('CRITICO',tipo,'🔴 Crítico')+opt('AVISO',tipo,'🟡 Aviso')+opt('INFO',tipo,'🔵 Informativo')
@@ -1251,7 +1285,7 @@ function cenarioRowHTML(id,c){
   const pac=c.PACOTE||'P1';
   const opt=(val,atual)=>'<option value="'+val+'"'+(val===atual?' selected':'')+'>'+val+'</option>';
   return '<div class="cenario-row" data-id="'+id+'">'
-    +'<div><label>Pacote</label><select data-f="PACOTE">'+opt('P1',pac)+opt('P2',pac)+opt('P3',pac)+'</select></div>'
+    +'<div><label>Pacote</label><select data-f="PACOTE">'+opt('P1',pac)+opt('P1A',pac)+opt('P1B',pac)+opt('P1C',pac)+opt('P2',pac)+opt('P3',pac)+opt('P5',pac)+'</select></div>'
     +'<div><label>Nº equipes</label><input type="number" min="0" data-f="N_EQUIPES" value="'+escAttr(c.N_EQUIPES??1)+'"></div>'
     +'<div><label>Pend./semana</label><input type="number" step="0.01" data-f="PEND_SEMANA" value="'+escAttr(c.PEND_SEMANA??0)+'"></div>'
     +'<div><label>Pend./dia</label><input type="number" step="0.01" data-f="PEND_DIA" value="'+escAttr(c.PEND_DIA??0)+'"></div>'
