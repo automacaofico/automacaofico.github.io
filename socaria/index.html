@@ -213,8 +213,8 @@ tbody tr:hover{background:var(--blue-subtle)}
         Importar JSON
         <input type="file" id="jsonFileInput" accept=".json" style="display:none" onchange="importBackupJSON(event)">
       </label>
-      <button class="btn btn-danger btn-sm" onclick="resetToInitialData()" title="Restaura a base oficial">
-        Resetar Base
+      <button class="btn btn-blue" onclick="manualSave()" id="manualSaveBtn" title="Salva imediatamente na base compartilhada, sem esperar o salvamento automático">
+        💾 Salvar Agora
       </button>
     </div>
   </header>
@@ -858,7 +858,6 @@ let targetSettings = {
 let appRows = [];
 let period = 7;
 let activeMachs = new Set(MACHINES);
-let selectedMach = 'CONSOLIDADO';
 
 // ---------------------------------------------------------------------------
 // Base compartilhada (Cloudflare Worker + D1): esta é a única fonte oficial
@@ -930,14 +929,14 @@ async function loadShared(){
   }
 }
 
-function scheduleSharedSave(){
+const AUTOSAVE_INTERVAL_MS = 60_000;
+
+function markDirty(){
   sharedDirty = true;
-  clearTimeout(sharedSaveTimer);
-  sharedSaveTimer = setTimeout(() => flushSharedSave(), 600);
+  setSyncStatus('alterações pendentes · salvando automaticamente a cada 1 min', 'warn');
 }
 
-function flushSharedSave({ force = false } = {}){
-  clearTimeout(sharedSaveTimer);
+function flushSharedSave({ force = false, keepalive = false } = {}){
   if(!sharedDirty && !force) return sharedSaveInFlight;
   sharedDirty = false;
   const payload = { rows: JSON.parse(JSON.stringify(appRows)), settings: JSON.parse(JSON.stringify(targetSettings)) };
@@ -946,7 +945,8 @@ function flushSharedSave({ force = false } = {}){
     try {
       const data = await api('/api/v1/socaria/state', {
         method: 'POST',
-        body: JSON.stringify({ state: payload, expectedRevision: sharedRevision })
+        body: JSON.stringify({ state: payload, expectedRevision: sharedRevision }),
+        keepalive
       });
       sharedRevision = Number(data.revision);
       sharedUpdatedAt = data.updatedAt || new Date().toISOString();
@@ -966,6 +966,18 @@ function flushSharedSave({ force = false } = {}){
   });
   return sharedSaveInFlight;
 }
+
+function manualSave(){
+  const btn = $('manualSaveBtn');
+  if(btn){ btn.disabled = true; }
+  flushSharedSave({ force: true }).finally(() => { if(btn) btn.disabled = false; });
+}
+
+setInterval(() => { if(sharedDirty) flushSharedSave(); }, AUTOSAVE_INTERVAL_MS);
+
+window.addEventListener('beforeunload', () => {
+  if(sharedDirty) flushSharedSave({ force: true, keepalive: true });
+});
 
 function initData(){
   try {
@@ -990,16 +1002,7 @@ function saveToStorage(){
     localStorage.setItem('fico_socaria_real_app', JSON.stringify(appRows));
     localStorage.setItem('fico_target_settings', JSON.stringify(targetSettings));
   } catch(e){}
-  scheduleSharedSave();
-}
-
-function resetToInitialData(){
-  if(confirm('Deseja realmente restaurar os dados originais? Isso afeta a base compartilhada usada por todas as pessoas que acessam este painel.')){
-    appRows = JSON.parse(JSON.stringify(DEFAULT_ROWS));
-    targetSettings = { weeklyTarget: 35000, jornadaHoras: 10, diasSemana: 6 };
-    saveToStorage();
-    refreshAll();
-  }
+  markDirty();
 }
 
 const $ = id => document.getElementById(id);
@@ -1092,7 +1095,7 @@ function renderMachineDeck(rows){
   const maxTotal = Math.max(1, ...MACHINES.map(m => rows.reduce((s, r) => s + (r[m] || 0), 0)));
 
   let html = `
-    <div class="mach-card ${selectedMach==='CONSOLIDADO'?'selected':''}" onclick="selectMachine('CONSOLIDADO')">
+    <div class="mach-card ${activeMachs.size!==1?'selected':''}" onclick="selectMachine('CONSOLIDADO')">
       <div class="mach-card-head">
         <span class="mach-name">CONSOLIDADO</span>
         <span class="tag tag-target">${activeMachs.size} máq.</span>
@@ -1115,7 +1118,7 @@ function renderMachineDeck(rows){
     let dfM = rows.length ? (prodDays / rows.length) * 100 : 0;
     let avgAtiva = prodDays ? totM / prodDays : 0;
     let share = allTotal > 0 ? (totM / allTotal) * 100 : 0;
-    let isSelected = selectedMach === m;
+    let isSelected = activeMachs.size === 1 && activeMachs.has(m);
     let isActive = activeMachs.has(m);
 
     html += `
@@ -1141,14 +1144,21 @@ function renderMachineDeck(rows){
   $('machineCardsDeck').innerHTML = html;
 }
 
+function syncMachSelectors(){
+  document.querySelectorAll('.mach-pill').forEach(b => {
+    b.classList.toggle('active', activeMachs.has(b.dataset.m));
+  });
+}
+
 function selectMachine(m){
-  selectedMach = m;
-  if(m !== 'CONSOLIDADO'){
-    activeMachs = new Set([m]);
-    document.querySelectorAll('.mach-pill').forEach(b => {
-      b.classList.toggle('active', b.dataset.m === m);
-    });
+  if(m === 'CONSOLIDADO'){
+    activeMachs = new Set(MACHINES);
+  } else if(activeMachs.has(m) && activeMachs.size > 1){
+    activeMachs.delete(m);
+  } else {
+    activeMachs.add(m);
   }
+  syncMachSelectors();
   refreshAll();
 }
 
@@ -1158,10 +1168,7 @@ function toggleMach(m){
   } else {
     activeMachs.add(m);
   }
-  selectedMach = 'CONSOLIDADO';
-  document.querySelectorAll('.mach-pill').forEach(b => {
-    b.classList.toggle('active', activeMachs.has(b.dataset.m));
-  });
+  syncMachSelectors();
   refreshAll();
 }
 
@@ -1374,16 +1381,17 @@ function renderDailyChart(rows){
   const pad = { l: 60, r: 20, t: 24, b: 36 };
 
   const labels = rows.map(r => r.dateShort);
+  const soloMach = activeMachs.size === 1 ? [...activeMachs][0] : null;
   let maxVal = 1000;
 
-  if(selectedMach === 'CONSOLIDADO'){
+  if(!soloMach){
     rows.forEach(r => {
       let tot = calcTotalActive(r);
       if(tot > maxVal) maxVal = tot;
     });
   } else {
     rows.forEach(r => {
-      let v = r[selectedMach] || 0;
+      let v = r[soloMach] || 0;
       if(v > maxVal) maxVal = v;
     });
   }
@@ -1392,7 +1400,7 @@ function renderDailyChart(rows){
   ctx.clearRect(0, 0, w, h);
   drawAxes(ctx, w, h, pad, maxVal, labels, 'm');
 
-  if(selectedMach === 'CONSOLIDADO'){
+  if(!soloMach){
     let bw = Math.max(4, ((w - pad.l - pad.r) / rows.length) * 0.65);
     rows.forEach((r, i) => {
       let cx = pad.l + (w - pad.l - pad.r) * (i + 0.5) / rows.length;
@@ -1407,7 +1415,7 @@ function renderDailyChart(rows){
       });
     });
   } else {
-    let m = selectedMach;
+    let m = soloMach;
     ctx.strokeStyle = COLORS[m];
     ctx.fillStyle = COLORS[m] + '22';
     ctx.lineWidth = 3;
