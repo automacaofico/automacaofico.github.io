@@ -1028,14 +1028,34 @@ function calcTotalActive(row){
   return [...activeMachs].reduce((sum, m) => sum + (row[m] || 0), 0);
 }
 
+const MACH_FIELD_PREFIX = { PLASSER: 'p', MATISA: 'm', HARSCO: 'h' };
+
+// Disponibilidade real de uma maquina num dia, como fracao 0..1.
+// Usa as horas de parada mecanica/operacional lancadas no apontamento
+// quando existem; se o registro nao tem esse detalhamento (base historica
+// anterior ao campo de horas), cai de volta para o proxy antigo
+// (produziu algo > 0 nesse dia = considerado disponivel).
+function machineDayAvailability(row, m){
+  const prefix = MACH_FIELD_PREFIX[m];
+  const pm = row[prefix + '_pm'];
+  const po = row[prefix + '_po'];
+  if(pm !== undefined || po !== undefined){
+    const jornada = targetSettings.jornadaHoras || 10;
+    if(jornada <= 0) return 0;
+    const parada = (pm || 0) + (po || 0);
+    return Math.max(0, Math.min(1, (jornada - parada) / jornada));
+  }
+  return (row[m] || 0) > 0 ? 1 : 0;
+}
+
 function calcDF(rows, machs = [...activeMachs]){
   if(!rows.length || !machs.length) return 0;
   let totalOpportunities = rows.length * machs.length;
-  let activeOpportunities = 0;
+  let availableSum = 0;
   machs.forEach(m => {
-    activeOpportunities += rows.filter(r => (r[m] || 0) > 0).length;
+    rows.forEach(r => { availableSum += machineDayAvailability(r, m); });
   });
-  return (activeOpportunities / totalOpportunities) * 100;
+  return (availableSum / totalOpportunities) * 100;
 }
 
 // ---------------------------------------------------------------------------
@@ -1084,7 +1104,7 @@ function weeklySeries(rows){
     map[s].total += (r.PLASSER || 0) + (r.MATISA || 0) + (r.HARSCO || 0);
     MACHINES.forEach(m => {
       map[s].possibleDays += 1;
-      if((r[m] || 0) > 0) map[s].activeDays += 1;
+      map[s].activeDays += machineDayAvailability(r, m);
     });
   });
   return Object.values(map).sort((a, b) => a.s - b.s);
@@ -1338,7 +1358,7 @@ function renderAIInsights(rows){
     let tot = vals.reduce((a, b) => a + b, 0);
     let prod = vals.filter(v => v > 0).length;
     let avg = prod ? tot / prod : 0;
-    let dfM = rows.length ? (prod / rows.length) * 100 : 0;
+    let dfM = rows.length ? (rows.reduce((s, r) => s + machineDayAvailability(r, m), 0) / rows.length) * 100 : 0;
     return { m, tot, avg, dfM, prod };
   });
 
@@ -1392,7 +1412,7 @@ function renderDetailedIntelligence(){
     let activeVals = vals.filter(v => v>0);
     let prod = activeVals.length;
     let avg = prod ? tot/prod : 0;
-    let df = rows.length ? (prod / rows.length) * 100 : 0;
+    let df = rows.length ? (rows.reduce((s, r) => s + machineDayAvailability(r, m), 0) / rows.length) * 100 : 0;
     let max = Math.max(...vals, 0);
     let std = prod ? Math.sqrt(activeVals.reduce((s,v) => s + (v-avg)**2, 0) / prod) : 0;
     let cv = avg ? (std / avg) * 100 : 0;
@@ -1682,7 +1702,7 @@ function renderDFProdChart(rows){
     let vals = rows.map(r => r[m] || 0);
     let tot = vals.reduce((a, b) => a + b, 0);
     let prod = vals.filter(v => v > 0).length;
-    let df = rows.length ? (prod / rows.length) * 100 : 0;
+    let df = rows.length ? (rows.reduce((s, r) => s + machineDayAvailability(r, m), 0) / rows.length) * 100 : 0;
     let avg = prod ? tot / prod : 0;
     return { m, df, avg };
   });
@@ -1781,7 +1801,7 @@ function renderRankingTable(rows){
     let vals = rows.map(r => r[m] || 0);
     let tot = vals.reduce((a, b) => a + b, 0);
     let prod = vals.filter(v => v > 0).length;
-    let df = rows.length ? (prod / rows.length) * 100 : 0;
+    let df = rows.length ? (rows.reduce((s, r) => s + machineDayAvailability(r, m), 0) / rows.length) * 100 : 0;
     let avg = prod ? tot / prod : 0;
     let share = allTotal > 0 ? (tot / allTotal) * 100 : 0;
     return { m, tot, df, prod, avg, share };
@@ -1808,7 +1828,8 @@ function renderDataEntryTable(){
   tbody.innerHTML = appRows.map((r, i) => {
     let tot = (r.PLASSER || 0) + (r.MATISA || 0) + (r.HARSCO || 0);
     let activeM = (r.PLASSER > 0 ? 1 : 0) + (r.MATISA > 0 ? 1 : 0) + (r.HARSCO > 0 ? 1 : 0);
-    let dfMed = ((activeM / 3) * 100).toFixed(0) + '%';
+    let dfDia = MACHINES.reduce((s, m) => s + machineDayAvailability(r, m), 0) / MACHINES.length;
+    let dfMed = (dfDia * 100).toFixed(0) + '%';
     let detailsText = r.obs || '';
 
     if(r.p_pm !== undefined || r.m_pm !== undefined || r.h_pm !== undefined){
