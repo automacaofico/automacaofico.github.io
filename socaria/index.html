@@ -435,7 +435,7 @@ tbody tr:hover{background:var(--blue-subtle)}
             <span class="ai-badge">Motor Cognitivo</span>
           </div>
           <p style="font-size:14px;color:var(--text);margin-bottom:14px">
-            O motor cognitivo analisa a correlação entre <b>Disponibilidade Física</b>, <b>Produtividade Ativa</b> e a <b>Meta Semanal Vigente (<span id="intelMetaDisplay">35.000</span> m)</b>, calculando com precisão o que é necessário para recuperar ou manter o ritmo.
+            O motor cognitivo analisa a correlação entre <b>Disponibilidade Física</b>, <b>Produtividade Ativa</b> e a <b>Meta Semanal Vigente (<span id="intelMetaDisplay">35.000</span> m)</b>, calculando com precisão o que é necessário para recuperar ou manter o ritmo. Considera os <b>últimos <span id="intelWindowDays">15</span> dias</b> de apontamentos.
           </p>
           <div class="ai-insights-list" id="aiDetailedAnalysis"></div>
         </div>
@@ -1404,8 +1404,11 @@ function renderAIInsights(rows){
   `).join('');
 }
 
+const INTEL_WINDOW_DAYS = 15;
+
 function renderDetailedIntelligence(){
-  const rows = appRows;
+  const rows = appRows.slice(Math.max(0, appRows.length - INTEL_WINDOW_DAYS));
+  if($('intelWindowDays')) $('intelWindowDays').textContent = rows.length;
   let machStats = MACHINES.map(m => {
     let vals = rows.map(r => r[m] || 0);
     let tot = vals.reduce((a,b) => a+b, 0);
