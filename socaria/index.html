@@ -1422,6 +1422,12 @@ function renderDetailedIntelligence(){
   const weeks = weeklySeries(rows);
   const target = targetSettings.weeklyTarget || 35000;
 
+  function confidenceLabel(r2){
+    if(r2 >= 0.6) return 'alta';
+    if(r2 >= 0.3) return 'média';
+    return 'baixa — os números variam bastante semana a semana, use essa projeção com cautela';
+  }
+
   // 1) Tendência real: regressão linear sobre o total semanal.
   let trendText, trendOk = true;
   if(weeks.length < 2){
@@ -1431,12 +1437,12 @@ function renderDetailedIntelligence(){
     if(reg.slope > 1){
       const lastTotal = weeks[weeks.length-1].total;
       const weeksToTarget = lastTotal >= target ? 0 : Math.max(1, Math.ceil((target - reg.intercept - reg.slope*weeks.length) / reg.slope));
-      trendText = `Regressão linear sobre ${weeks.length} semanas (R²=${reg.r2.toFixed(2)}): crescimento de ${fmt(reg.slope)} m/semana. Mantido esse ritmo, a meta de ${fmt(target)} m/semana seria atingida em ${weeksToTarget <= 0 ? 'já foi atingida' : `aproximadamente ${weeksToTarget} semana(s)`}.`;
+      trendText = `Nas últimas ${weeks.length} semanas a produção vem <b>SUBINDO</b>, em média +${fmt(reg.slope)} m por semana. Nesse ritmo, a meta de ${fmt(target)} m/semana seria alcançada em ${weeksToTarget <= 0 ? 'já foi alcançada' : `cerca de ${weeksToTarget} semana(s)`}. <span style="color:var(--muted)">(Confiança da tendência: ${confidenceLabel(reg.r2)} — regressão linear, R²=${reg.r2.toFixed(2)})</span>`;
     } else if(reg.slope < -1){
       trendOk = false;
-      trendText = `Regressão linear sobre ${weeks.length} semanas (R²=${reg.r2.toFixed(2)}): QUEDA de ${fmt(Math.abs(reg.slope))} m/semana. No ritmo atual a distância para a meta de ${fmt(target)} m/semana está aumentando — é necessário reverter a tendência antes de qualquer projeção de prazo.`;
+      trendText = `Nas últimas ${weeks.length} semanas a produção vem <b>CAINDO</b>, em média ${fmt(Math.abs(reg.slope))} m por semana — ou seja, o time está se afastando da meta de ${fmt(target)} m/semana, não se aproximando. É preciso reverter essa queda antes de tentar prever um prazo. <span style="color:var(--muted)">(Confiança da tendência: ${confidenceLabel(reg.r2)} — regressão linear, R²=${reg.r2.toFixed(2)})</span>`;
     } else {
-      trendText = `Produção semanal estável nas últimas ${weeks.length} semanas (variação de ${fmt(reg.slope)} m/semana, R²=${reg.r2.toFixed(2)}) — sem tendência clara de alta ou queda.`;
+      trendText = `A produção está <b>ESTÁVEL</b> nas últimas ${weeks.length} semanas, sem tendência clara de alta ou queda. <span style="color:var(--muted)">(Variação média de ${fmt(reg.slope)} m/semana, R²=${reg.r2.toFixed(2)})</span>`;
     }
   }
 
@@ -1452,8 +1458,8 @@ function renderDetailedIntelligence(){
     const strength = absCorr >= 0.7 ? 'forte' : absCorr >= 0.4 ? 'moderada' : 'fraca';
     corrOk = corr >= 0.4;
     corrText = corrOk
-      ? `Correlação ${strength} entre Disponibilidade Física e produção semanal (r=${corr.toFixed(2)}): aumentar a DF tende a se traduzir diretamente em mais metros socados — manter as máquinas disponíveis é a alavanca mais direta.`
-      : `Correlação ${strength} entre Disponibilidade Física e produção semanal (r=${corr.toFixed(2)}): elevar a DF sozinha não está se traduzindo proporcionalmente em mais produção — o gargalo provável está no rendimento por dia efetivamente trabalhado, não na disponibilidade.`;
+      ? `<b>SIM</b> — nas semanas em que a Disponibilidade Física (DF) foi maior, a produção também foi maior. Manter as máquinas disponíveis (evitar quebras e paradas) é a alavanca mais direta para produzir mais. <span style="color:var(--muted)">(Correlação ${strength}, r=${corr.toFixed(2)})</span>`
+      : `<b>NÃO de forma clara</b> — semanas com DF maior não estão consistentemente produzindo mais. Ou seja, ter as máquinas disponíveis não está virando mais metros socados: o gargalo provável é o <b>ritmo de trabalho</b> nas horas disponíveis (velocidade de socaria, logística de apoio, condições da via), não a disponibilidade em si. <span style="color:var(--muted)">(Correlação ${strength}, r=${corr.toFixed(2)})</span>`;
   }
 
   // 3) Evolução real da DF (metade inicial vs metade final do período, sem números fixos).
@@ -1468,28 +1474,42 @@ function renderDetailedIntelligence(){
   const dfDelta = dfSecondHalf - dfFirstHalf;
   const dfText = weeks.length < 2
     ? 'Ainda não há semanas suficientes para comparar a evolução da DF.'
-    : `A DF evoluiu de ${dfFirstHalf.toFixed(1)}% na primeira metade do período (${weeks.slice(0,half).length} semana(s)) para ${dfSecondHalf.toFixed(1)}% na segunda metade (${weeks.slice(half).length} semana(s)) — variação de ${dfDelta>=0?'+':''}${dfDelta.toFixed(1)} p.p.`;
+    : `A disponibilidade média das máquinas <b>${dfDelta >= 0 ? 'MELHOROU' : 'PIOROU'} ${Math.abs(dfDelta).toFixed(1)} pontos percentuais</b>: foi de ${dfFirstHalf.toFixed(1)}% (primeiras ${weeks.slice(0,half).length} semana(s) do período) para ${dfSecondHalf.toFixed(1)}% (últimas ${weeks.slice(half).length} semana(s)). As máquinas estão passando ${dfDelta>=0?'menos':'mais'} tempo paradas do que antes.`;
 
   // 4) Consistência real por equipamento (coeficiente de variação dos dias ativos).
-  const cvText = machStats.map(ms => `${ms.m}: CV=${prodOrDash(ms)}`).join(' · ');
   function prodOrDash(ms){ return ms.prod ? ms.cv.toFixed(0) + '%' : '—'; }
+  const cvDetail = machStats.map(ms => `${ms.m} ${prodOrDash(ms)}`).join(' · ');
+  const withCv = machStats.filter(ms => ms.prod > 1);
+  let cvText;
+  if(!withCv.length){
+    cvText = `Ainda não há dias produtivos suficientes para comparar a consistência das máquinas. <span style="color:var(--muted)">(${cvDetail})</span>`;
+  } else {
+    const sortedByCv = [...withCv].sort((a,b) => a.cv - b.cv);
+    const mostConsistent = sortedByCv[0];
+    const leastConsistent = sortedByCv[sortedByCv.length - 1];
+    cvText = `<b>${mostConsistent.m}</b> é a mais previsível no dia a dia (varia ${mostConsistent.cv.toFixed(0)}% entre os dias em que operou)`
+      + (sortedByCv.length > 1 && leastConsistent.m !== mostConsistent.m
+          ? `, enquanto <b>${leastConsistent.m}</b> varia mais (${leastConsistent.cv.toFixed(0)}%) — tem dias muito bons e muito fracos mesmo estando disponível.`
+          : '.')
+      + ` Quanto menor esse número, mais dá pra confiar no volume que a máquina vai entregar num dia normal. <span style="color:var(--muted)">(${cvDetail})</span>`;
+  }
 
   let htmlDet = `
     <div class="insight-item ${trendOk ? 'success' : 'danger'}">
-      <div class="insight-title">1. Tendência de Produção (regressão linear)</div>
+      <div class="insight-title">1. A produção está subindo ou caindo?</div>
       <p>${trendText}</p>
     </div>
     <div class="insight-item ${corrOk ? 'success' : 'warning'}">
-      <div class="insight-title">2. Correlação: Disponibilidade Física × Produção</div>
+      <div class="insight-title">2. Falta de máquina disponível está limitando a produção?</div>
       <p>${corrText}</p>
     </div>
     <div class="insight-item ${dfDelta >= 0 ? 'success' : 'danger'}">
-      <div class="insight-title">3. Evolução da Disponibilidade Física</div>
+      <div class="insight-title">3. A disponibilidade das máquinas está melhorando?</div>
       <p>${dfText}</p>
     </div>
     <div class="insight-item">
-      <div class="insight-title">4. Consistência por Equipamento (coeficiente de variação)</div>
-      <p>${cvText} — quanto menor o CV, mais previsível é a produção diária daquela máquina quando ativa.</p>
+      <div class="insight-title">4. Qual máquina rende de forma mais previsível?</div>
+      <p>${cvText}</p>
     </div>
   `;
   $('aiDetailedAnalysis').innerHTML = htmlDet;
