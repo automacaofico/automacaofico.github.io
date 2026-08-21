@@ -907,7 +907,14 @@ async function loadShared(){
     sharedRevision = Number(data.revision || 0);
     sharedUpdatedAt = data.updatedAt || '';
     sharedReady = true;
-    if(data.state && Array.isArray(data.state.rows)){
+    if(sharedDirty){
+      // Há uma edição local ainda não confirmada no servidor (ex.: o
+      // usuário salvou um apontamento enquanto esta busca ainda estava em
+      // andamento). Não descartar essa edição — só adota a revisão mais
+      // recente conhecida e tenta salvar por cima dela.
+      setSyncStatus('há alterações locais pendentes · salvando…', 'connecting');
+      flushSharedSave({ force: true });
+    } else if(data.state && Array.isArray(data.state.rows)){
       appRows = data.state.rows;
       if(data.state.settings && typeof data.state.settings === 'object'){
         targetSettings = Object.assign(targetSettings, data.state.settings);
@@ -939,7 +946,9 @@ function markDirty(){
 
 function flushSharedSave({ force = false, keepalive = false } = {}){
   if(!sharedDirty && !force) return sharedSaveInFlight;
-  sharedDirty = false;
+  // Só marca como "salvo" depois de confirmar que o servidor aceitou —
+  // assim, se a gravação falhar (rede ou conflito de revisão), a edição
+  // continua marcada como pendente em vez de ser descartada em silêncio.
   const payload = { rows: JSON.parse(JSON.stringify(appRows)), settings: JSON.parse(JSON.stringify(targetSettings)) };
   sharedSaveInFlight = sharedSaveInFlight.then(async () => {
     setSyncStatus('salvando na base compartilhada…', 'connecting');
@@ -952,16 +961,17 @@ function flushSharedSave({ force = false, keepalive = false } = {}){
       sharedRevision = Number(data.revision);
       sharedUpdatedAt = data.updatedAt || new Date().toISOString();
       sharedReady = true;
+      sharedDirty = false;
       setSyncStatus('salvo para todos', 'ok');
     } catch(error){
       if(error.status === 409){
         // Outra pessoa salvou entre a nossa leitura e a nossa gravação:
-        // busca a versão mais recente e repinta o painel automaticamente.
+        // busca a revisão mais recente e tenta salvar de novo por cima
+        // dela (a edição local continua marcada como pendente).
         setSyncStatus('sincronizando com a versão mais recente…', 'connecting');
         try { await loadShared(); } catch(e){}
         return;
       }
-      sharedDirty = true;
       setSyncStatus('sem conexão · alterações salvas só neste navegador', 'warn');
     }
   });
