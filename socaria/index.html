@@ -578,20 +578,20 @@ tbody tr:hover{background:var(--blue-subtle)}
       </div>
 
       <div style="background:#fffaf4;border-left:5px solid var(--orange);padding:14px 18px;border-radius:8px;margin-bottom:20px;font-size:14px;line-height:1.6">
-        <b>Conclusão Estratégica:</b> A produtividade consolidada e a Disponibilidade Física (DF) apresentaram evolução ao longo das 8 semanas analisadas. Para atingir a meta estipulada de <b><span id="execMetaDisplay">35.000</span> m/semana</b>, a frente necessita de foco no rendimento efetivo por dia disponível das socadoras e sincronismo logístico com o descarregamento de lastro.
+        <b>Conclusão Estratégica:</b> A produtividade consolidada e a Disponibilidade Física (DF) <span id="execTrendPhrase">estão sendo avaliadas</span> ao longo das <span id="execWeekCount">-</span> semanas analisadas <span style="color:var(--muted);font-weight:400">(tendência calculada semana a semana — o comparativo de blocos abaixo mostra a média geral de cada metade do período, que pode divergir dessa tendência mais recente)</span>. Para atingir a meta estipulada de <b><span id="execMetaDisplay">35.000</span> m/semana</b>, a frente necessita de foco no rendimento efetivo por dia disponível das socadoras e sincronismo logístico com o descarregamento de lastro.
       </div>
 
       <div class="grid">
         <div class="col-6">
           <div class="card" style="box-shadow:none">
-            <div class="card-title" style="margin-bottom:10px">Comparativo de Blocos Históricos (4 primeiras vs 4 últimas semanas)</div>
+            <div class="card-title" id="execBlockTitle" style="margin-bottom:10px">Comparativo de Blocos Históricos</div>
             <div class="table-responsive">
               <table>
                 <thead>
                   <tr>
                     <th>Indicador</th>
-                    <th>Primeiras 4 Semanas</th>
-                    <th>Últimas 4 Semanas</th>
+                    <th id="execFirstHalfHeader">Primeira Metade</th>
+                    <th id="execSecondHalfHeader">Segunda Metade</th>
                     <th>Variação</th>
                   </tr>
                 </thead>
@@ -2102,10 +2102,29 @@ function resetSimulatorDefaults(){
 
 function renderExecutiveSummary(){
   const rows = appRows;
-  const half = Math.floor(rows.length / 2);
-  const firstHalf = rows.slice(0, half);
-  const lastHalf = rows.slice(half);
+  const weeks = weeklySeries(rows);
+  const half = Math.floor(weeks.length / 2);
+  const firstWeekNums = new Set(weeks.slice(0, half).map(w => w.s));
+  const secondWeekNums = new Set(weeks.slice(half).map(w => w.s));
+  const firstHalf = rows.filter(r => firstWeekNums.has(r.SEMANA || 1));
+  const lastHalf = rows.filter(r => secondWeekNums.has(r.SEMANA || 1));
   const target = targetSettings.weeklyTarget || 35000;
+
+  if($('execWeekCount')) $('execWeekCount').textContent = weeks.length;
+  if($('execFirstHalfHeader')) $('execFirstHalfHeader').textContent = `Primeiras ${firstWeekNums.size} Semana(s)`;
+  if($('execSecondHalfHeader')) $('execSecondHalfHeader').textContent = `Últimas ${secondWeekNums.size} Semana(s)`;
+  if($('execBlockTitle')) $('execBlockTitle').textContent = `Comparativo de Blocos Históricos (${firstWeekNums.size} primeiras vs ${secondWeekNums.size} últimas semanas)`;
+
+  if($('execTrendPhrase')){
+    if(weeks.length < 2){
+      $('execTrendPhrase').textContent = 'ainda não têm semanas suficientes para uma avaliação de tendência';
+    } else {
+      const reg = linearRegression(weeks.map((w,i) => ({ x: i+1, y: w.total })));
+      if(reg.slope > 1) $('execTrendPhrase').textContent = 'apresentaram tendência de CRESCIMENTO';
+      else if(reg.slope < -1) $('execTrendPhrase').textContent = 'apresentaram tendência de QUEDA';
+      else $('execTrendPhrase').textContent = 'permaneceram ESTÁVEIS, sem tendência clara de alta ou queda';
+    }
+  }
 
   function getStats(rs){
     let tot = rs.reduce((s, r) => s + (r.PLASSER||0) + (r.MATISA||0) + (r.HARSCO||0), 0);
