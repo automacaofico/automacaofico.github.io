@@ -172,6 +172,7 @@ tbody tr:hover{background:var(--blue-subtle)}
   .top-header{flex-direction:column;align-items:flex-start}
 }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -212,6 +213,10 @@ tbody tr:hover{background:var(--blue-subtle)}
       <label class="btn btn-outline" style="margin:0;cursor:pointer">
         Importar JSON
         <input type="file" id="jsonFileInput" accept=".json" style="display:none" onchange="importBackupJSON(event)">
+      </label>
+      <label class="btn btn-primary" style="margin:0;cursor:pointer" title="Sobe a planilha de Produção e Desvios (Consolidado) e grava os apontamentos diários na base compartilhada">
+        📤 Subir Planilha
+        <input type="file" id="xlsxFileInput" accept=".xlsx,.xls" style="display:none" onchange="importSpreadsheet(event)">
       </label>
       <button class="btn btn-blue" onclick="manualSave()" id="manualSaveBtn" title="Salva imediatamente na base compartilhada, sem esperar o salvamento automático">
         💾 Salvar Agora
@@ -2248,6 +2253,124 @@ function importBackupJSON(e){
     }
   };
   reader.readAsText(file);
+}
+
+// ---------------------------------------------------------------------------
+// Importação da planilha "Produção e Desvios" (aba Consolidado -> estratificação
+// diária). Lê a tabela "DETALHAMENTO POR DIA E EQUIPAMENTO", soma produção e
+// tempo parado por socadora/dia e grava (upsert por data) direto na base
+// compartilhada, para nunca depender só do preenchimento manual no HTML.
+// ---------------------------------------------------------------------------
+const SPREADSHEET_MACHINE_MAP = [
+  { match: 'SPLIT HEAD', machine: 'PLASSER', prefix: 'p' },
+  { match: 'MATISA', machine: 'MATISA', prefix: 'm' },
+  { match: 'HASCO', machine: 'HARSCO', prefix: 'h' }
+];
+
+function excelSerialToDate(serial){
+  const utcMs = Math.round((serial - 25569) * 86400000);
+  return new Date(utcMs);
+}
+
+function parseSheetDurationHours(value){
+  if(value === null || value === undefined || value === '') return 0;
+  if(typeof value === 'number') return value * 24;
+  if(value instanceof Date) return (value.getUTCDate() - 30) * 24 + value.getUTCHours() + value.getUTCMinutes() / 60 + value.getUTCSeconds() / 3600;
+  const s = String(value).trim();
+  const m = s.match(/^(\d+):(\d{2})(?::(\d{2}))?$/);
+  if(m) return parseInt(m[1]) + parseInt(m[2]) / 60 + (m[3] ? parseInt(m[3]) / 3600 : 0);
+  return 0;
+}
+
+function parseSheetDate(value){
+  let d;
+  if(value instanceof Date) d = value;
+  else if(typeof value === 'number') d = excelSerialToDate(value);
+  else {
+    const s = String(value).trim();
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if(!m) return null;
+    d = new Date(Date.UTC(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1])));
+  }
+  if(isNaN(d.getTime())) return null;
+  const yyyy = d.getUTCFullYear(), mm = String(d.getUTCMonth() + 1).padStart(2, '0'), dd = String(d.getUTCDate()).padStart(2, '0');
+  return { dateISO: `${yyyy}-${mm}-${dd}`, dateBR: `${dd}/${mm}/${yyyy}`, dateShort: `${dd}/${mm}` };
+}
+
+function importSpreadsheet(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(evt){
+    try {
+      const wb = XLSX.read(evt.target.result, { type: 'array' });
+      let sheet = wb.Sheets[wb.SheetNames.find(n => /produ/i.test(n))] || wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
+
+      const headerIdx = rows.findIndex(r => r[0] === 'Data' && r[1] === 'Tipo');
+      if(headerIdx === -1) throw new Error('Não encontrei a tabela "DETALHAMENTO POR DIA E EQUIPAMENTO" nessa planilha.');
+
+      const byDate = {};
+      for(let i = headerIdx + 1; i < rows.length; i++){
+        const r = rows[i];
+        if(!r || r[0] == null || r[1] !== 'Socadora') continue;
+        const parsedDate = parseSheetDate(r[0]);
+        if(!parsedDate) continue;
+        const equip = String(r[2] || '').toUpperCase();
+        const mapEntry = SPREADSHEET_MACHINE_MAP.find(x => equip.includes(x.match));
+        if(!mapEntry) continue;
+
+        const producao = Math.round(Number(r[3]) || 0);
+        const paradaHoras = parseSheetDurationHours(r[4]);
+        const causa = String(r[8] || '').trim();
+        const isMecanica = /manuten/i.test(causa);
+
+        if(!byDate[parsedDate.dateISO]) byDate[parsedDate.dateISO] = { ...parsedDate, notas: [] };
+        const bucket = byDate[parsedDate.dateISO];
+        bucket[mapEntry.machine] = producao;
+        bucket[mapEntry.prefix + '_pm'] = isMecanica ? paradaHoras : 0;
+        bucket[mapEntry.prefix + '_po'] = isMecanica ? 0 : paradaHoras;
+        if(paradaHoras > 0 && causa) bucket.notas.push(`${mapEntry.machine}: ${causa}`);
+      }
+
+      const dates = Object.keys(byDate).sort();
+      if(!dates.length) throw new Error('Nenhum apontamento de socadora foi encontrado nessa planilha.');
+
+      let created = 0, updated = 0;
+      dates.forEach(dateISO => {
+        const b = byDate[dateISO];
+        const existingIdx = appRows.findIndex(r => r.dateISO === dateISO);
+        const entry = existingIdx >= 0 ? { ...appRows[existingIdx] } : {
+          dateBR: b.dateBR, dateISO: b.dateISO, dateShort: b.dateShort,
+          SEMANA: Math.min(52, Math.max(1, Math.ceil((appRows.length + 1) / (targetSettings.diasSemana || 6))))
+        };
+        MACHINES.forEach(m => { entry[m] = b[m] !== undefined ? b[m] : (entry[m] || 0); });
+        SPREADSHEET_MACHINE_MAP.forEach(({ prefix }) => {
+          if(b[prefix + '_pm'] !== undefined) entry[prefix + '_pm'] = b[prefix + '_pm'];
+          if(b[prefix + '_po'] !== undefined) entry[prefix + '_po'] = b[prefix + '_po'];
+        });
+        if(b.notas.length) entry.obs = b.notas.join(' | ');
+
+        if(existingIdx >= 0){ appRows[existingIdx] = entry; updated++; }
+        else { appRows.push(entry); created++; }
+      });
+
+      appRows.sort((a, b) => (a.dateISO || '').localeCompare(b.dateISO || ''));
+
+      saveToStorage();
+      flushSharedSave({ force: true }).then(() => {
+        refreshAll();
+        const gravado = sharedReady && !sharedDirty;
+        alert(`Planilha importada: ${created} dia(s) novo(s), ${updated} dia(s) atualizado(s).\n` +
+          (gravado ? 'Dados gravados na base compartilhada.' : 'Atenção: não foi possível confirmar a gravação na base compartilhada agora (ficou salvo só neste navegador). Tente "Salvar Agora" com a conexão ativa.'));
+      });
+    } catch(err){
+      alert('Erro ao importar a planilha: ' + err.message);
+    } finally {
+      e.target.value = '';
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 function switchTab(tabId){
