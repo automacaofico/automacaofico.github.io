@@ -1007,9 +1007,29 @@ function flushSharedSave({ force = false, keepalive = false } = {}){
   return sharedSaveInFlight;
 }
 
+// Pede o nome de quem está atualizando antes de qualquer gravação deliberada
+// (salvar, lançar produção, excluir, subir planilha), para registrar
+// "quem e quando" igual aos outros painéis do site. Fica lembrado no
+// navegador (localStorage) para não perguntar de novo a cada ação; o campo
+// vem pré-preenchido com o último nome usado, só confirmar com Enter.
+function promptEditorName(){
+  const key = 'fico_editor_name';
+  const last = localStorage.getItem(key) || '';
+  const name = prompt('Seu nome (fica registrado como responsável por esta atualização):', last);
+  if(name === null) return null;
+  const trimmed = name.trim();
+  if(trimmed){
+    localStorage.setItem(key, trimmed);
+    targetSettings.updatedBy = trimmed;
+  }
+  return trimmed;
+}
+
 function manualSave(){
+  if(promptEditorName() === null) return;
   const btn = $('manualSaveBtn');
   if(btn){ btn.disabled = true; }
+  saveToStorage();
   flushSharedSave({ force: true }).finally(() => { if(btn) btn.disabled = false; });
 }
 
@@ -1353,6 +1373,7 @@ function closeTargetModal(){
 
 function saveTargetSettings(e){
   e.preventDefault();
+  if(promptEditorName() === null) return;
   targetSettings.weeklyTarget = parseFloat($('settingTargetWeekly').value) || 6000;
   targetSettings.jornadaHoras = parseFloat($('settingJornadaHoras').value) || 10;
   targetSettings.diasSemana = parseFloat($('settingDiasSemana').value) || 6;
@@ -1984,6 +2005,7 @@ function closeModal(){
 
 function saveEntry(e){
   e.preventDefault();
+  if(promptEditorName() === null) return;
   const idx = parseInt($('editIndex').value);
   const dateISO = $('formDate').value;
   const parts = dateISO.split('-');
@@ -2019,6 +2041,7 @@ function saveEntry(e){
 
 function deleteEntry(index){
   if(confirm('Tem certeza que deseja excluir este registro de produção?')){
+    if(promptEditorName() === null) return;
     appRows.splice(index, 1);
     saveToStorage();
     refreshAll();
@@ -2361,6 +2384,7 @@ function importSpreadsheet(e){
 
       const dates = Object.keys(byDate).sort();
       if(!dates.length) throw new Error('Nenhum apontamento foi encontrado nessa planilha.');
+      if(promptEditorName() === null) return;
 
       let created = 0, updated = 0;
       dates.forEach(dateISO => {

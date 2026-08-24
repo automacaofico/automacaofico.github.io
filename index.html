@@ -167,6 +167,7 @@
 
 <div class="wrap">
 
+  <p class="section-label">Superestrutura</p>
   <div class="grid grid-single">
     <a class="card" href="./super/" data-repo="super" data-path="Modelo Acompanhamento Super - FINAL.xlsx">
       <div class="card-top">
@@ -189,6 +190,33 @@
       </div>
       <h2>Mapa Superestrutura</h2>
       <p>Avanço das atividades diretamente no traçado FICO, com pacotes, frentes, previsto e realizado.</p>
+      <span class="updated" data-updated>📅 verificando última atualização…</span>
+    </a>
+  </div>
+
+  <p class="section-label">Produtividade &amp; Disponibilidade Física</p>
+  <div class="grid grid-single">
+    <a class="card" href="./socaria/" data-worker-path="socaria">
+      <div class="card-top">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18a8 8 0 1 1 16 0"/><line x1="12" y1="18" x2="16" y2="10"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+        </div>
+        <span class="status">disponível</span>
+      </div>
+      <h2>Produtividade &amp; DF de Socaria</h2>
+      <p>Lançamento diário de produção e disponibilidade física, com base única compartilhada por todos.</p>
+      <span class="updated" data-updated>📅 verificando última atualização…</span>
+    </a>
+
+    <a class="card" href="./ntc/" data-worker-path="ntc">
+      <div class="card-top">
+        <div class="card-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="12" rx="2"/><line x1="5" y1="11" x2="19" y2="11"/><circle cx="8.5" cy="17.5" r="1.3"/><circle cx="15.5" cy="17.5" r="1.3"/><line x1="8" y1="16" x2="6" y2="20"/><line x1="16" y1="16" x2="18" y2="20"/></svg>
+        </div>
+        <span class="status">disponível</span>
+      </div>
+      <h2>Produtividade &amp; DF de NTC</h2>
+      <p>Lançamento diário de produção e disponibilidade física da NTC, com base única compartilhada por todos.</p>
       <span class="updated" data-updated>📅 verificando última atualização…</span>
     </a>
   </div>
@@ -335,20 +363,6 @@
         <p>Hierarquia da equipe, editável em reunião (acesso restrito)</p>
       </div>
     </a>
-    <a class="tool-card" href="./socaria/">
-      <div class="card-icon">🚧</div>
-      <div>
-        <h2>Produtividade &amp; DF de Socaria</h2>
-        <p>Lançamento diário de produção e disponibilidade física, com base única compartilhada por todos</p>
-      </div>
-    </a>
-    <a class="tool-card" href="./ntc/">
-      <div class="card-icon">🚂</div>
-      <div>
-        <h2>Produtividade &amp; DF de NTC</h2>
-        <p>Lançamento diário de produção e disponibilidade física da NTC, com base única compartilhada por todos</p>
-      </div>
-    </a>
   </div>
 
 </div>
@@ -415,6 +429,28 @@
       .catch(function () {
         if (cached) render(cached.date, cached.responsible);
         else el.textContent = '📅 Não foi possível checar a última atualização';
+      });
+  });
+
+  // Painéis de Socaria/NTC não vivem em arquivo versionado no git: os dados
+  // ficam na base compartilhada (Cloudflare Worker + D1), atualizada pelo
+  // navegador de quem sobe a planilha ou salva um lançamento. Por isso a
+  // data/responsável vêm direto da API do Worker, não do histórico de commits.
+  var WORKER_API_BASE = 'https://fico-tracking-api.automacaofico.workers.dev';
+  document.querySelectorAll('[data-worker-path]').forEach(function (card) {
+    var path = card.dataset.workerPath;
+    var el = card.querySelector('[data-updated]');
+    fetch(WORKER_API_BASE + '/api/v1/' + path + '/state', { headers: { Accept: 'application/json' } })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (data) {
+        if (!data || !data.updatedAt) throw new Error('sem atualização registrada');
+        var responsible = data.state && data.state.settings && data.state.settings.updatedBy || '';
+        var text = '📅 Planilha atualizada em ' + fmtWhen(data.updatedAt.replace(' ', 'T') + 'Z');
+        if (responsible) text += ' · 👤 ' + responsible;
+        el.textContent = text;
+      })
+      .catch(function () {
+        el.textContent = '📅 Não foi possível checar a última atualização';
       });
   });
 </script>
