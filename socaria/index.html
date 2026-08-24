@@ -331,6 +331,7 @@ tbody tr:hover{background:var(--blue-subtle)}
           <div class="kpi-footer">
             <span class="kpi-status status-good" id="kpiBestDaySub">Sem lançamentos ainda</span>
           </div>
+          <div id="kpiBestDayByMachine" style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);font-size:11px;color:var(--muted);display:flex;flex-direction:column;gap:3px"></div>
         </div>
       </div>
     </div>
@@ -1270,6 +1271,21 @@ function updateKPIs(rows){
   } else {
     $('kpiBestDay').textContent = '-';
     $('kpiBestDaySub').textContent = 'Sem lançamentos ainda';
+  }
+
+  // Recorde por máquina: melhor dia individual de cada equipamento,
+  // também sobre todo o histórico (não o filtro de período).
+  const byMachineEl = $('kpiBestDayByMachine');
+  if(byMachineEl){
+    byMachineEl.innerHTML = MACHINES.map(m => {
+      const best = appRows.reduce((acc, r) => {
+        const v = r[m] || 0;
+        return (!acc || v > acc.v) ? { v, r } : acc;
+      }, null);
+      if(!best || best.v <= 0) return `<div><b style="color:${COLORS[m]}">${m}:</b> sem lançamentos</div>`;
+      const date = best.r.dateBR || best.r.dateISO;
+      return `<div><b style="color:${COLORS[m]}">${m}:</b> ${fmt(best.v)} m em ${date}</div>`;
+    }).join('');
   }
 }
 
