@@ -2182,7 +2182,8 @@ function renderExecutiveSummary(){
   const weekTotalsArr = Object.entries(weekTotalsMap).map(([s, tot]) => ({ s: parseInt(s), tot }));
   const bestWeek = weekTotalsArr.reduce((best, w) => (w.tot > (best ? best.tot : -1) ? w : best), null) || { s: '-', tot: 0 };
   const bestWeekTotal = bestWeek.tot;
-  const lastWeekTotal = rows.slice(-targetSettings.diasSemana).reduce((s,r) => s + (r.NTC||0), 0);
+  const lastSemana = rows.length ? (rows[rows.length - 1].SEMANA || 1) : null;
+  const lastWeekTotal = lastSemana != null ? (weekTotalsMap[lastSemana] || 0) : 0;
 
   $('execAdherenceTable').innerHTML = `
     <tr>
@@ -2198,7 +2199,7 @@ function renderExecutiveSummary(){
       <td style="color:${target-bestWeekTotal>0?'var(--red)':'var(--green)'}">${target-bestWeekTotal>0?'-':'+'}${fmt(Math.abs(target - bestWeekTotal))} m</td>
     </tr>
     <tr>
-      <td>Última Semana (S${appRows.length ? (appRows[appRows.length-1].SEMANA || '-') : '-'})</td>
+      <td>Última Semana (S${lastSemana ?? '-'})</td>
       <td>${fmt(lastWeekTotal)} m</td>
       <td>${((lastWeekTotal/target)*100).toFixed(1)}%</td>
       <td style="color:${target-lastWeekTotal>0?'var(--red)':'var(--green)'}">${target-lastWeekTotal>0?'-':'+'}${fmt(Math.abs(target - lastWeekTotal))} m</td>
