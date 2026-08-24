@@ -1310,7 +1310,7 @@ function renderMachineDeck(rows){
     let vals = rows.map(r => r[m] || 0);
     let totM = vals.reduce((a, b) => a + b, 0);
     let prodDays = vals.filter(v => v > 0).length;
-    let dfM = rows.length ? (prodDays / rows.length) * 100 : 0;
+    let dfM = calcDF(rows, [m]);
     let avgAtiva = prodDays ? totM / prodDays : 0;
     let share = allTotal > 0 ? (totM / allTotal) * 100 : 0;
     let isSelected = activeMachs.size === 1 && activeMachs.has(m);
