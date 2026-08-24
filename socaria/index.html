@@ -210,6 +210,9 @@ tbody tr:hover{background:var(--blue-subtle)}
       <button class="btn btn-outline" onclick="exportDataCSV()">
         Exportar CSV
       </button>
+      <button class="btn btn-outline" onclick="exportDataXLSX()" title="Baixa a planilha Excel com todos os dados atuais da base compartilhada">
+        📊 Baixar Planilha
+      </button>
       <button class="btn btn-outline" onclick="exportBackupJSON()">
         Backup JSON
       </button>
@@ -2322,6 +2325,42 @@ function exportDataCSV(){
   a.href = url;
   a.download = `socaria_fico_real_${new Date().toISOString().split('T')[0]}.csv`;
   a.click();
+}
+
+function exportDataXLSX(){
+  const jornada = targetSettings.jornadaHoras || 10;
+  const data = appRows.map(r => {
+    const tot = (r.PLASSER||0) + (r.MATISA||0) + (r.HARSCO||0);
+    const dfDia = MACHINES.reduce((s, m) => s + machineDayAvailability(r, m), 0) / MACHINES.length;
+    const opHoras = MACHINES.reduce((s, m) => s + (r[MACH_FIELD_PREFIX[m] + '_po'] || 0), 0);
+    const opPct = jornada > 0 ? Math.max(0, (opHoras / (jornada * MACHINES.length)) * 100) : 0;
+    return {
+      'Data': r.dateBR || r.dateISO,
+      'Semana': r.SEMANA || 1,
+      'PLASSER (m)': r.PLASSER || 0,
+      'MATISA (m)': r.MATISA || 0,
+      'HARSCO (m)': r.HARSCO || 0,
+      'Total (m)': tot,
+      'DF Mecânica (%)': Math.round(dfDia * 1000) / 10,
+      'Parada Operacional (%)': Math.round(opPct * 10) / 10,
+      'PLASSER Parada Mecânica (h)': r.p_pm || 0,
+      'PLASSER Parada Operacional (h)': r.p_po || 0,
+      'MATISA Parada Mecânica (h)': r.m_pm || 0,
+      'MATISA Parada Operacional (h)': r.m_po || 0,
+      'HARSCO Parada Mecânica (h)': r.h_pm || 0,
+      'HARSCO Parada Operacional (h)': r.h_po || 0,
+      'Observações': r.obs || ''
+    };
+  });
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [
+    { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
+    { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 22 }, { wch: 20 }, { wch: 22 },
+    { wch: 20 }, { wch: 22 }, { wch: 40 }
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Socaria');
+  XLSX.writeFile(wb, `socaria_fico_${new Date().toISOString().split('T')[0]}.xlsx`);
 }
 
 function exportBackupJSON(){
