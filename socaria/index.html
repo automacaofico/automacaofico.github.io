@@ -172,7 +172,9 @@ tbody tr:hover{background:var(--blue-subtle)}
   .top-header{flex-direction:column;align-items:flex-start}
 }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!-- xlsx-js-style: fork do SheetJS 0.18.5 (mesma versao/API de leitura que usavamos)
+     que adiciona suporte a estilos na escrita, para a planilha exportada sair formatada. -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 </head>
 <body>
 
@@ -2327,37 +2329,174 @@ function exportDataCSV(){
   a.click();
 }
 
+// ---------------------------------------------------------------------------
+// Exportação da planilha Excel formatada (via xlsx-js-style). Monta a folha
+// célula a célula para poder aplicar estilo: faixa de título, cabeçalho azul,
+// zebra, bordas, datas reais (ordenáveis), percentuais como fração, cores
+// condicionais em DF/Parada e uma linha de totais com fórmulas de verdade.
+// ---------------------------------------------------------------------------
+const XLS_COLOR = {
+  blue: '1B4F8A', blueDark: '11263C', blueSoft: 'EEF3F9',
+  green: '1E824C', greenBg: 'E6F4EC',
+  orange: 'E8791D', orangeBg: 'FDF0E4',
+  red: 'C0392B', redBg: 'FBEAE8',
+  zebra: 'F7FAFC', line: 'D9E2EC', muted: '64748B', white: 'FFFFFF'
+};
+const XLS_THIN = { style: 'thin', color: { rgb: XLS_COLOR.line } };
+const XLS_BOX = { top: XLS_THIN, bottom: XLS_THIN, left: XLS_THIN, right: XLS_THIN };
+
+// Converte 'aaaa-mm-dd' no serial de data do Excel (dias desde 30/12/1899),
+// para a coluna virar data de verdade e ordenar/filtrar corretamente.
+function xlsDateSerial(iso){
+  const parts = String(iso || '').split('-');
+  if(parts.length !== 3) return null;
+  const [y, m, d] = parts.map(Number);
+  if(!y || !m || !d) return null;
+  return (Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000;
+}
+
 function exportDataXLSX(){
   const jornada = targetSettings.jornadaHoras || 10;
+
+  const COLS = [
+    { key: 'data', head: 'Data',                w: 12, type: 'date' },
+    { key: 'sem',  head: 'Semana',              w: 9,  type: 'int' },
+    { key: 'p',    head: 'PLASSER\n(m)',        w: 12, type: 'm' },
+    { key: 'm',    head: 'MATISA\n(m)',         w: 12, type: 'm' },
+    { key: 'h',    head: 'HARSCO\n(m)',         w: 12, type: 'm' },
+    { key: 'tot',  head: 'TOTAL DIA\n(m)',      w: 13, type: 'm', bold: true },
+    { key: 'df',   head: 'DF Mecânica',         w: 13, type: 'pct', scale: 'df' },
+    { key: 'op',   head: 'Parada\nOperacional', w: 13, type: 'pct', scale: 'op' },
+    { key: 'ppm',  head: 'PLASSER\nMec. (h)',   w: 11, type: 'h' },
+    { key: 'ppo',  head: 'PLASSER\nOper. (h)',  w: 11, type: 'h' },
+    { key: 'mpm',  head: 'MATISA\nMec. (h)',    w: 11, type: 'h' },
+    { key: 'mpo',  head: 'MATISA\nOper. (h)',   w: 11, type: 'h' },
+    { key: 'hpm',  head: 'HARSCO\nMec. (h)',    w: 11, type: 'h' },
+    { key: 'hpo',  head: 'HARSCO\nOper. (h)',   w: 11, type: 'h' },
+    { key: 'obs',  head: 'Observações',         w: 52, type: 'text' }
+  ];
+
   const data = appRows.map(r => {
     const tot = (r.PLASSER||0) + (r.MATISA||0) + (r.HARSCO||0);
-    const dfDia = MACHINES.reduce((s, m) => s + machineDayAvailability(r, m), 0) / MACHINES.length;
-    const opHoras = MACHINES.reduce((s, m) => s + (r[MACH_FIELD_PREFIX[m] + '_po'] || 0), 0);
-    const opPct = jornada > 0 ? Math.max(0, (opHoras / (jornada * MACHINES.length)) * 100) : 0;
+    const df = MACHINES.reduce((s, m) => s + machineDayAvailability(r, m), 0) / MACHINES.length;
+    const opH = MACHINES.reduce((s, m) => s + (r[MACH_FIELD_PREFIX[m] + '_po'] || 0), 0);
+    // Sem teto em 100%: se as horas lancadas passarem da jornada, a planilha
+    // mostra o mesmo valor do painel (nao esconde a inconsistencia do dado).
+    const op = jornada > 0 ? Math.max(0, opH / (jornada * MACHINES.length)) : 0;
     return {
-      'Data': r.dateBR || r.dateISO,
-      'Semana': r.SEMANA || 1,
-      'PLASSER (m)': r.PLASSER || 0,
-      'MATISA (m)': r.MATISA || 0,
-      'HARSCO (m)': r.HARSCO || 0,
-      'Total (m)': tot,
-      'DF Mecânica (%)': Math.round(dfDia * 1000) / 10,
-      'Parada Operacional (%)': Math.round(opPct * 10) / 10,
-      'PLASSER Parada Mecânica (h)': r.p_pm || 0,
-      'PLASSER Parada Operacional (h)': r.p_po || 0,
-      'MATISA Parada Mecânica (h)': r.m_pm || 0,
-      'MATISA Parada Operacional (h)': r.m_po || 0,
-      'HARSCO Parada Mecânica (h)': r.h_pm || 0,
-      'HARSCO Parada Operacional (h)': r.h_po || 0,
-      'Observações': r.obs || ''
+      data: xlsDateSerial(r.dateISO), dataTexto: r.dateBR || r.dateISO || '',
+      sem: r.SEMANA || 1,
+      p: r.PLASSER || 0, m: r.MATISA || 0, h: r.HARSCO || 0, tot, df, op,
+      ppm: r.p_pm || 0, ppo: r.p_po || 0,
+      mpm: r.m_pm || 0, mpo: r.m_po || 0,
+      hpm: r.h_pm || 0, hpo: r.h_po || 0,
+      obs: r.obs || ''
     };
   });
-  const ws = XLSX.utils.json_to_sheet(data);
-  ws['!cols'] = [
-    { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
-    { wch: 14 }, { wch: 18 }, { wch: 20 }, { wch: 22 }, { wch: 20 }, { wch: 22 },
-    { wch: 20 }, { wch: 22 }, { wch: 40 }
+
+  const NCOL = COLS.length;
+  const HEADER_ROW = 3;                 // 0-indexed -> linha 4 no Excel
+  const FIRST_DATA = HEADER_ROW + 1;
+  const ws = {};
+  const put = (r, c, cell) => { ws[XLSX.utils.encode_cell({ r, c })] = cell; };
+
+  const agora = new Date();
+  const doisDig = n => String(n).padStart(2, '0');
+  const carimbo = `${doisDig(agora.getDate())}/${doisDig(agora.getMonth()+1)}/${agora.getFullYear()} ${doisDig(agora.getHours())}:${doisDig(agora.getMinutes())}`;
+  const responsavel = targetSettings.updatedBy ? ` · Última atualização por: ${targetSettings.updatedBy}` : '';
+
+  put(0, 0, { v: 'PRODUTIVIDADE & DISPONIBILIDADE FÍSICA — SOCARIA', t: 's',
+    s: { font: { bold: true, sz: 14, color: { rgb: XLS_COLOR.white } },
+         fill: { fgColor: { rgb: XLS_COLOR.blue } },
+         alignment: { horizontal: 'left', vertical: 'center', indent: 1 } } });
+  put(1, 0, { v: `Ferrovia de Integração do Centro-Oeste · Meta ${fmt(targetSettings.weeklyTarget)} m/semana · Jornada ${jornada}h/dia (${targetSettings.diasSemana}d/sem) · Gerado em ${carimbo}${responsavel}`, t: 's',
+    s: { font: { sz: 9, italic: true, color: { rgb: XLS_COLOR.muted } },
+         fill: { fgColor: { rgb: XLS_COLOR.blueSoft } },
+         alignment: { horizontal: 'left', vertical: 'center', indent: 1 } } });
+  for(let c = 1; c < NCOL; c++){
+    put(0, c, { v: '', t: 's', s: { fill: { fgColor: { rgb: XLS_COLOR.blue } } } });
+    put(1, c, { v: '', t: 's', s: { fill: { fgColor: { rgb: XLS_COLOR.blueSoft } } } });
+  }
+
+  COLS.forEach((col, c) => put(HEADER_ROW, c, { v: col.head, t: 's',
+    s: { font: { bold: true, sz: 10, color: { rgb: XLS_COLOR.white } },
+         fill: { fgColor: { rgb: XLS_COLOR.blue } },
+         alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+         border: XLS_BOX } }));
+
+  data.forEach((row, i) => {
+    const r = FIRST_DATA + i;
+    const zebra = i % 2 === 1;
+    COLS.forEach((col, c) => {
+      const v = row[col.key];
+      const s = { border: XLS_BOX, font: { sz: 10 }, alignment: { vertical: 'center' } };
+      if(zebra) s.fill = { fgColor: { rgb: XLS_COLOR.zebra } };
+      let cell = { v, t: 'n', s };
+
+      if(col.type === 'date'){
+        if(v === null){ cell = { v: row.dataTexto, t: 's', s }; }
+        else { cell.z = 'dd/mm/yyyy'; }
+        s.alignment.horizontal = 'center';
+      } else if(col.type === 'int'){
+        cell.z = '0'; s.alignment.horizontal = 'center';
+      } else if(col.type === 'm'){
+        cell.z = '#,##0';
+        if(col.bold) s.font = { sz: 10, bold: true, color: { rgb: XLS_COLOR.blueDark } };
+      } else if(col.type === 'h'){
+        cell.z = '0.00';
+      } else if(col.type === 'text'){
+        cell = { v: v, t: 's', s }; s.alignment.wrapText = true;
+      } else if(col.type === 'pct'){
+        cell.z = '0.0%';
+        s.alignment.horizontal = 'center';
+        const good = col.scale === 'df' ? v >= 0.85 : v <= 0.25;
+        const warn = col.scale === 'df' ? v >= 0.70 : v <= 0.45;
+        const tone = good ? [XLS_COLOR.green, XLS_COLOR.greenBg]
+                   : warn ? [XLS_COLOR.orange, XLS_COLOR.orangeBg]
+                          : [XLS_COLOR.red, XLS_COLOR.redBg];
+        s.font = { sz: 10, bold: true, color: { rgb: tone[0] } };
+        s.fill = { fgColor: { rgb: tone[1] } };
+      }
+      put(r, c, cell);
+    });
+  });
+
+  // Linha de totais: soma real (SUM) para metros/horas e média (AVERAGE) para
+  // os percentuais, como fórmula — o Excel recalcula se alguém editar.
+  const totalRow = FIRST_DATA + data.length;
+  const addr = (c, r) => XLSX.utils.encode_cell({ r, c });
+  COLS.forEach((col, c) => {
+    const base = {
+      font: { bold: true, sz: 10, color: { rgb: XLS_COLOR.blueDark } },
+      fill: { fgColor: { rgb: XLS_COLOR.blueSoft } },
+      border: { top: { style: 'medium', color: { rgb: XLS_COLOR.blue } }, bottom: XLS_THIN, left: XLS_THIN, right: XLS_THIN },
+      alignment: { vertical: 'center' }
+    };
+    if(c === 0){
+      put(totalRow, c, { v: 'TOTAL / MÉDIA', t: 's', s: { ...base, alignment: { horizontal: 'center', vertical: 'center' } } });
+      return;
+    }
+    if(!data.length){ put(totalRow, c, { v: '', t: 's', s: base }); return; }
+    const rng = `${addr(c, FIRST_DATA)}:${addr(c, totalRow - 1)}`;
+    if(col.type === 'm' || col.type === 'h'){
+      put(totalRow, c, { t: 'n', f: `SUM(${rng})`, z: col.type === 'm' ? '#,##0' : '0.00', s: base });
+    } else if(col.type === 'pct'){
+      put(totalRow, c, { t: 'n', f: `AVERAGE(${rng})`, z: '0.0%', s: { ...base, alignment: { horizontal: 'center', vertical: 'center' } } });
+    } else {
+      put(totalRow, c, { v: '', t: 's', s: base });
+    }
+  });
+
+  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: totalRow, c: NCOL - 1 } });
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: NCOL - 1 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: NCOL - 1 } }
   ];
+  ws['!cols'] = COLS.map(c => ({ wch: c.w }));
+  ws['!rows'] = [{ hpt: 28 }, { hpt: 18 }, { hpt: 6 }, { hpt: 32 }];
+  // Autofiltro do cabeçalho ate a ultima linha de dados (deixa os totais de fora).
+  ws['!autofilter'] = { ref: `A${HEADER_ROW + 1}:${XLSX.utils.encode_col(NCOL - 1)}${totalRow}` };
+
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Socaria');
   XLSX.writeFile(wb, `socaria_fico_${new Date().toISOString().split('T')[0]}.xlsx`);
