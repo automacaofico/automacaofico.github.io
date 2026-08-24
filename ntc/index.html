@@ -455,8 +455,8 @@ tbody tr:hover{background:var(--blue-subtle)}
       <div class="col-6">
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Matriz de Desempenho dos Equipamentos</div>
-            <div class="card-subtitle">Classificação do perfil operacional de cada máquina</div>
+            <div class="card-title">Perfil Operacional da NTC</div>
+            <div class="card-subtitle">Indicadores consolidados do equipamento no período</div>
           </div>
           <div id="matrixAnalysis"></div>
         </div>
@@ -1525,24 +1525,20 @@ function renderDetailedIntelligence(){
   const dfDelta = dfSecondHalf - dfFirstHalf;
   const dfText = weeks.length < 2
     ? 'Ainda não há semanas suficientes para comparar a evolução da DF.'
-    : `A disponibilidade média das máquinas <b>${dfDelta >= 0 ? 'MELHOROU' : 'PIOROU'} ${Math.abs(dfDelta).toFixed(1)} pontos percentuais</b>: foi de ${dfFirstHalf.toFixed(1)}% (primeiras ${weeks.slice(0,half).length} semana(s) do período) para ${dfSecondHalf.toFixed(1)}% (últimas ${weeks.slice(half).length} semana(s)). As máquinas estão passando ${dfDelta>=0?'menos':'mais'} tempo paradas do que antes.`;
+    : `A disponibilidade da NTC <b>${dfDelta >= 0 ? 'MELHOROU' : 'PIOROU'} ${Math.abs(dfDelta).toFixed(1)} pontos percentuais</b>: foi de ${dfFirstHalf.toFixed(1)}% (primeiras ${weeks.slice(0,half).length} semana(s) do período) para ${dfSecondHalf.toFixed(1)}% (últimas ${weeks.slice(half).length} semana(s)). A máquina está passando ${dfDelta>=0?'menos':'mais'} tempo parada por manutenção do que antes.`;
 
-  // 4) Consistência real por equipamento (coeficiente de variação dos dias ativos).
-  function prodOrDash(ms){ return ms.prod ? ms.cv.toFixed(0) + '%' : '—'; }
-  const cvDetail = machStats.map(ms => `${ms.m} ${prodOrDash(ms)}`).join(' · ');
-  const withCv = machStats.filter(ms => ms.prod > 1);
+  // 4) Consistência real do rendimento diário (coeficiente de variação dos dias ativos).
+  const ntcStats = machStats[0];
   let cvText;
-  if(!withCv.length){
-    cvText = `Ainda não há dias produtivos suficientes para comparar a consistência das máquinas. <span style="color:var(--muted)">(${cvDetail})</span>`;
+  if(ntcStats.prod < 2){
+    cvText = 'Ainda não há dias produtivos suficientes para avaliar a consistência do rendimento diário.';
   } else {
-    const sortedByCv = [...withCv].sort((a,b) => a.cv - b.cv);
-    const mostConsistent = sortedByCv[0];
-    const leastConsistent = sortedByCv[sortedByCv.length - 1];
-    cvText = `<b>${mostConsistent.m}</b> é a mais previsível no dia a dia (varia ${mostConsistent.cv.toFixed(0)}% entre os dias em que operou)`
-      + (sortedByCv.length > 1 && leastConsistent.m !== mostConsistent.m
-          ? `, enquanto <b>${leastConsistent.m}</b> varia mais (${leastConsistent.cv.toFixed(0)}%) — tem dias muito bons e muito fracos mesmo estando disponível.`
-          : '.')
-      + ` Quanto menor esse número, mais dá pra confiar no volume que a máquina vai entregar num dia normal. <span style="color:var(--muted)">(${cvDetail})</span>`;
+    const level = ntcStats.cv <= 25
+      ? 'baixa variação — o rendimento diário é bastante previsível'
+      : ntcStats.cv <= 50
+        ? 'variação moderada — há dias bons e fracos, mas dentro do esperado'
+        : 'alta variação — o rendimento oscila muito de um dia para outro, mesmo com a máquina disponível';
+    cvText = `A NTC tem <b>${level}</b> (coeficiente de variação de ${ntcStats.cv.toFixed(0)}% entre os dias em que operou, média de ${fmt(ntcStats.avg)} m/dia). Quanto menor esse número, mais dá pra confiar no volume que a máquina vai entregar num dia normal.`;
   }
 
   let htmlDet = `
@@ -1559,7 +1555,7 @@ function renderDetailedIntelligence(){
       <p>${dfText}</p>
     </div>
     <div class="insight-item">
-      <div class="insight-title">4. Qual máquina rende de forma mais previsível?</div>
+      <div class="insight-title">4. O rendimento diário da NTC é previsível?</div>
       <p>${cvText}</p>
     </div>
   `;
@@ -1582,16 +1578,27 @@ function renderDetailedIntelligence(){
   matrixHtml += `</div>`;
   $('matrixAnalysis').innerHTML = matrixHtml;
 
-  // Plano de ação: os dois primeiros itens apontam para a máquina real mais
-  // fraca em cada métrica (não é texto fixo — muda conforme os dados mudam).
-  const weakestDF = [...machStats].sort((a,b) => a.df - b.df)[0];
-  const machsWithData = machStats.filter(ms => ms.prod > 0);
-  const weakestAvg = machsWithData.length ? [...machsWithData].sort((a,b) => a.avg - b.avg)[0] : null;
+  // Plano de ação: os dois primeiros itens comparam a DF e o rendimento da
+  // NTC contra referências reais (limiar saudável de DF e a meta vigente) —
+  // não é texto fixo, muda conforme os dados e a meta mudam.
+  const requiredDaily = (targetSettings.diasSemana || 6) > 0 ? target / (targetSettings.diasSemana || 6) : 0;
+  const dfHealthy = ntcStats.df >= 85;
+  const avgMeetsTarget = requiredDaily > 0 && ntcStats.avg >= requiredDaily;
+
+  const dfActionItem = dfHealthy
+    ? `<b>Disponibilidade sob controle:</b> DF da NTC está em ${ntcStats.df.toFixed(1)}%, dentro do saudável — o gargalo para bater a meta está mais no rendimento por dia disponível do que em parada mecânica.`
+    : `<b>Foco em disponibilidade:</b> DF da NTC está em ${ntcStats.df.toFixed(1)}%, abaixo do ideal — priorizar liberação de via/manutenção reduz a parada mecânica e amplia os dias produtivos.`;
+
+  const avgActionItem = ntcStats.prod === 0
+    ? `<b>Foco em rendimento:</b> ainda não há dias produtivos no período para avaliar o rendimento médio.`
+    : avgMeetsTarget
+      ? `<b>Rendimento em linha com a meta:</b> a média ativa da NTC (${fmt(ntcStats.avg)} m/dia) já cobre o necessário para bater ${fmt(target)} m/semana (${fmt(requiredDaily)} m/dia) — o ganho agora está em aumentar a DF, não o ritmo.`
+      : `<b>Foco em rendimento:</b> a média ativa da NTC (${fmt(ntcStats.avg)} m/dia) está abaixo do necessário para bater ${fmt(target)} m/semana (${fmt(requiredDaily)} m/dia) — investigar se é limitação mecânica, geometria da via ou logística de apoio.`;
 
   $('actionPlanList').innerHTML = `
     <ol style="padding-left:18px;font-size:13px;line-height:1.8;color:var(--text)">
-      <li><b>Foco em disponibilidade:</b> ${weakestDF.m} tem a menor DF do grupo (${weakestDF.df.toFixed(1)}%) — priorizar liberação de via/manutenção para essa máquina eleva os dias produtivos.</li>
-      ${weakestAvg ? `<li><b>Foco em rendimento:</b> ${weakestAvg.m} tem a menor média ativa entre os dias em que operou (${fmt(weakestAvg.avg)} m/dia) — investigar se é limitação mecânica, geometria da via ou logística de apoio.</li>` : ''}
+      <li>${dfActionItem}</li>
+      <li>${avgActionItem}</li>
       <li><b>Janela Efetiva de Linha:</b> Alinhar com o CCO blocos contínuos de trabalho na jornada de ${targetSettings.jornadaHoras}h/dia para maximizar os metros por dia ativo.</li>
       <li><b>Ajuste de Meta:</b> Mantenha a meta atualizada no botão "Configurar Metas" conforme o avanço físico do cronograma da FICO.</li>
     </ol>
