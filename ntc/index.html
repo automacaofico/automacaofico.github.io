@@ -285,10 +285,19 @@ tbody tr:hover{background:var(--blue-subtle)}
       </div>
       <div class="col-3">
         <div class="kpi-card">
-          <div class="kpi-label">Disponibilidade Física (DF)</div>
+          <div class="kpi-label">Disponibilidade Física (DF) — paradas mecânicas</div>
           <div class="kpi-val" id="kpiDFReal" style="color:var(--blue)">0%</div>
           <div class="kpi-footer">
             <span class="kpi-status status-good" id="kpiDiasProdSub">0 dias produtivos</span>
+          </div>
+        </div>
+      </div>
+      <div class="col-3">
+        <div class="kpi-card">
+          <div class="kpi-label">Paradas Operacionais / CCO</div>
+          <div class="kpi-val" id="kpiOpStop" style="color:var(--orange)">0%</div>
+          <div class="kpi-footer">
+            <span class="kpi-status status-warn" id="kpiOpStopSub">0 h no período</span>
           </div>
         </div>
       </div>
@@ -1050,10 +1059,12 @@ function calcTotalActive(row){
 const MACH_FIELD_PREFIX = { NTC: 'n' };
 
 // Disponibilidade real de uma maquina num dia, como fracao 0..1.
-// Usa as horas de parada mecanica/operacional lancadas no apontamento
-// quando existem; se o registro nao tem esse detalhamento (base historica
-// anterior ao campo de horas), cai de volta para o proxy antigo
-// (produziu algo > 0 nesse dia = considerado disponivel).
+// DF considera apenas paradas mecânicas: é a métrica de saúde/confiabilidade
+// do equipamento. Paradas operacionais/CCO (aguardando liberação, chuva,
+// logística etc.) não são culpa da máquina e são medidas separadamente pelo
+// índice de Paradas Operacionais. Se o registro nao tem esse detalhamento
+// (base historica anterior ao campo de horas), cai de volta para o proxy
+// antigo (produziu algo > 0 nesse dia = considerado disponivel).
 function machineDayAvailability(row, m){
   const prefix = MACH_FIELD_PREFIX[m];
   const pm = row[prefix + '_pm'];
@@ -1061,10 +1072,25 @@ function machineDayAvailability(row, m){
   if(pm !== undefined || po !== undefined){
     const jornada = targetSettings.jornadaHoras || 10;
     if(jornada <= 0) return 0;
-    const parada = (pm || 0) + (po || 0);
+    const parada = (pm || 0);
     return Math.max(0, Math.min(1, (jornada - parada) / jornada));
   }
   return (row[m] || 0) > 0 ? 1 : 0;
+}
+
+// Índice de Paradas Operacionais/CCO: fração da jornada perdida por motivos
+// não mecânicos (aguardando liberação, chuva, logística, manobra etc.).
+function calcOperationalStopIndex(rows, machs = [...activeMachs]){
+  if(!rows.length || !machs.length) return { pct: 0, hours: 0 };
+  const jornada = targetSettings.jornadaHoras || 10;
+  let totalPO = 0;
+  machs.forEach(m => {
+    const prefix = MACH_FIELD_PREFIX[m];
+    rows.forEach(r => { totalPO += r[prefix + '_po'] || 0; });
+  });
+  const totalScheduled = rows.length * machs.length * jornada;
+  const pct = totalScheduled > 0 ? (totalPO / totalScheduled) * 100 : 0;
+  return { pct, hours: totalPO };
 }
 
 function calcDF(rows, machs = [...activeMachs]){
@@ -1188,11 +1214,14 @@ function updateKPIs(rows){
   });
   const avgActive = activeMachineDaysCount ? totalActiveProd / activeMachineDaysCount : 0;
   const avgDailyMean = rows.length ? total / rows.length : 0;
+  const opStop = calcOperationalStopIndex(rows);
 
   $('kpiTotal').textContent = fmt(total) + ' m';
   $('kpiTotalSub').textContent = `${rows.length} dias no filtro (${activeMachs.size}/${MACHINES.length} máq.)`;
   $('kpiDFReal').textContent = df.toFixed(1).replace('.',',') + '%';
   $('kpiDiasProdSub').textContent = `${activeMachineDaysCount} dias ativos de máquina`;
+  $('kpiOpStop').textContent = opStop.pct.toFixed(1).replace('.',',') + '%';
+  $('kpiOpStopSub').textContent = `${fmt(opStop.hours)} h de parada operacional/CCO`;
   $('kpiActiveAvg').textContent = fmt(avgActive) + ' m/dia';
   $('kpiDailyMeanSub').textContent = `Média total: ${fmt(avgDailyMean)} m/dia`;
   $('kpiWeeklyAvg').textContent = fmt(weeklyAvg) + ' m/sem';
