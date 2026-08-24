@@ -4,6 +4,7 @@ import { routeCco } from './cco.js';
 import { routeRadar } from './radar.js';
 import { routeOrganogram } from './organogram.js';
 import { routeSocaria } from './socaria.js';
+import { routeNtc } from './ntc.js';
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
 
@@ -857,6 +858,8 @@ async function route(request, env) {
   if (organogramResponse) return organogramResponse;
   const socariaResponse = await routeSocaria(request, env);
   if (socariaResponse) return socariaResponse;
+  const ntcResponse = await routeNtc(request, env);
+  if (ntcResponse) return ntcResponse;
   if (request.method === 'GET' && url.pathname === '/health') return reply(request, { ok: true, service: 'fico-tracking-api', time: new Date().toISOString() });
   if (request.method === 'POST' && url.pathname === '/api/v1/activate') return activate(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/operators') return registerOperator(request, env);
