@@ -355,6 +355,12 @@
 .edit-status.ok{color:var(--verde)}
 .edit-status.err{color:var(--vermelho)}
 .edit-status.busy{color:var(--azul)}
+.program-upload{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px;background:#f4f7fa;border:1px dashed var(--cinza-borda);border-radius:8px}
+.program-upload span{font-size:12px;color:var(--cinza-txt)}
+.programacao-card{background:#fff;border:1px solid var(--cinza-borda);border-radius:12px;padding:18px;margin:16px 0}
+.programacao-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}.programacao-kpis div{padding:12px;background:#f4f7fa;border-radius:8px}.programacao-kpis b{display:block;font-size:21px;color:var(--navy)}.programacao-kpis span{font-size:11px;color:var(--cinza-txt)}
+.programacao-table{width:100%;border-collapse:collapse;font-size:12px}.programacao-table th,.programacao-table td{padding:9px;border-bottom:1px solid var(--cinza-borda);text-align:left}.programacao-table th{color:var(--cinza-txt);font-size:10px;text-transform:uppercase}.programacao-table td:last-child{max-width:260px}
+@media(max-width:700px){.programacao-kpis{grid-template-columns:repeat(2,1fr)}.programacao-card{overflow:auto}.programacao-table{min-width:800px}}
 </style>
 </head>
 <body>
@@ -375,7 +381,7 @@
       <div class="data" id="dataRef"></div>
       <span class="cad" id="hCadencia"></span>
       <div class="fetch-badge"><span class="fetch-dot" id="fetchDot"></span><span id="fetchStatus">dados locais</span></div>
-      <button class="edit-btn" onclick="abrirEdicao()">🔒 Editar mobilização/alertas</button>
+      <button class="edit-btn" onclick="abrirEdicao()">🔒 Editar painel e programação</button>
     </div>
   </div>
 </header>
@@ -397,7 +403,7 @@
 <div id="editOverlay" class="edit-overlay" style="display:none">
   <div class="edit-modal">
     <h2>Editar dados manuais</h2>
-    <p class="edit-hint">Mobilização por pacote, alertas, cenários e cabeçalho não vêm da planilha — ficam guardados à parte. Peça a senha ao responsável pelo painel.</p>
+    <p class="edit-hint">Mobilização, alertas, cenários e programação ficam guardados à parte da base oficial. Peça a senha ao responsável pelo painel.</p>
     <div id="editLoginBox">
       <label for="editUsuario">Seu nome</label>
       <input type="text" id="editUsuario" autocomplete="name">
@@ -410,6 +416,11 @@
       <div id="editLoginStatus" class="edit-status"></div>
     </div>
     <div id="editFormBox" style="display:none">
+
+      <h3 class="ef-secao">Programação de pendências</h3>
+      <p class="ef-ajuda">Baixe sempre o modelo atualizado antes de programar. Somente os IDs presentes no arquivo serão incluídos ou atualizados; os demais permanecem intactos.</p>
+      <div class="program-upload"><input id="programFile" type="file" accept=".xlsx" hidden><button type="button" class="ef-add" onclick="baixarModeloProgramacao()">↓ Baixar modelo atualizado</button><button type="button" class="ef-add" onclick="document.getElementById('programFile').click()">↑ Enviar programação (.xlsx)</button><span id="programFileName">Nenhuma planilha selecionada</span></div>
+      <div id="programUploadStatus" class="edit-status"></div>
 
       <h3 class="ef-secao">Cabeçalho do painel</h3>
       <div class="ef-grid2">
@@ -450,11 +461,13 @@
 
 <nav class="abas" id="navAbas">
   <button class="ativa" onclick="mostrar('consolidado',this)">Consolidado</button>
+  <button onclick="mostrar('programacao',this)">Programação</button>
   <button class="print-btn" id="printBtn" onclick="window.print()">🖨 Imprimir esta aba</button>
 </nav>
 
 <main id="main">
   <section id="consolidado" class="painel ativo"></section>
+  <section id="programacao" class="painel"></section>
 </main>
 
 <footer>
@@ -1014,7 +1027,17 @@ function renderCharts(){
   });
 }
 
-function renderAll(){renderChrome();renderConsolidado();D.EMP_ORDER.forEach(renderEmpresa);renderCharts();}
+function renderProgramacao(){
+  const alvo=document.getElementById('programacao'); if(!alvo)return;
+  const itens=(ultimoManual&&Array.isArray(ultimoManual.programacao)?ultimoManual.programacao:[]).filter(item=>passaRegional(String(item.PACOTE||'')));
+  if(!itens.length){alvo.innerHTML='<div class="programacao-card"><h2>Programação de pendências</h2><p class="ef-ajuda">Baixe o modelo baseado na Base atual, preencha ID e data programada e depois envie-o em “Editar painel e programação”.</p><button class="ef-add" type="button" onclick="baixarModeloProgramacao()">↓ Baixar modelo atualizado</button></div>';return;}
+  const empresas=[...new Set(itens.map(item=>item.EXECUTANTE||item.EMPRESA).filter(Boolean))].length;
+  const datas=[...new Set(itens.map(item=>item.DATA_PROGRAMADA).filter(Boolean))].length;
+  const linha=item=>'<tr><td>'+escHtml(item.Id_Pendencia)+'</td><td>'+escHtml(item.EXECUTANTE||item.EMPRESA)+'</td><td>'+escHtml(item.PACOTE)+'</td><td>'+escHtml(item.TIPO||'—')+'</td><td>'+escHtml(item.KM_INICIAL||'—')+' → '+escHtml(item.KM_FINAL||'—')+'</td><td>'+escHtml(item.DATA_PROGRAMADA||'—')+'</td><td>'+escHtml(item.STATUS||'Programada')+'</td></tr>';
+  alvo.innerHTML='<div class="programacao-card"><h2>Programação de pendências</h2><p class="ef-ajuda">Visão por executante. A programação aceita apenas IDs que estejam abertos na Base oficial.</p><button class="ef-add" type="button" onclick="baixarModeloProgramacao()">↓ Baixar modelo atualizado</button><div class="programacao-kpis"><div><b>'+itens.length+'</b><span>programadas</span></div><div><b>'+empresas+'</b><span>executantes</span></div><div><b>'+datas+'</b><span>datas planejadas</span></div><div><b>'+itens.filter(item=>item.STATUS==='Programada').length+'</b><span>aguardando campo</span></div></div><table class="programacao-table"><thead><tr><th>ID</th><th>Executante</th><th>Pacote</th><th>Tipo</th><th>Trecho</th><th>Data programada</th><th>Status</th></tr></thead><tbody>'+itens.sort((a,b)=>String(a.EXECUTANTE||a.EMPRESA).localeCompare(String(b.EXECUTANTE||b.EMPRESA),'pt-BR')||String(a.DATA_PROGRAMADA).localeCompare(String(b.DATA_PROGRAMADA),'pt-BR')||String(a.Id_Pendencia).localeCompare(String(b.Id_Pendencia),'pt-BR')).map(linha).join('')+'</tbody></table></div>';
+}
+
+function renderAll(){renderChrome();renderConsolidado();renderProgramacao();D.EMP_ORDER.forEach(renderEmpresa);renderCharts();}
 
 function mostrar(id,btn){
   document.querySelectorAll('.painel').forEach(p=>p.classList.remove('ativo'));
@@ -1165,7 +1188,85 @@ async function tentarFetch(){
 // editáveis aqui mesmo, atrás de senha. Salvar grava manual-data.json no GitHub (via worker)
 // e a página recarrega os dados na hora.
 // ============================================================
-let ultimoManual=null, tokenEdicao=null;
+let ultimoManual=null, tokenEdicao=null, programacaoPendente=null;
+
+const normalizarIdProgramacao=v=>String(v==null?'':v).trim().toUpperCase();
+const textoProgramacao=v=>String(v==null?'':v).trim();
+function formatarKm(valor){
+  const bruto=textoProgramacao(valor).replace(/^KM\s*/i,'').replace(/\s+/g,'');
+  if(!bruto)return '';
+  const partes=bruto.match(/^(\d+)(?:\+(\d{1,3}))?$/);
+  if(!partes)return textoProgramacao(valor);
+  let km,metros;
+  if(partes[2]!==undefined){km=Number(partes[1]);metros=Number(partes[2]);}
+  else {const total=Number(partes[1]);km=Math.floor(total/1000);metros=total%1000;}
+  if(!Number.isFinite(km)||!Number.isFinite(metros))return textoProgramacao(valor);
+  return `${km}+${String(metros).padStart(3,'0')}`;
+}
+function colunaExcel(indice){let numero=indice+1,letras='';while(numero>0){const resto=(numero-1)%26;letras=String.fromCharCode(65+resto)+letras;numero=Math.floor((numero-1)/26);}return letras;}
+function baixarModeloProgramacao(){
+  if(!ultimasLinhasBanco||!ultimasLinhasBanco.length){alert('A Base oficial ainda está carregando. Aguarde alguns segundos e tente novamente.');return;}
+  const camposBase=['Id_Pendencia','Executante','Empresa','Pacote','Segmento','Tipo de Pendencia','Descrição Pendencia','KM Inicial','KM Final','Status_Pendencia'];
+  const linhasBase=ultimasLinhasBanco.map(linha=>camposBase.map(campo=>campo==='Id_Pendencia'?textoProgramacao(linha[campo]):(campo==='KM Inicial'||campo==='KM Final'?formatarKm(linha[campo]):linha[campo]??'')));
+  const linhasVisiveis=[['PROGRAMAÇÃO DE PENDÊNCIAS · MODELO ATUALIZADO'],['Digite apenas o Id_Pendencia e a data programada. Os demais campos são preenchidos automaticamente pela Base atual.'],['O painel validará novamente o ID, o executante e a situação no momento do envio. Somente pendências abertas podem ser programadas.'],[],['Id_Pendencia','Executante','Empresa','Pacote','Segmento','Tipo de pendência','Descrição','KM inicial','KM final','Situação','Pode programar?','Data programada']];
+  for(let indice=0;indice<200;indice++)linhasVisiveis.push(Array(12).fill(''));
+  const wb=XLSX.utils.book_new(),aba=XLSX.utils.aoa_to_sheet(linhasVisiveis),abaBase=XLSX.utils.aoa_to_sheet([camposBase,...linhasBase]);
+  const ultimaBase=linhasBase.length+1;
+  for(let linha=6;linha<=205;linha++){
+    const busca=coluna=>`IF($A${linha}=\"\",\"\",IFERROR(INDEX('Base atual'!$${coluna}$2:$${coluna}$${ultimaBase},MATCH($A${linha}&\"\",'Base atual'!$A$2:$A$${ultimaBase},0)),\"ID não encontrado\"))`;
+    ['B','C','D','E','F','G','H','I','J'].forEach((coluna,indice)=>aba[`${coluna}${linha}`]={t:'n',f:busca(colunaExcel(indice+1))});
+    aba[`K${linha}`]={t:'n',f:`IF($A${linha}=\"\",\"\",IF($J${linha}=\"Aberta\",\"SIM\",\"NÃO\"))`};
+  }
+  aba['!cols']=[{wch:16},{wch:20},{wch:18},{wch:12},{wch:16},{wch:22},{wch:48},{wch:14},{wch:14},{wch:16},{wch:18},{wch:18}];
+  aba['!rows']=[{hpt:26},{hpt:30},{hpt:30}];
+  aba['!freeze']={xSplit:1,ySplit:5};
+  abaBase['!cols']=camposBase.map((_,indice)=>({wch:indice===6?52:18}));
+  abaBase['!hidden']=1;
+  XLSX.utils.book_append_sheet(wb,aba,'Programação');XLSX.utils.book_append_sheet(wb,abaBase,'Base atual');
+  wb.Workbook={CalcPr:{calcMode:'auto',fullCalcOnLoad:'1',forceFullCalc:'1'}};
+  XLSX.writeFile(wb,`modelo-programacao-pendencias-${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+async function lerPlanilhaProgramacao(file){
+  if(!file) return;
+  const st=document.getElementById('programUploadStatus'), nome=document.getElementById('programFileName');
+  try{
+    if(!ultimasLinhasBanco||!ultimasLinhasBanco.length)throw new Error('A base oficial ainda não foi carregada. Aguarde a sincronização e tente novamente.');
+    st.className='edit-status busy';st.textContent='🔎 Validando IDs da programação…';
+    const wb=XLSX.read(await file.arrayBuffer(),{type:'array'}), aba=wb.Sheets['Programação']||wb.Sheets[wb.SheetNames[0]];
+    const grade=XLSX.utils.sheet_to_json(aba,{header:1,defval:''});
+    const cabecalho=grade.findIndex(colunas=>colunas.some(coluna=>['ID_PENDENCIA','ID'].includes(normalizarIdProgramacao(coluna))));
+    if(cabecalho<0)throw new Error('Não encontrei a coluna Id_Pendencia. Use a planilha-modelo fornecida pelo painel.');
+    const linhas=XLSX.utils.sheet_to_json(aba,{range:cabecalho,defval:''});
+    if(!linhas.length)throw new Error('A planilha está vazia.');
+    const base=new Map(ultimasLinhasBanco.map(row=>[normalizarIdProgramacao(row.Id_Pendencia),row]));
+    const vistos=new Set(), erros=[], atualizados=[];
+    linhas.forEach((linha,indice)=>{
+      const linhaExcel=cabecalho+indice+2;
+      const id=normalizarIdProgramacao(linha.Id_Pendencia||linha.ID_PENDENCIA||linha.ID);
+      if(!id){if(Object.values(linha).some(valor=>textoProgramacao(valor)))erros.push(`linha ${linhaExcel}: Id_Pendencia ausente`);return;}
+      if(vistos.has(id)){erros.push(`linha ${linhaExcel}: ID ${id} duplicado`);return;}
+      vistos.add(id);
+      const oficial=base.get(id);
+      if(!oficial){erros.push(`linha ${linhaExcel}: ID ${id} não existe na base oficial`);return;}
+      const executante=textoProgramacao(oficial.Executante), empresa=textoProgramacao(oficial.Empresa), pacote=textoProgramacao(oficial.Pacote);
+      if(textoProgramacao(linha.Executante)&&normalizarIdProgramacao(linha.Executante)!==normalizarIdProgramacao(executante))erros.push(`linha ${linhaExcel}: executante diverge para o ID ${id}`);
+      if(textoProgramacao(linha.Empresa)&&normalizarIdProgramacao(linha.Empresa)!==normalizarIdProgramacao(empresa))erros.push(`linha ${linhaExcel}: empresa diverge para o ID ${id}`);
+      if(textoProgramacao(linha.Pacote)&&normalizarIdProgramacao(linha.Pacote)!==normalizarIdProgramacao(pacote))erros.push(`linha ${linhaExcel}: pacote diverge para o ID ${id}`);
+      if(textoProgramacao(oficial.Status_Pendencia).toUpperCase()!=='ABERTA'){erros.push(`linha ${linhaExcel}: ID ${id} não está pendente (situação atual: ${oficial.Status_Pendencia||'não informada'})`);return;}
+      const dataBruta=linha.DATA_PROGRAMADA??linha['Data programada'];
+      if(dataBruta===''||dataBruta==null){erros.push(`linha ${linhaExcel}: informe a data programada para o ID ${id}`);return;}
+      const dataProgramada=typeof dataBruta==='number'?XLSX.SSF.format('yyyy-mm-dd',dataBruta):textoProgramacao(dataBruta);
+      atualizados.push({Id_Pendencia:id,EXECUTANTE:executante,EMPRESA:executante,EMPRESA_CLP:empresa,PACOTE:pacote,TIPO:textoProgramacao(oficial['Tipo de Pendencia']||oficial.Tipo||oficial.Tipo_Pendencia||''),DESCRICAO:textoProgramacao(oficial['Descrição Pendencia']||''),KM_INICIAL:formatarKm(oficial['KM Inicial']||''),KM_FINAL:formatarKm(oficial['KM Final']||''),DATA_PROGRAMADA:dataProgramada,STATUS:'Programada'});
+    });
+    if(erros.length)throw new Error(erros.slice(0,6).join(' · ')+(erros.length>6?` · e mais ${erros.length-6} erro(s)` : ''));
+    const existentes=Array.isArray(ultimoManual?.programacao)?ultimoManual.programacao:[];
+    const combinada=new Map(existentes.map(item=>[normalizarIdProgramacao(item.Id_Pendencia),item]));
+    atualizados.forEach(item=>combinada.set(item.Id_Pendencia,item));
+    programacaoPendente=[...combinada.values()]; nome.textContent=`${file.name} · ${atualizados.length} ID(s) válido(s)`;
+    st.className='edit-status ok';st.textContent=`✅ ${atualizados.length} programação(ões) pronta(s). Ao salvar, somente esses IDs serão alterados.`;
+  }catch(e){programacaoPendente=null;nome.textContent='Nenhuma programação válida selecionada';st.className='edit-status err';st.textContent='⚠️ '+e.message;}
+}
 
 function abrirEdicao(){
   document.getElementById('editOverlay').style.display='flex';
@@ -1212,7 +1313,7 @@ async function salvarEdicao(){
     });
     const result=await resp.json().catch(()=>({}));
     if(!resp.ok)throw new Error(result.error||'Falha ao salvar.');
-    st.className='edit-status ok';st.textContent='✅ Salvo · painel atualizado.';
+    programacaoPendente=null;st.className='edit-status ok';st.textContent='✅ Salvo · painel atualizado.';
     await tentarFetch();
     setTimeout(fecharEdicao,1200);
   }catch(e){st.className='edit-status err';st.textContent='⚠️ '+e.message;}
@@ -1371,12 +1472,13 @@ function coletarFormulario(){
     cenarios.push(c);
   });
 
-  return {meta,pacotes,cenarios,alertas};
+  return {meta,pacotes,cenarios,alertas,programacao:programacaoPendente||(ultimoManual&&Array.isArray(ultimoManual.programacao)?ultimoManual.programacao:[])};
 }
 
 D=normalizar(FALLBACK);
 renderAll();
 tentarFetch();
+document.getElementById('programFile').addEventListener('change',event=>lerPlanilhaProgramacao(event.target.files[0]));
 window.addEventListener('resize',()=>Object.values(charts).forEach(c=>c&&c.resize()));
 window.addEventListener('beforeprint',()=>setTimeout(()=>Object.values(charts).forEach(c=>c&&c.resize()),100));
 

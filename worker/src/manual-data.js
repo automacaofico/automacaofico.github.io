@@ -12,12 +12,13 @@ function fail(message) {
 // cabeçalho do painel, mobilização por pacote, cenários de projeção e alertas.
 export function validateManualData(data) {
   if (!isPlainObject(data)) fail('Dados manuais inválidos: corpo precisa ser um objeto.');
-  const { meta, pacotes, cenarios, alertas } = data;
+  const { meta, pacotes, cenarios, alertas, programacao = [] } = data;
 
   if (!isPlainObject(meta)) fail('Campo "meta" ausente ou inválido.');
   if (!Array.isArray(pacotes)) fail('Campo "pacotes" ausente ou inválido.');
   if (!Array.isArray(cenarios)) fail('Campo "cenarios" ausente ou inválido.');
   if (!Array.isArray(alertas)) fail('Campo "alertas" ausente ou inválido.');
+  if (!Array.isArray(programacao)) fail('Campo "programacao" inválido.');
 
   pacotes.forEach((row, index) => {
     if (!isPlainObject(row) || !row.PACOTE || !row.EMPRESA) {
@@ -35,5 +36,19 @@ export function validateManualData(data) {
     }
   });
 
-  return { meta, pacotes, cenarios, alertas };
+  const ids = new Set();
+  programacao.forEach((row, index) => {
+    if (!isPlainObject(row) || !String(row.Id_Pendencia || '').trim()) {
+      fail(`Item ${index + 1} de "programacao" precisa ter Id_Pendencia.`);
+    }
+    const id = String(row.Id_Pendencia).trim().toUpperCase();
+    if (ids.has(id)) fail(`Id_Pendencia duplicado na programação: ${row.Id_Pendencia}.`);
+    ids.add(id);
+    const percentual = Number(row.PERCENTUAL_EXECUTADO ?? 0);
+    if (!Number.isFinite(percentual) || percentual < 0 || percentual > 100) {
+      fail(`Percentual executado inválido para a pendência ${row.Id_Pendencia}.`);
+    }
+  });
+
+  return { meta, pacotes, cenarios, alertas, programacao };
 }
