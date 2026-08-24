@@ -1029,7 +1029,8 @@ function renderCharts(){
 
 function renderProgramacao(){
   const alvo=document.getElementById('programacao'); if(!alvo)return;
-  const itens=(ultimoManual&&Array.isArray(ultimoManual.programacao)?ultimoManual.programacao:[]).filter(item=>passaRegional(String(item.PACOTE||'')));
+  const pacoteDaProgramacao=item=>{const valor=String(item.PACOTE||'').trim().toUpperCase().replace(/^P\s*/,'');return valor?'P'+valor:'';};
+  const itens=(ultimoManual&&Array.isArray(ultimoManual.programacao)?ultimoManual.programacao:[]).filter(item=>passaRegional(pacoteDaProgramacao(item)));
   if(!itens.length){alvo.innerHTML='<div class="programacao-card"><h2>Programação de pendências</h2><p class="ef-ajuda">Baixe o modelo baseado na Base atual, preencha ID e data programada e depois envie-o em “Editar painel e programação”.</p><button class="ef-add" type="button" onclick="baixarModeloProgramacao()">↓ Baixar modelo atualizado</button></div>';return;}
   const empresas=[...new Set(itens.map(item=>item.EXECUTANTE||item.EMPRESA).filter(Boolean))].length;
   const datas=[...new Set(itens.map(item=>item.DATA_PROGRAMADA).filter(Boolean))].length;
