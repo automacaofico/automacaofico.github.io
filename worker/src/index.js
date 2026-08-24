@@ -105,6 +105,19 @@ async function saveManualData(request, env, session, dashboardId) {
   return { ok: true, commit: result.commit?.sha || null, when };
 }
 
+async function readManualData(env, dashboardId) {
+  const dashboard = dashboardById(dashboardId);
+  if (!dashboard) throw new AppError('Dashboard desconhecido.', 404, 'DASHBOARD_NOT_FOUND');
+  if (!dashboard.manualData) throw new AppError('Este painel não tem dados manuais.', 404, 'MANUAL_DATA_NOT_SUPPORTED');
+  const current = await new GitHubPublisher(env).currentOrNull(dashboard.manualData);
+  if (!current) return {};
+  try {
+    return JSON.parse(new TextDecoder().decode(current.buffer));
+  } catch {
+    throw new AppError('Dados manuais publicados estão inválidos.', 502, 'MANUAL_DATA_INVALID');
+  }
+}
+
 async function forwardRestore(env, dashboard, versionId, user) {
   const id = env.COORDINATOR.idFromName(`dashboard:${dashboard.id}`);
   return env.COORDINATOR.get(id).fetch('https://internal/internal/restore', {
@@ -152,13 +165,15 @@ export default {
       }
       if (url.pathname === '/api/v1/auth/session' && request.method === 'POST') return response(request, env, await authenticate(request, env));
 
+      const manualMatch = url.pathname.match(/^\/api\/v1\/dashboards\/([^/]+)\/manual$/);
+      if (manualMatch && request.method === 'GET') return response(request, env, await readManualData(env, manualMatch[1]));
+
       const session = await requireSession(request, env);
       if (url.pathname === '/api/v1/uploads' && request.method === 'POST') {
         const result = await forwardUpload(request, env, session);
         return new Response(result.body, { status: result.status, headers: { ...Object.fromEntries(result.headers), ...cors(request, env), 'Cache-Control': 'no-store' } });
       }
 
-      const manualMatch = url.pathname.match(/^\/api\/v1\/dashboards\/([^/]+)\/manual$/);
       if (manualMatch && request.method === 'POST') {
         return response(request, env, await saveManualData(request, env, session, manualMatch[1]));
       }
