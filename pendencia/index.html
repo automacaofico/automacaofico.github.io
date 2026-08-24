@@ -681,7 +681,7 @@ function normalizar(raw){
 
   // ordem das abas: contratadas principais na ordem P1→P2→P3, depois as demais
   // empresas em ordem alfabética, e por fim a VALE (tratada como mais uma "empresa").
-  const principaisOrdem=['p1','p1a','p1b','p1c','p2','p3','p5'].map(k=>PAC[k]&&PAC[k].empresaPrincipal).filter(Boolean);
+  const principaisOrdem=[...new Set(['p1','p1a','p1b','p1c','p2','p3','p5'].map(k=>PAC[k]&&PAC[k].empresaPrincipal).filter(Boolean))];
   const todas=Object.keys(EMP);
   const secundarias=todas.filter(e=>principaisOrdem.indexOf(e)===-1&&e!=='VALE').sort((a,b)=>a.localeCompare(b,'pt-BR'));
   let ordemFinal=principaisOrdem.filter(e=>EMP[e]).concat(secundarias);
