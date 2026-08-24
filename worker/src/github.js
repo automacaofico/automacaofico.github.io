@@ -13,6 +13,11 @@ function bytesToBase64(buffer) {
   return btoa(output);
 }
 
+function base64ToBuffer(value) {
+  const binary = atob(String(value || '').replace(/\s/g, ''));
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0)).buffer;
+}
+
 export class GitHubPublisher {
   constructor(env) {
     this.token = env.GITHUB_TOKEN;
@@ -64,6 +69,11 @@ export class GitHubPublisher {
       throw new AppError('Falha ao consultar arquivo atual.', 502, 'GITHUB_ERROR');
     }
     const metadata = await response.json();
+    // Arquivos JSON pequenos vêm completos na resposta autenticada da API. Usar esse
+    // conteúdo evita que o CDN raw do GitHub devolva uma versão antiga em cache.
+    if (metadata.encoding === 'base64' && metadata.content) {
+      return { sha: metadata.sha, buffer: base64ToBuffer(metadata.content) };
+    }
     const rawResponse = await fetch(metadata.download_url, { headers: { Authorization: `Bearer ${this.token}` }, cache: 'no-store' });
     if (!rawResponse.ok) throw new AppError('Não foi possível localizar o arquivo atual.', 502, 'CURRENT_FILE_UNAVAILABLE');
     return { sha: metadata.sha, buffer: await rawResponse.arrayBuffer() };
