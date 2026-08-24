@@ -322,6 +322,15 @@ tbody tr:hover{background:var(--blue-subtle)}
           </div>
         </div>
       </div>
+      <div class="col-3">
+        <div class="kpi-card">
+          <div class="kpi-label">Melhor Dia de Produção</div>
+          <div class="kpi-val" id="kpiBestDay" style="color:var(--green)">-</div>
+          <div class="kpi-footer">
+            <span class="kpi-status status-good" id="kpiBestDaySub">Sem lançamentos ainda</span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Machine Cards Deck -->
@@ -1257,6 +1266,20 @@ function updateKPIs(rows){
   } else {
     $('kpiDeficitSub').className = 'kpi-status status-good';
     $('kpiDeficitSub').textContent = `Superávit: +${fmt(weeklyAvg - targetSettings.weeklyTarget)} m/sem (${adherence.toFixed(1)}%)`;
+  }
+
+  // Recorde histórico: melhor dia de produção já lançado (não é limitado
+  // pelo filtro de período — é o melhor dia de todo o histórico).
+  const bestDay = appRows.reduce((best, r) => {
+    const v = r.NTC || 0;
+    return (!best || v > best.v) ? { v, r } : best;
+  }, null);
+  if(bestDay && bestDay.v > 0){
+    $('kpiBestDay').textContent = bestDay.r.dateBR || bestDay.r.dateISO;
+    $('kpiBestDaySub').textContent = `${fmt(bestDay.v)} m em um único dia`;
+  } else {
+    $('kpiBestDay').textContent = '-';
+    $('kpiBestDaySub').textContent = 'Sem lançamentos ainda';
   }
 }
 
