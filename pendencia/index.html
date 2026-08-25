@@ -361,6 +361,26 @@
 .programacao-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}.programacao-kpis div{padding:12px;background:#f4f7fa;border-radius:8px}.programacao-kpis b{display:block;font-size:21px;color:var(--navy)}.programacao-kpis span{font-size:11px;color:var(--cinza-txt)}
 .programacao-table{width:100%;border-collapse:collapse;font-size:12px}.programacao-table th,.programacao-table td{padding:9px;border-bottom:1px solid var(--cinza-borda);text-align:left}.programacao-table th{color:var(--cinza-txt);font-size:10px;text-transform:uppercase}.programacao-table td:last-child{max-width:260px}
 @media(max-width:700px){.programacao-kpis{grid-template-columns:repeat(2,1fr)}.programacao-card{overflow:auto}.programacao-table{min-width:800px}}
+
+/* ============ TENDÊNCIA (Meta × Real de baixa de pendências, semanal) ============ */
+.tend-mes{background:#fff;border:1px solid var(--cinza-borda);border-radius:12px;padding:18px 20px;margin-bottom:18px;box-shadow:var(--sh-sm);overflow-x:auto}
+.tend-mes h3{color:var(--navy);font-size:14px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px}
+table.tend-tabela{width:100%;border-collapse:collapse;font-size:12px;min-width:900px}
+table.tend-tabela th,table.tend-tabela td{padding:7px 9px;text-align:center;border-bottom:1px solid var(--cinza-borda)}
+table.tend-tabela th{color:#fff;background:var(--navy);font-size:10.5px;text-transform:uppercase;letter-spacing:.3px}
+table.tend-tabela thead tr.tend-semanas th{background:var(--azul)}
+table.tend-tabela td:first-child,table.tend-tabela th:first-child{text-align:left;font-weight:700;color:var(--navy)}
+table.tend-tabela tbody tr:hover{background:#f4f7fa}
+table.tend-tabela tfoot td{font-weight:800;background:#f4f7fa;color:var(--navy)}
+.tend-pct{display:inline-flex;align-items:center;gap:5px;font-weight:700}
+.tend-pct::before{content:"";width:8px;height:8px;border-radius:50%;flex:none}
+.tend-pct.verde::before{background:var(--verde);box-shadow:0 0 5px var(--verde)}
+.tend-pct.amarelo::before{background:var(--amarelo);box-shadow:0 0 5px var(--amarelo)}
+.tend-pct.vermelho::before{background:var(--vermelho);box-shadow:0 0 5px var(--vermelho)}
+.tend-legenda{display:flex;gap:18px;flex-wrap:wrap;font-size:11px;color:var(--cinza-txt);margin-top:10px}
+.tend-legenda span{display:inline-flex;align-items:center;gap:6px}
+.tend-legenda i{width:8px;height:8px;border-radius:50%;display:inline-block}
+@media(max-width:700px){.tend-mes{padding:14px}}
 </style>
 </head>
 <body>
@@ -462,12 +482,14 @@
 <nav class="abas" id="navAbas">
   <button class="ativa" onclick="mostrar('consolidado',this)">Consolidado</button>
   <button onclick="mostrar('programacao',this)">Programação</button>
+  <button onclick="mostrar('tendencia',this)">Tendência</button>
   <button class="print-btn" id="printBtn" onclick="window.print()">🖨 Imprimir esta aba</button>
 </nav>
 
 <main id="main">
   <section id="consolidado" class="painel ativo"></section>
   <section id="programacao" class="painel"></section>
+  <section id="tendencia" class="painel"></section>
 </main>
 
 <footer>
@@ -1056,7 +1078,76 @@ function renderProgramacao(){
   alvo.innerHTML='<div class="programacao-card"><h2>Programação de pendências</h2><p class="ef-ajuda">Visão por executante. A programação aceita apenas IDs que estejam abertos na Base oficial.</p><button class="ef-add" type="button" onclick="baixarModeloProgramacao()">↓ Baixar modelo atualizado</button><div class="programacao-kpis"><div><b>'+itens.length+'</b><span>programadas</span></div><div><b>'+empresas+'</b><span>executantes</span></div><div><b>'+datas+'</b><span>datas planejadas</span></div><div><b>'+itens.filter(item=>item.STATUS==='Programada').length+'</b><span>aguardando campo</span></div></div><table class="programacao-table"><thead><tr><th>ID</th><th>Executante</th><th>Pacote</th><th>Tipo</th><th>Trecho</th><th>Data programada</th><th>Status</th></tr></thead><tbody>'+itens.sort((a,b)=>String(a.EXECUTANTE||a.EMPRESA).localeCompare(String(b.EXECUTANTE||b.EMPRESA),'pt-BR')||String(a.DATA_PROGRAMADA).localeCompare(String(b.DATA_PROGRAMADA),'pt-BR')||String(a.Id_Pendencia).localeCompare(String(b.Id_Pendencia),'pt-BR')).map(linha).join('')+'</tbody></table></div>';
 }
 
-function renderAll(){renderChrome();renderConsolidado();renderProgramacao();D.EMP_ORDER.forEach(renderEmpresa);renderCharts();}
+// ============================================================
+// TENDÊNCIA — acompanhamento semanal de Meta × Real de baixa de pendências
+// (aba "Tendência - Protocolo" da planilha EAP). Não vem do upload nem do
+// Banco de Dados — é uma tabela de acompanhamento à parte, atualizada por
+// quem mantém a planilha; por ora os números ficam fixos aqui (mesmo padrão
+// de mobilização/cenários/alertas, que também não vêm da planilha).
+// ============================================================
+const TENDENCIA_EMPRESAS=['GSA','EMPA','ATERPA','ÁPIA','CIVIL MASTER','VALE'];
+// [meta,real,%] — a meta exibida na planilha é arredondada (ex.: GSA "5"/semana vem de
+// 5,4 real), então a % vem pronta da planilha em vez de recalculada a partir do inteiro
+// arredondado (senão diverge: 3/5=60% ≠ 56% que a planilha mostra com a meta real 5,4).
+const TENDENCIA_DATA={
+  atualizadoAte:'22/08/2026 (S3 de agosto)',
+  meses:[
+    {mes:'Junho/26',total:109,semanas:[
+      {label:'S1 (01/06 a 08/06)',encerradas:0,dados:{GSA:[5,0,0],EMPA:[55,0,0],ATERPA:[55,0,0],'ÁPIA':[71,0,0],'CIVIL MASTER':[2,0,0],VALE:[10,0,0]}},
+      {label:'S2 (10/06 a 15/06)',encerradas:5,dados:{GSA:[5,0,0],EMPA:[55,0,0],ATERPA:[55,5,9],'ÁPIA':[71,0,0],'CIVIL MASTER':[2,0,0],VALE:[10,0,0]}},
+      {label:'S3 (17/06 a 22/06)',encerradas:22,dados:{GSA:[5,0,0],EMPA:[55,8,15],ATERPA:[55,14,26],'ÁPIA':[71,0,0],'CIVIL MASTER':[2,0,0],VALE:[10,0,0]}},
+      {label:'S4 (24/06 a 30/06)',encerradas:82,dados:{GSA:[5,0,0],EMPA:[55,16,29],ATERPA:[55,11,20],'ÁPIA':[71,55,77],'CIVIL MASTER':[2,0,0],VALE:[10,0,0]}}
+    ]},
+    {mes:'Julho/26',total:458,semanas:[
+      {label:'S1 (01/07 a 08/07)',encerradas:104,dados:{GSA:[5,0,0],EMPA:[55,83,151],ATERPA:[55,21,39],'ÁPIA':[71,0,0],'CIVIL MASTER':[2,0,0],VALE:[10,0,0]}},
+      {label:'S2 (10/07 a 15/07)',encerradas:110,dados:{GSA:[5,0,0],EMPA:[55,36,66],ATERPA:[55,38,70],'ÁPIA':[71,36,50],'CIVIL MASTER':[2,0,0],VALE:[10,0,0]}},
+      {label:'S3 (17/07 a 22/07)',encerradas:61,dados:{GSA:[5,2,37],EMPA:[55,41,75],ATERPA:[55,18,33],'ÁPIA':[71,0,0],'CIVIL MASTER':[2,0,0],VALE:[10,0,0]}},
+      {label:'S4 (24/07 a 31/07)',encerradas:183,dados:{GSA:[5,1,19],EMPA:[55,119,217],ATERPA:[55,46,84],'ÁPIA':[71,17,24],'CIVIL MASTER':[2,0,0],VALE:[10,0,0]}}
+    ]},
+    {mes:'Agosto/26',total:431,semanas:[
+      {label:'S1 (01/08 a 08/08)',encerradas:182,dados:{GSA:[5,0,0],EMPA:[55,32,58],ATERPA:[55,38,70],'ÁPIA':[71,112,157],'CIVIL MASTER':[2,0,0],VALE:[10,0,0]}},
+      {label:'S2 (10/08 a 15/08)',encerradas:77,dados:{GSA:[5,2,40],EMPA:[55,35,64],ATERPA:[55,38,70],'ÁPIA':[71,1,1],'CIVIL MASTER':[2,0,0],VALE:[10,1,10]}},
+      {label:'S3 (17/08 a 22/08)',encerradas:172,dados:{GSA:[5,3,56],EMPA:[55,67,122],ATERPA:[55,66,121],'ÁPIA':[71,35,49],'CIVIL MASTER':[2,0,0],VALE:[10,1,10]}},
+      {label:'S4 (24/08 a 30/08)',encerradas:0,dados:{GSA:[5,null,null],EMPA:[55,null,null],ATERPA:[55,null,null],'ÁPIA':[71,null,null],'CIVIL MASTER':[2,null,null],VALE:[10,null,null]}}
+    ],saldo:{GSA:[21,5],EMPA:[220,134],ATERPA:[218,142],'ÁPIA':[285,148],'CIVIL MASTER':[8,0],VALE:[40,2]}}
+  ]
+};
+
+function tendPctCls(pct){ if(pct>=100)return 'verde'; if(pct>=70)return 'amarelo'; return 'vermelho'; }
+function tendCelula(t){
+  const meta=t[0], real=t[1], pct=t[2];
+  if(real==null)return '<td>'+meta+'</td><td>—</td><td>—</td>';
+  return '<td>'+meta+'</td><td>'+real+'</td><td><span class="tend-pct '+tendPctCls(pct)+'">'+pct+'%</span></td>';
+}
+function renderTendencia(){
+  const alvo=document.getElementById('tendencia'); if(!alvo)return;
+  let h='<h2 class="secao">Tendência · Baixa de pendências (Meta × Real)</h2>'
+    +'<p class="ef-ajuda">Acompanhamento semanal de encerramento de pendências por executante, vindo da aba "Tendência - Protocolo" da planilha EAP. Dados atualizados até '+TENDENCIA_DATA.atualizadoAte+'.</p>';
+  TENDENCIA_DATA.meses.forEach(m=>{
+    const temSaldo=!!m.saldo;
+    h+='<div class="tend-mes"><h3>'+m.mes+'</h3><div style="overflow-x:auto"><table class="tend-tabela"><thead>'
+      +'<tr><th rowspan="2">Empresa</th>'+m.semanas.map(s=>'<th colspan="3">'+s.label+'</th>').join('')+(temSaldo?'<th colspan="2" rowspan="1">Saldo do mês</th>':'')+'</tr>'
+      +'<tr class="tend-semanas">'+m.semanas.map(()=>'<th>Meta</th><th>Real</th><th>%</th>').join('')+(temSaldo?'<th>Meta</th><th>Real</th>':'')+'</tr>'
+      +'</thead><tbody>';
+    TENDENCIA_EMPRESAS.forEach(emp=>{
+      h+='<tr><td>'+nomeExibicao(emp)+'</td>'
+        +m.semanas.map(s=>tendCelula(s.dados[emp]||[0,0,0])).join('')
+        +(temSaldo?'<td>'+m.saldo[emp][0]+'</td><td>'+m.saldo[emp][1]+'</td>':'')
+        +'</tr>';
+    });
+    h+='</tbody><tfoot><tr><td>Encerradas na semana</td>'
+      +m.semanas.map(s=>'<td colspan="3">'+s.encerradas+'</td>').join('')
+      +(temSaldo?'<td colspan="2">Total: '+m.total+'</td>':'<td colspan="1" style="text-align:right">Total: '+m.total+'</td>')
+      +'</tr></tfoot></table></div></div>';
+  });
+  h+='<div class="tend-legenda">'
+    +'<span><i style="background:var(--verde)"></i>≥ 100% da meta semanal</span>'
+    +'<span><i style="background:var(--amarelo)"></i>70–99% da meta</span>'
+    +'<span><i style="background:var(--vermelho)"></i>&lt; 70% da meta</span></div>';
+  alvo.innerHTML=h;
+}
+
+function renderAll(){renderChrome();renderConsolidado();renderProgramacao();renderTendencia();D.EMP_ORDER.forEach(renderEmpresa);renderCharts();}
 
 function mostrar(id,btn){
   document.querySelectorAll('.painel').forEach(p=>p.classList.remove('ativo'));
