@@ -678,6 +678,9 @@ function normalizar(raw){
     E.finSemImpGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.finSemImp,0);
     E.finalizadoGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.finalizado,0);
     E.pendGeral=E.totalGeral-E.finalizadoGeral;
+    // Tipos somados de todos os pacotes da empresa — usado nos gráficos "por empresa"
+    // (antes eles somavam só um pacote de cada vez).
+    E.tiposGeral=agregarTipos(Object.values(E.pacotes).flatMap(pe=>pe.tipos));
   });
 
   const AL={geral:[],p1:[],p2:[],p3:[],p5:[],p1a:[],p1b:[],p1c:[]};
@@ -826,9 +829,11 @@ function renderConsolidado(){
   document.getElementById('consolidado').innerHTML=h;
 }
 
-function renderBlocoPacote(empKey,k,pe,scls){
-  let h='<h2 class="secao '+scls+'">'+labelPacote(k)+(pe.principal?' · Contratada principal':'')+'</h2>';
-  if(pe.cronograma)h+='<div style="font-size:12px;color:var(--cinza-txt);margin:-6px 0 14px">'+pe.cronograma+'</div>';
+function renderBlocoPacote(empKey,k,pe,scls,multi){
+  // Cabeçalho "Pacote XX" só aparece quando a empresa atua em mais de um pacote —
+  // com um único pacote ele só repetia (com outro rótulo) os mesmos números do
+  // banner da empresa, então some para não confundir.
+  let h=multi?('<h2 class="secao '+scls+'">'+labelPacote(k)+'</h2>'):'';
 
   const pctFinPe=pe.total?Math.round(pe.finalizado/pe.total*100):0;
   if(pe.principal){
@@ -853,11 +858,6 @@ function renderBlocoPacote(empKey,k,pe,scls){
   }
 
   h+=tabelaTiposHTML(pe.tipos);
-
-  h+='<div class="grid-3" style="margin-top:16px">'
-    +'<div class="card"><h3>Executado × Pendente por tipo</h3><div id="g_'+slug(empKey)+'_'+k+'t" class="grafico"></div></div>'
-    +'<div class="card"><h3>Composição da execução</h3><div id="g_'+slug(empKey)+'_'+k+'d" class="grafico"></div></div>'
-    +'<div class="card"><h3>Impacto na certificação</h3><div id="g_'+slug(empKey)+'_'+k+'c" class="grafico"></div></div></div>';
 
   if(pe.principal){
     h+='<h2 class="secao '+scls+'">Composição da equipe</h2><div class="equipe-comp">';
@@ -928,6 +928,11 @@ function renderEmpresa(key){
     +'<div class="kpi laranja"><div class="rot">Pacotes</div><div class="val">'+pactoKeys.length+'</div><div class="sub">'+pactoKeys.map(k=>k.toUpperCase()).join(' · ')+'</div></div>'
     +'</div>';
 
+  h+='<div class="grid-3" style="margin-top:16px">'
+    +'<div class="card"><h3>Executado × Pendente por tipo</h3><div id="g_tipo_'+slug(key)+'" class="grafico"></div></div>'
+    +'<div class="card"><h3>Composição da execução</h3><div id="g_comp_'+slug(key)+'" class="grafico"></div></div>'
+    +'<div class="card"><h3>Impacto na certificação</h3><div id="g_impc_'+slug(key)+'" class="grafico"></div></div></div>';
+
   {
     const certTot=E.certGeral+E.naoCertGeral, pctCertE=certTot?(E.certGeral/certTot*100).toFixed(1):0;
     const pctNaoCertE=certTot?(E.naoCertGeral/certTot*100).toFixed(1):0;
@@ -941,7 +946,7 @@ function renderEmpresa(key){
       +'</div>';
   }
 
-  pactoKeys.forEach(k=>{ h+=renderBlocoPacote(key,k,E.pacotes[k],scls); });
+  pactoKeys.forEach(k=>{ h+=renderBlocoPacote(key,k,E.pacotes[k],scls,pactoKeys.length>1); });
 
   el.innerHTML=h;
 }
@@ -997,27 +1002,25 @@ function renderCharts(){
 
   D.EMP_ORDER.forEach(key=>{
     const E=D.EMP[key];
-    Object.keys(E.pacotes).forEach(k=>{
-      const pe=E.pacotes[k];
-      const t=initChart('g_'+slug(key)+'_'+k+'t');
-      if(t)t.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},legend:{data:['Executado','Pendente'],bottom:0,textStyle:{fontSize:11}},grid:baseGrid(),
-        xAxis:{type:'category',data:pe.tipos.map(x=>x.tipo),axisLabel:{fontSize:10,color:CORES.navy,interval:0}},
-        yAxis:{type:'value',axisLabel:{fontSize:10,color:'#8898B0'},splitLine:{lineStyle:{color:'#EEF'}}},
-        series:[{name:'Executado',type:'bar',stack:'t',color:CORES.verde,barWidth:'55%',label:{show:true,position:'inside',color:'#fff',fontSize:10,fontWeight:'bold',formatter:x=>x.value>0?x.value:''},data:pe.tipos.map(x=>x.exec)},
-          {name:'Pendente',type:'bar',stack:'t',color:CORES.laranja,barWidth:'55%',itemStyle:{borderRadius:[5,5,0,0]},label:{show:true,position:'inside',color:'#fff',fontSize:10,fontWeight:'bold',formatter:x=>x.value>0?x.value:''},data:pe.tipos.map(x=>x.pend)}]});
-      const d=initChart('g_'+slug(key)+'_'+k+'d');
-      const pct=pe.total?(pe.exec/pe.total*100).toFixed(1):0;
-      if(d)d.setOption({tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},legend:{bottom:0,textStyle:{fontSize:11}},
-        series:[{type:'pie',radius:['56%','78%'],center:['50%','44%'],avoidLabelOverlap:false,itemStyle:{borderRadius:6,borderColor:'#fff',borderWidth:3},
-          label:{show:true,position:'center',formatter:pct+'%\navanço',fontSize:18,fontWeight:'bold',color:CORES.navy,lineHeight:22},
-          data:[{value:pe.exec,name:'Executado',itemStyle:{color:CORES.verde}},{value:pe.pend,name:'Pendente',itemStyle:{color:CORES.laranja}}]}]});
-      const c=initChart('g_'+slug(key)+'_'+k+'c');
-      const certTotPe=pe.cert+pe.naoCert;
-      if(c)c.setOption({tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},legend:{bottom:0,textStyle:{fontSize:11}},
-        series:[{type:'pie',radius:['56%','78%'],center:['50%','44%'],avoidLabelOverlap:false,itemStyle:{borderRadius:6,borderColor:'#fff',borderWidth:3},
-          label:{show:true,position:'center',formatter:certTotPe+'\nclassificadas',fontSize:15,fontWeight:'bold',color:CORES.navy,lineHeight:19},
-          data:[{value:pe.cert,name:'Impacta certificação',itemStyle:{color:CORES.vermelho}},{value:pe.naoCert,name:'Não impacta',itemStyle:{color:CORES.azul}}]}]});
-    });
+    const tiposE=E.tiposGeral||[];
+    const t=initChart('g_tipo_'+slug(key));
+    if(t)t.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},legend:{data:['Executado','Pendente'],bottom:0,textStyle:{fontSize:11}},grid:baseGrid(),
+      xAxis:{type:'category',data:tiposE.map(x=>x.tipo),axisLabel:{fontSize:10,color:CORES.navy,interval:0}},
+      yAxis:{type:'value',axisLabel:{fontSize:10,color:'#8898B0'},splitLine:{lineStyle:{color:'#EEF'}}},
+      series:[{name:'Executado',type:'bar',stack:'t',color:CORES.verde,barWidth:'55%',label:{show:true,position:'inside',color:'#fff',fontSize:10,fontWeight:'bold',formatter:x=>x.value>0?x.value:''},data:tiposE.map(x=>x.exec)},
+        {name:'Pendente',type:'bar',stack:'t',color:CORES.laranja,barWidth:'55%',itemStyle:{borderRadius:[5,5,0,0]},label:{show:true,position:'inside',color:'#fff',fontSize:10,fontWeight:'bold',formatter:x=>x.value>0?x.value:''},data:tiposE.map(x=>x.total-x.exec)}]});
+    const d=initChart('g_comp_'+slug(key));
+    const pctE=E.totalGeral?(E.execGeral/E.totalGeral*100).toFixed(1):0;
+    if(d)d.setOption({tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},legend:{bottom:0,textStyle:{fontSize:11}},
+      series:[{type:'pie',radius:['56%','78%'],center:['50%','44%'],avoidLabelOverlap:false,itemStyle:{borderRadius:6,borderColor:'#fff',borderWidth:3},
+        label:{show:true,position:'center',formatter:pctE+'%\navanço',fontSize:18,fontWeight:'bold',color:CORES.navy,lineHeight:22},
+        data:[{value:E.execGeral,name:'Executado',itemStyle:{color:CORES.verde}},{value:E.pendGeral,name:'Pendente',itemStyle:{color:CORES.laranja}}]}]});
+    const impc=initChart('g_impc_'+slug(key));
+    const certTotEmp=E.certGeral+E.naoCertGeral;
+    if(impc)impc.setOption({tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},legend:{bottom:0,textStyle:{fontSize:11}},
+      series:[{type:'pie',radius:['56%','78%'],center:['50%','44%'],avoidLabelOverlap:false,itemStyle:{borderRadius:6,borderColor:'#fff',borderWidth:3},
+        label:{show:true,position:'center',formatter:certTotEmp+'\nclassificadas',fontSize:15,fontWeight:'bold',color:CORES.navy,lineHeight:19},
+        data:[{value:E.certGeral,name:'Impacta certificação',itemStyle:{color:CORES.vermelho}},{value:E.naoCertGeral,name:'Não impacta',itemStyle:{color:CORES.azul}}]}]});
     const certTotE=E.certGeral+E.naoCertGeral;
     const ce2=initChart('g_cert_'+slug(key));
     if(ce2)ce2.setOption({tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},legend:{bottom:0,textStyle:{fontSize:11}},
