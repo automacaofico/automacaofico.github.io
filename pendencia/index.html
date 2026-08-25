@@ -523,11 +523,12 @@ function kpiStrat(fin,pend,total){
 function agregarTipos(listaDeTipos){
   const map={};
   listaDeTipos.forEach(t=>{
-    if(!map[t.tipo])map[t.tipo]={tipo:t.tipo,total:0,cert:0,naoCert:0,semCert:0,fisc:0,fund:0,impl:0,proto:0,semOrigem:0,exec:0,finSemImp:0,finCert:0,pendExec:0,pendFin:0};
+    if(!map[t.tipo])map[t.tipo]={tipo:t.tipo,total:0,cert:0,naoCert:0,semCert:0,fisc:0,fund:0,impl:0,proto:0,semOrigem:0,exec:0,finSemImp:0,finCert:0,pendExec:0,pendFin:0,pendExecCert:0};
     const m=map[t.tipo];
     m.total+=t.total; m.cert+=t.cert; m.naoCert+=t.naoCert; m.semCert+=t.semCert;
     m.fisc+=t.fisc; m.fund+=t.fund; m.impl+=t.impl; m.proto+=t.proto; m.semOrigem+=t.semOrigem;
     m.exec+=t.exec; m.finSemImp+=t.finSemImp; m.finCert+=t.finCert; m.pendExec+=t.pendExec; m.pendFin+=t.pendFin;
+    m.pendExecCert+=t.pendExecCert||0;
   });
   return Object.values(map).sort((a,b)=>b.total-a.total);
 }
@@ -623,7 +624,7 @@ function normalizar(raw){
   const ensureEmp=nome=>{ if(!EMP[nome])EMP[nome]={key:nome,nome,isVale:nome==='VALE',pacotes:{}}; return EMP[nome]; };
 
   raw.pendencias.forEach(row=>{
-    let pac,emp,tipo,tot,exe,cert,naoCert,semCert,fisc,fund,impl,proto,semOrigem,finSemImp,finCert,pendExec,pendFin;
+    let pac,emp,tipo,tot,exe,cert,naoCert,semCert,fisc,fund,impl,proto,semOrigem,finSemImp,finCert,pendExec,pendFin,pendExecCert;
     if(Array.isArray(row)){
       pac=row[0];emp=row[1];tipo=row[2];tot=row[3];exe=row[4];
     }else{
@@ -632,6 +633,7 @@ function normalizar(raw){
       fisc=row['FISCALIZAÇÃO'];fund=row['FUNDIÁRIO'];impl=row['IMPLANTAÇÃO'];proto=row['PROTOCOLO'];semOrigem=row['SEM ORIGEM'];
       finSemImp=row['FINALIZADO (SEM IMPACTO)'];
       finCert=row['FINALIZADO (CERTIFICAÇÃO)'];pendExec=row['PENDENTE EXECUÇÃO'];pendFin=row['PENDENTE FINALIZAÇÃO'];
+      pendExecCert=row['PENDENTE EXECUÇÃO (CERTIFICAÇÃO)'];
     }
     const k=KEY(pac); if(!k)return;
     const empresa=esc(emp).trim().toUpperCase(); if(!empresa)return;
@@ -646,7 +648,10 @@ function normalizar(raw){
       fisc:+fisc||0,fund:+fund||0,impl:+impl||0,proto:+proto||0,semOrigem:+semOrigem||0,
       finSemImp:+finSemImp||0,finCert:+finCert||0,
       pendExec:(pendExec!=null&&pendExec!==''?+pendExec:t-e),
-      pendFin:(pendFin!=null&&pendFin!==''?+pendFin:t-e)});
+      pendFin:(pendFin!=null&&pendFin!==''?+pendFin:t-e),
+      // Pendente de execução (ainda não concluída) que impacta certificação — vem da
+      // planilha; sem essa coluna (base antiga), assume 0 em vez de estimar.
+      pendExecCert:+pendExecCert||0});
     E.pacotes[k].total+=t; E.pacotes[k].exec+=e;
   });
 
@@ -933,6 +938,8 @@ function renderEmpresa(key){
     +'<div class="card"><h3>Composição da execução</h3><div id="g_comp_'+slug(key)+'" class="grafico"></div></div>'
     +'<div class="card"><h3>Impacto na certificação</h3><div id="g_impc_'+slug(key)+'" class="grafico"></div></div></div>';
 
+  h+='<div class="card" style="margin-top:16px"><h3>Pendente por tipo × impacto na certificação</h3><div id="g_pendcert_'+slug(key)+'" class="grafico" style="height:320px"></div></div>';
+
   {
     const certTot=E.certGeral+E.naoCertGeral, pctCertE=certTot?(E.certGeral/certTot*100).toFixed(1):0;
     const pctNaoCertE=certTot?(E.naoCertGeral/certTot*100).toFixed(1):0;
@@ -1021,6 +1028,14 @@ function renderCharts(){
       series:[{type:'pie',radius:['56%','78%'],center:['50%','44%'],avoidLabelOverlap:false,itemStyle:{borderRadius:6,borderColor:'#fff',borderWidth:3},
         label:{show:true,position:'center',formatter:certTotEmp+'\nclassificadas',fontSize:15,fontWeight:'bold',color:CORES.navy,lineHeight:19},
         data:[{value:E.certGeral,name:'Impacta certificação',itemStyle:{color:CORES.vermelho}},{value:E.naoCertGeral,name:'Não impacta',itemStyle:{color:CORES.azul}}]}]});
+    // Dentro do que ainda está pendente de execução (mesma base do gráfico "Executado ×
+    // Pendente por tipo"), quanto disso impacta certificação — para priorizar o que resta.
+    const pc=initChart('g_pendcert_'+slug(key));
+    if(pc)pc.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},legend:{data:['Impacta certificação','Não impacta'],bottom:0,textStyle:{fontSize:11}},grid:baseGrid(),
+      xAxis:{type:'category',data:tiposE.map(x=>x.tipo),axisLabel:{fontSize:10,color:CORES.navy,interval:0}},
+      yAxis:{type:'value',name:'Pendente de execução',nameTextStyle:{fontSize:10,color:CORES.navy},axisLabel:{fontSize:10,color:'#8898B0'},splitLine:{lineStyle:{color:'#EEF'}}},
+      series:[{name:'Impacta certificação',type:'bar',stack:'p',color:CORES.vermelho,barWidth:'55%',label:{show:true,position:'inside',color:'#fff',fontSize:10,fontWeight:'bold',formatter:x=>x.value>0?x.value:''},data:tiposE.map(x=>x.pendExecCert)},
+        {name:'Não impacta',type:'bar',stack:'p',color:CORES.azul,barWidth:'55%',itemStyle:{borderRadius:[5,5,0,0]},label:{show:true,position:'inside',color:'#fff',fontSize:10,fontWeight:'bold',formatter:x=>x.value>0?x.value:''},data:tiposE.map(x=>(x.total-x.exec)-x.pendExecCert)}]});
     const certTotE=E.certGeral+E.naoCertGeral;
     const ce2=initChart('g_cert_'+slug(key));
     if(ce2)ce2.setOption({tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},legend:{bottom:0,textStyle:{fontSize:11}},
@@ -1095,7 +1110,8 @@ function aggregarBancoDeDados(rows,campoResp){
     if(!grupos[key])grupos[key]={PACOTE:pac,EMPRESA:empresa,TIPO:tipo,TOTAL:0,EXECUTADO:0,
       'CERTIFICAÇÃO':0,'NÃO CERTIFICAÇÃO':0,'SEM CLASSIFICAÇÃO':0,
       'FISCALIZAÇÃO':0,'FUNDIÁRIO':0,'IMPLANTAÇÃO':0,'PROTOCOLO':0,'SEM ORIGEM':0,
-      'FINALIZADO (SEM IMPACTO)':0,'FINALIZADO (CERTIFICAÇÃO)':0,'PENDENTE EXECUÇÃO':0,'PENDENTE FINALIZAÇÃO':0};
+      'FINALIZADO (SEM IMPACTO)':0,'FINALIZADO (CERTIFICAÇÃO)':0,'PENDENTE EXECUÇÃO':0,'PENDENTE FINALIZAÇÃO':0,
+      'PENDENTE EXECUÇÃO (CERTIFICAÇÃO)':0};
     const g=grupos[key];
     g.TOTAL++;
     // Executado (coluna AB · Status_Encerramento) e Finalizado (coluna T · Status_Pendencia) são
@@ -1121,7 +1137,12 @@ function aggregarBancoDeDados(rows,campoResp){
     }else{
       g['PENDENTE FINALIZAÇÃO']++;
     }
-    if(!executado)g['PENDENTE EXECUÇÃO']++;
+    if(!executado){
+      g['PENDENTE EXECUÇÃO']++;
+      // Cruza pendente de execução (coluna AB) com certificação (coluna B) — usado no
+      // gráfico "Pendente por tipo × impacto na certificação".
+      if(cert==='CERTIFICAÇÃO')g['PENDENTE EXECUÇÃO (CERTIFICAÇÃO)']++;
+    }
   });
   return Object.values(grupos);
 }
