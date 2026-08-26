@@ -325,6 +325,26 @@
 .view-toggle button{border:none;background:transparent;padding:8px 20px;border-radius:999px;font-size:13px;font-weight:700;color:var(--cinza-txt);cursor:pointer;transition:background .15s,color .15s}
 .view-toggle button.ativa{background:var(--navy);color:#fff;box-shadow:var(--sh-sm)}
 .view-toggle button:not(.ativa):hover{background:rgba(20,42,76,.08)}
+
+/* ============ FILTRO "ELEMENTO" (coluna M) — estilo AutoFiltro do Excel ============ */
+.elfiltro-wrap{position:relative}
+.elfiltro-btn{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:8px;border:1px solid var(--cinza-borda);background:#fff;font-size:13px;font-weight:700;color:var(--navy);cursor:pointer}
+.elfiltro-btn:hover{background:#f4f7fa}
+.elfiltro-btn.ativo{border-color:var(--laranja);color:var(--laranja)}
+.elfiltro-ico{font-size:10px;color:var(--cinza-txt)}
+.elfiltro-painel{position:absolute;top:calc(100% + 6px);left:0;z-index:60;background:#fff;border:1px solid var(--cinza-borda);border-radius:10px;box-shadow:var(--sh-md);padding:12px;width:290px}
+.elfiltro-sort{display:flex;gap:6px;margin-bottom:8px}
+.elfiltro-sort button{flex:1;padding:6px;border:1px solid var(--cinza-borda);border-radius:6px;background:#f4f7fa;font-size:11px;font-weight:700;color:var(--navy);cursor:pointer}
+.elfiltro-sort button:hover{background:#e9eef5}
+.elfiltro-busca{width:100%;padding:7px 10px;border:1px solid var(--cinza-borda);border-radius:6px;font-size:12.5px;margin-bottom:8px;box-sizing:border-box}
+.elfiltro-item{display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:12.5px;color:var(--navy);cursor:pointer}
+.elfiltro-all{border-bottom:1px solid var(--cinza-borda);padding-bottom:8px;margin-bottom:6px;font-weight:800}
+.elfiltro-lista{max-height:220px;overflow-y:auto}
+.elfiltro-vazio{font-size:12px;color:var(--cinza-txt);padding:6px 2px}
+.elfiltro-acoes{display:flex;gap:8px;margin-top:10px}
+.elfiltro-acoes button{flex:1;padding:8px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid var(--cinza-borda);background:#fff}
+.elfiltro-acoes button.primary{background:var(--navy);color:#fff;border-color:var(--navy)}
+.elfiltro-acoes button.primary:hover{background:var(--navy2,#1d3a63)}
 .regional-select{border:1px solid var(--cinza-borda);border-radius:999px;padding:9px 30px 9px 16px;font-size:13px;font-weight:700;color:var(--navy);background:var(--branco);cursor:pointer;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23142a4c'><path d='M5 7l5 6 5-6z'/></svg>");background-repeat:no-repeat;background-position:right 10px center;background-size:14px}
 .regional-select:hover{background-color:rgba(20,42,76,.04)}
 .edit-overlay{position:fixed;inset:0;background:rgba(20,42,76,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px}
@@ -423,6 +443,25 @@ td.tend-col{color:var(--cinza-txt);font-weight:600}
     <option value="r2">Regional 02</option>
     <option value="todas">Todas</option>
   </select>
+  <span class="view-toggle-lab" style="margin-left:10px">Elemento:</span>
+  <div class="elfiltro-wrap">
+    <button type="button" id="elFiltroBtn" class="elfiltro-btn" onclick="toggleElFiltroPainel(event)">
+      <span id="elFiltroLabel">Todos</span><span class="elfiltro-ico">▾</span>
+    </button>
+    <div id="elFiltroPainel" class="elfiltro-painel" style="display:none" onclick="event.stopPropagation()">
+      <div class="elfiltro-sort">
+        <button type="button" onclick="ordenarElFiltro('asc')">A → Z</button>
+        <button type="button" onclick="ordenarElFiltro('desc')">Z → A</button>
+      </div>
+      <input type="text" id="elFiltroBusca" class="elfiltro-busca" placeholder="🔍 Pesquisar" oninput="filtrarBuscaElemento(this.value)">
+      <label class="elfiltro-item elfiltro-all"><input type="checkbox" id="elFiltroTodos" checked onchange="toggleTodosElementos(this.checked)"> (Selecionar tudo)</label>
+      <div id="elFiltroLista" class="elfiltro-lista"></div>
+      <div class="elfiltro-acoes">
+        <button type="button" class="primary" onclick="aplicarFiltroElemento()">OK</button>
+        <button type="button" onclick="cancelarFiltroElemento()">Cancelar</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div id="editOverlay" class="edit-overlay" style="display:none">
@@ -1345,17 +1384,107 @@ function parseWorkbook(wb,manual){
   const rows=wb.Sheets['Banco de Dados']?XLSX.utils.sheet_to_json(wb.Sheets['Banco de Dados'],{range:1,defval:null}):[];
   if(!rows.length)throw new Error('aba "Banco de Dados" ausente ou vazia');
   ultimasLinhasBanco=rows;
+  ELEMENTOS_DISPONIVEIS=ordenarListaTexto(extrairElementosDisponiveis(rows),'asc');
+  atualizarBotaoFiltroElemento();
   return montarD(rows,manual);
 }
 
 function montarD(rows,manual){
-  const pendencias=aggregarBancoDeDados(rows,CAMPO_RESPONSAVEL[visaoAtual]);
+  // Filtro "Elemento" (coluna M) — quando ativo, trava o painel inteiro (todos os gráficos por
+  // empresa, inclusive Consolidado) só nas linhas cujo Elemento está selecionado.
+  const rowsFiltradas=ELEMENTOS_SELECIONADOS?rows.filter(r=>ELEMENTOS_SELECIONADOS.has(String(r['Elemento']||'').trim())):rows;
+  const pendencias=aggregarBancoDeDados(rowsFiltradas,CAMPO_RESPONSAVEL[visaoAtual]);
   const m=manual||{};
   const meta=Object.keys(m.meta||{}).length?m.meta:FALLBACK.meta;
   const pacotes=(m.pacotes&&m.pacotes.length)?m.pacotes:FALLBACK.pacotes;
   const cenarios=m.cenarios||FALLBACK.cenarios;
   const alertas=m.alertas||FALLBACK.alertas;
   return normalizar({meta,pacotes,pendencias,cenarios,alertas});
+}
+
+// ============================================================
+// Filtro "Elemento" (coluna M do Banco de Dados) — dropdown multi-seleção com busca e
+// ordenação, igual ao AutoFiltro do Excel. Reagrupa as mesmas linhas já carregadas (sem
+// rebuscar), do mesmo jeito que mudarVisao/mudarRegional.
+// ============================================================
+let ELEMENTOS_DISPONIVEIS=[]; // todos os valores distintos de "Elemento" na base carregada
+let ELEMENTOS_SELECIONADOS=null; // Set aplicado; null = sem filtro (todos)
+let elFiltroPendente=null; // Set em edição no painel, antes de confirmar em OK
+let elFiltroOrdem='asc';
+
+function extrairElementosDisponiveis(rows){
+  const set=new Set();
+  rows.forEach(r=>{ const v=String(r['Elemento']||'').trim(); if(v)set.add(v); });
+  return [...set];
+}
+function ordenarListaTexto(lista,ordem){
+  return [...lista].sort((a,b)=>ordem==='asc'?a.localeCompare(b,'pt-BR'):b.localeCompare(a,'pt-BR'));
+}
+function toggleElFiltroPainel(ev){
+  if(ev)ev.stopPropagation();
+  const painel=document.getElementById('elFiltroPainel');
+  const abrindo=painel.style.display==='none';
+  if(abrindo){
+    elFiltroPendente=ELEMENTOS_SELECIONADOS?new Set(ELEMENTOS_SELECIONADOS):new Set(ELEMENTOS_DISPONIVEIS);
+    document.getElementById('elFiltroBusca').value='';
+    renderListaElementos(ordenarListaTexto(ELEMENTOS_DISPONIVEIS,elFiltroOrdem));
+    painel.style.display='block';
+    document.addEventListener('click',fecharElFiltroPainelFora);
+  }else{
+    painel.style.display='none';
+  }
+}
+function fecharElFiltroPainelFora(){
+  document.getElementById('elFiltroPainel').style.display='none';
+  document.removeEventListener('click',fecharElFiltroPainelFora);
+}
+function renderListaElementos(lista){
+  const cont=document.getElementById('elFiltroLista');
+  cont.innerHTML=lista.length?lista.map(v=>'<label class="elfiltro-item"><input type="checkbox" data-el="'+escAttr(v)+'" '+(elFiltroPendente.has(v)?'checked':'')+' onchange="toggleElementoItem(this)"> '+escHtml(v)+'</label>').join('')
+    :'<div class="elfiltro-vazio">Nenhum elemento encontrado</div>';
+  atualizarCheckboxTodos();
+}
+function toggleElementoItem(chk){
+  const v=chk.dataset.el;
+  if(chk.checked)elFiltroPendente.add(v); else elFiltroPendente.delete(v);
+  atualizarCheckboxTodos();
+}
+function atualizarCheckboxTodos(){
+  const visiveis=[...document.querySelectorAll('#elFiltroLista input[type=checkbox]')];
+  document.getElementById('elFiltroTodos').checked=visiveis.length>0&&visiveis.every(c=>c.checked);
+}
+function toggleTodosElementos(marcar){
+  const visiveis=[...document.querySelectorAll('#elFiltroLista input[type=checkbox]')];
+  visiveis.forEach(c=>{ c.checked=marcar; const v=c.dataset.el; if(marcar)elFiltroPendente.add(v); else elFiltroPendente.delete(v); });
+}
+function filtrarBuscaElemento(termo){
+  const t=termo.trim().toLowerCase();
+  const base=ordenarListaTexto(ELEMENTOS_DISPONIVEIS,elFiltroOrdem);
+  renderListaElementos(t?base.filter(v=>v.toLowerCase().includes(t)):base);
+}
+function ordenarElFiltro(ordem){
+  elFiltroOrdem=ordem;
+  filtrarBuscaElemento(document.getElementById('elFiltroBusca').value);
+}
+function aplicarFiltroElemento(){
+  // Se todos os elementos disponíveis ficaram marcados, equivale a "sem filtro" (null).
+  ELEMENTOS_SELECIONADOS=(elFiltroPendente.size>=ELEMENTOS_DISPONIVEIS.length)?null:new Set(elFiltroPendente);
+  document.getElementById('elFiltroPainel').style.display='none';
+  document.removeEventListener('click',fecharElFiltroPainelFora);
+  atualizarBotaoFiltroElemento();
+  if(!ultimasLinhasBanco)return;
+  D=montarD(ultimasLinhasBanco,ultimoManual);
+  renderAll();
+}
+function cancelarFiltroElemento(){
+  document.getElementById('elFiltroPainel').style.display='none';
+  document.removeEventListener('click',fecharElFiltroPainelFora);
+}
+function atualizarBotaoFiltroElemento(){
+  const lbl=document.getElementById('elFiltroLabel'), btn=document.getElementById('elFiltroBtn');
+  if(!lbl||!btn)return;
+  if(!ELEMENTOS_SELECIONADOS){ lbl.textContent='Todos'; btn.classList.remove('ativo'); }
+  else{ lbl.textContent=ELEMENTOS_SELECIONADOS.size+' selecionado(s)'; btn.classList.add('ativo'); }
 }
 
 // Troca de ótica (CLP × Execução): reagrupa as mesmas linhas já carregadas, sem rebuscar nada.
