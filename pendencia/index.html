@@ -566,26 +566,32 @@ function tabelaTiposHTML(tipos){
   const finalizado=tipos.reduce((s,t)=>s+t.finSemImp+t.finCert,0);
   const pend=total-finalizado;
   const certResolv=tipos.reduce((s,t)=>s+t.finCert,0), naoCertResolv=tipos.reduce((s,t)=>s+(t.finNaoCert||0),0);
+  const certSaldo=cert-certResolv, naoCertSaldo=naoCert-naoCertResolv;
   let h='<div style="overflow-x:auto;margin-top:16px"><table class="tipos g-tabela"><thead>'
     +'<tr class="g-grupos"><th rowspan="2">Tipo</th><th rowspan="2">Total</th>'
-      +'<th colspan="5" class="g-certif">Certificação</th>'
+      +'<th colspan="7" class="g-certif">Certificação</th>'
       +'<th colspan="5" class="g-origem">Origem</th>'
       +'<th colspan="5" class="g-exec">Execução</th></tr>'
     +'<tr class="g-sub">'
-      +'<th class="num g-certif">Certif.</th><th class="num g-certif">Não certif.</th><th class="num g-certif g-vazio">S/ classif.</th><th class="num g-certif">Certif. resolvidas</th><th class="num g-certif">Não certif. resolvidas</th>'
+      +'<th class="num g-certif">Certif.</th><th class="num g-certif">Certif. resolvidas</th><th class="num g-certif">Saldo</th>'
+      +'<th class="num g-certif">Não certif.</th><th class="num g-certif">Não certif. resolvidas</th><th class="num g-certif">Saldo</th>'
+      +'<th class="num g-certif g-vazio">S/ classif.</th>'
       +'<th class="num g-origem">Fiscaliz.</th><th class="num g-origem">Fundiário</th><th class="num g-origem">Implant.</th><th class="num g-origem">Protocolo</th><th class="num g-origem g-vazio">S/ origem</th>'
       +'<th class="num g-exec">Executado</th><th class="num g-exec">Finaliz. (s/ impacto)</th><th class="num g-exec">Finaliz. (certif.)</th><th class="num g-exec">Pend. execução</th><th class="num g-exec">Pend. finalização</th>'
     +'</tr></thead><tbody>';
   tipos.forEach(t=>{
+    const tCertSaldo=t.cert-t.finCert, tNaoCertSaldo=t.naoCert-(t.finNaoCert||0);
     h+='<tr><td>'+t.tipo+'</td><td class="num">'+t.total+'</td>'
-      +'<td class="num g-certif">'+t.cert+'</td><td class="num g-certif">'+t.naoCert+'</td><td class="num g-certif g-vazio">'+t.semCert+'</td>'
-      +'<td class="num g-certif">'+t.finCert+'</td><td class="num g-certif">'+(t.finNaoCert||0)+'</td>'
+      +'<td class="num g-certif">'+t.cert+'</td><td class="num g-certif">'+t.finCert+'</td><td class="num g-certif">'+tCertSaldo+'</td>'
+      +'<td class="num g-certif">'+t.naoCert+'</td><td class="num g-certif">'+(t.finNaoCert||0)+'</td><td class="num g-certif">'+tNaoCertSaldo+'</td>'
+      +'<td class="num g-certif g-vazio">'+t.semCert+'</td>'
       +'<td class="num g-origem">'+t.fisc+'</td><td class="num g-origem">'+t.fund+'</td><td class="num g-origem">'+t.impl+'</td><td class="num g-origem">'+t.proto+'</td><td class="num g-origem g-vazio">'+t.semOrigem+'</td>'
       +'<td class="num g-exec">'+t.exec+'</td><td class="num g-exec">'+t.finSemImp+'</td><td class="num g-exec">'+t.finCert+'</td><td class="num g-exec">'+t.pendExec+'</td><td class="num g-exec">'+t.pendFin+'</td></tr>';
   });
   h+='<tr class="total-row"><td>TOTAL</td><td class="num">'+total+'</td>'
-    +'<td class="num g-certif">'+cert+'</td><td class="num g-certif">'+naoCert+'</td><td class="num g-certif g-vazio">'+semCert+'</td>'
-    +'<td class="num g-certif">'+certResolv+'</td><td class="num g-certif">'+naoCertResolv+'</td>'
+    +'<td class="num g-certif">'+cert+'</td><td class="num g-certif">'+certResolv+'</td><td class="num g-certif">'+certSaldo+'</td>'
+    +'<td class="num g-certif">'+naoCert+'</td><td class="num g-certif">'+naoCertResolv+'</td><td class="num g-certif">'+naoCertSaldo+'</td>'
+    +'<td class="num g-certif g-vazio">'+semCert+'</td>'
     +'<td class="num g-origem" colspan="4"></td><td class="num g-origem g-vazio"></td>'
     +'<td class="num g-exec">'+exec+'</td><td class="num g-exec" colspan="2"></td><td class="num g-exec">'+pend+'</td><td class="num g-exec"></td></tr>'
     +'</tbody></table></div>'
