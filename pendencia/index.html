@@ -808,19 +808,8 @@ function renderConsolidado(){
     +'<div class="kpi navy"><div class="rot">Total classificado</div><div class="val">'+certTotal.toLocaleString('pt-BR')+'</div><div class="sub">Base para o gráfico ao lado</div></div>'
     +'</div>';
 
-  TIPOS_INTERATIVO=agregarTipos(empresas.flatMap(E=>Object.values(E.pacotes).flatMap(pe=>pe.tipos)));
   h+='<h2 class="secao">Detalhamento por tipo · todos os responsáveis</h2>'
-    +tabelaTiposHTML(TIPOS_INTERATIVO);
-
-  h+='<h2 class="secao">Certificação × não certificação, por área</h2>'
-    +'<div class="card" style="margin-top:0">'
-    +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">'
-    +'<label for="selTipoInterativo" style="font-size:12px;color:var(--cinza-txt);font-weight:700;text-transform:uppercase">Área</label>'
-    +'<select id="selTipoInterativo" onchange="renderGraficoInterativo(this.value)" style="padding:8px 12px;border-radius:8px;border:1px solid var(--cinza-borda);font-size:13px;color:var(--navy);font-weight:700">'
-    +'<option value="__todos__">Todos os tipos</option>'
-    +TIPOS_INTERATIVO.map(t=>'<option value="'+escHtml(t.tipo)+'">'+escHtml(t.tipo)+'</option>').join('')
-    +'</select></div>'
-    +'<div id="g_interativo" class="grafico" style="height:340px"></div></div>';
+    +tabelaTiposHTML(agregarTipos(empresas.flatMap(E=>Object.values(E.pacotes).flatMap(pe=>pe.tipos))));
 
   h+='<h2 class="secao">Comparativo por '+ROTULO_VISAO[visaoAtual].toLowerCase()+'</h2><div class="comp-pacotes stagger">';
   empresas.forEach(E=>{
@@ -1083,35 +1072,6 @@ function renderCharts(){
         label:{show:true,position:'center',formatter:certTotE+'\nclassificadas',fontSize:16,fontWeight:'bold',color:CORES.navy,lineHeight:20},
         data:[{value:E.certGeral,name:'Impacta certificação',itemStyle:{color:CORES.vermelho}},{value:E.naoCertGeral,name:'Não impacta',itemStyle:{color:CORES.azul}}]}]});
   });
-
-  renderGraficoInterativo();
-}
-
-// Gráfico interativo (Consolidado): escolhe uma área (tipo) no seletor #selTipoInterativo e
-// mostra Certificação × Não certificação, cada uma dividida em Resolvido × Restante.
-// "__todos__" (ou nenhum argumento) soma todos os tipos.
-function renderGraficoInterativo(tipoSel){
-  const sel=document.getElementById('selTipoInterativo');
-  if(tipoSel==null)tipoSel=sel?sel.value:'__todos__';
-  let d;
-  if(tipoSel==='__todos__'||!tipoSel){
-    d=TIPOS_INTERATIVO.reduce((s,t)=>({cert:s.cert+t.cert,naoCert:s.naoCert+t.naoCert,finCert:s.finCert+t.finCert,finNaoCert:s.finNaoCert+(t.finNaoCert||0)}),{cert:0,naoCert:0,finCert:0,finNaoCert:0});
-  }else{
-    const t=TIPOS_INTERATIVO.find(x=>x.tipo===tipoSel);
-    d=t?{cert:t.cert,naoCert:t.naoCert,finCert:t.finCert,finNaoCert:t.finNaoCert||0}:{cert:0,naoCert:0,finCert:0,finNaoCert:0};
-  }
-  const ch=initChart('g_interativo'); if(!ch)return;
-  ch.setOption({
-    tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},
-    legend:{data:['Resolvido','Restante'],bottom:0,textStyle:{fontSize:11}},
-    grid:baseGrid(),
-    xAxis:{type:'category',data:['Certificação','Não certificação'],axisLabel:{fontSize:12,color:CORES.navy,fontWeight:'bold'}},
-    yAxis:{type:'value',axisLabel:{fontSize:10,color:'#8898B0'},splitLine:{lineStyle:{color:'#EEF'}}},
-    series:[
-      {name:'Resolvido',type:'bar',stack:'s',color:CORES.verde,barWidth:'42%',label:{show:true,position:'inside',color:'#fff',fontSize:12,fontWeight:'bold',formatter:x=>x.value>0?x.value:''},data:[d.finCert,d.finNaoCert]},
-      {name:'Restante',type:'bar',stack:'s',color:CORES.laranja,barWidth:'42%',itemStyle:{borderRadius:[6,6,0,0]},label:{show:true,position:'inside',color:'#fff',fontSize:12,fontWeight:'bold',formatter:x=>x.value>0?x.value:''},data:[d.cert-d.finCert,d.naoCert-d.finNaoCert]}
-    ]
-  });
 }
 
 function renderProgramacao(){
@@ -1361,7 +1321,6 @@ async function tentarFetch(){
 // e a página recarrega os dados na hora.
 // ============================================================
 let ultimoManual=null, tokenEdicao=null, programacaoPendente=null;
-let TIPOS_INTERATIVO=[]; // tipos consolidados (todos os responsáveis) — alimenta o seletor de área do gráfico interativo
 
 const normalizarIdProgramacao=v=>String(v==null?'':v).trim().toUpperCase();
 const textoProgramacao=v=>String(v==null?'':v).trim();
