@@ -201,6 +201,10 @@
   .card h3{color:var(--navy);font-size:12.5px;font-weight:800;margin-bottom:12px;text-transform:uppercase;letter-spacing:.6px;
     display:flex;align-items:center;gap:8px}
   .card h3::before{content:"";width:4px;height:14px;background:var(--laranja);border-radius:2px}
+  .chart-toggle{margin-left:auto;display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;
+    border:1px solid var(--cinza-borda);background:#f4f7fa;color:var(--navy);font-size:10px;font-weight:800;
+    text-transform:none;letter-spacing:0;cursor:pointer;white-space:nowrap}
+  .chart-toggle:hover{background:#e9eef5}
   .grafico{width:100%;height:290px}
   .grafico.alt{height:230px}
 
@@ -546,13 +550,14 @@ function kpiStrat(fin,pend,total){
 function agregarTipos(listaDeTipos){
   const map={};
   listaDeTipos.forEach(t=>{
-    if(!map[t.tipo])map[t.tipo]={tipo:t.tipo,total:0,cert:0,naoCert:0,semCert:0,fisc:0,fund:0,impl:0,proto:0,semOrigem:0,exec:0,finSemImp:0,finCert:0,pendExec:0,pendFin:0,pendExecCert:0,finNaoCert:0};
+    if(!map[t.tipo])map[t.tipo]={tipo:t.tipo,total:0,cert:0,naoCert:0,semCert:0,fisc:0,fund:0,impl:0,proto:0,semOrigem:0,exec:0,finSemImp:0,finCert:0,pendExec:0,pendFin:0,pendExecCert:0,finNaoCert:0,execCert:0};
     const m=map[t.tipo];
     m.total+=t.total; m.cert+=t.cert; m.naoCert+=t.naoCert; m.semCert+=t.semCert;
     m.fisc+=t.fisc; m.fund+=t.fund; m.impl+=t.impl; m.proto+=t.proto; m.semOrigem+=t.semOrigem;
     m.exec+=t.exec; m.finSemImp+=t.finSemImp; m.finCert+=t.finCert; m.pendExec+=t.pendExec; m.pendFin+=t.pendFin;
     m.pendExecCert+=t.pendExecCert||0;
     m.finNaoCert+=t.finNaoCert||0;
+    m.execCert+=t.execCert||0;
   });
   return Object.values(map).sort((a,b)=>b.total-a.total);
 }
@@ -657,7 +662,7 @@ function normalizar(raw){
   const ensureEmp=nome=>{ if(!EMP[nome])EMP[nome]={key:nome,nome,isVale:nome==='VALE',pacotes:{}}; return EMP[nome]; };
 
   raw.pendencias.forEach(row=>{
-    let pac,emp,tipo,tot,exe,cert,naoCert,semCert,fisc,fund,impl,proto,semOrigem,finSemImp,finCert,pendExec,pendFin,pendExecCert,finNaoCert;
+    let pac,emp,tipo,tot,exe,cert,naoCert,semCert,fisc,fund,impl,proto,semOrigem,finSemImp,finCert,pendExec,pendFin,pendExecCert,finNaoCert,execCert;
     if(Array.isArray(row)){
       pac=row[0];emp=row[1];tipo=row[2];tot=row[3];exe=row[4];
     }else{
@@ -667,6 +672,7 @@ function normalizar(raw){
       finSemImp=row['FINALIZADO (SEM IMPACTO)'];
       finCert=row['FINALIZADO (CERTIFICAÇÃO)'];pendExec=row['PENDENTE EXECUÇÃO'];pendFin=row['PENDENTE FINALIZAÇÃO'];
       pendExecCert=row['PENDENTE EXECUÇÃO (CERTIFICAÇÃO)'];finNaoCert=row['FINALIZADO (NÃO CERTIFICAÇÃO)'];
+      execCert=row['EXECUTADO (CERTIFICAÇÃO)'];
     }
     const k=KEY(pac); if(!k)return;
     const empresa=esc(emp).trim().toUpperCase(); if(!empresa)return;
@@ -685,7 +691,8 @@ function normalizar(raw){
       // Pendente de execução (ainda não concluída) que impacta certificação — vem da
       // planilha; sem essa coluna (base antiga), assume 0 em vez de estimar.
       pendExecCert:+pendExecCert||0,
-      finNaoCert:+finNaoCert||0});
+      finNaoCert:+finNaoCert||0,
+      execCert:+execCert||0});
     E.pacotes[k].total+=t; E.pacotes[k].exec+=e;
   });
 
@@ -699,6 +706,8 @@ function normalizar(raw){
       pe.finCert=pe.tipos.reduce((s,t)=>s+t.finCert,0); // finalizadas que impactam certificação
       pe.finSemImp=pe.tipos.reduce((s,t)=>s+t.finSemImp,0); // finalizadas que não impactam
       pe.finNaoCert=pe.tipos.reduce((s,t)=>s+t.finNaoCert,0); // subconjunto de finSemImp: só Não certificação
+      pe.pendExecCert=pe.tipos.reduce((s,t)=>s+(t.pendExecCert||0),0); // pendente de execução que impacta certificação
+      pe.execCert=pe.tipos.reduce((s,t)=>s+(t.execCert||0),0); // executado que impacta certificação
       pe.finalizado=pe.finSemImp+pe.finCert;
       pe.pend=pe.total-pe.finalizado; // "Restantes" = total − Finalizado (coluna T · Status_Pendencia)
       pe.km=base?base.km:''; pe.cronograma=base?base.cronograma:'';
@@ -716,6 +725,8 @@ function normalizar(raw){
     E.naoCertGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.naoCert,0);
     E.finCertGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.finCert,0);
     E.finSemImpGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.finSemImp,0);
+    E.pendExecCertGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.pendExecCert,0);
+    E.execCertGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.execCert,0);
     E.finalizadoGeral=Object.values(E.pacotes).reduce((s,pe)=>s+pe.finalizado,0);
     E.pendGeral=E.totalGeral-E.finalizadoGeral;
     // Tipos somados de todos os pacotes da empresa — usado nos gráficos "por empresa"
@@ -968,12 +979,16 @@ function renderEmpresa(key){
     +'<div class="kpi laranja"><div class="rot">Pacotes</div><div class="val">'+pactoKeys.length+'</div><div class="sub">'+pactoKeys.map(k=>k.toUpperCase()).join(' · ')+'</div></div>'
     +'</div>';
 
-  h+='<div class="grid-3" style="margin-top:16px">'
-    +'<div class="card"><h3>Executado × Pendente por tipo</h3><div id="g_tipo_'+slug(key)+'" class="grafico"></div></div>'
-    +'<div class="card"><h3>Composição da execução</h3><div id="g_comp_'+slug(key)+'" class="grafico"></div></div>'
-    +'<div class="card"><h3>Impacto na certificação</h3><div id="g_impc_'+slug(key)+'" class="grafico"></div></div></div>';
-
-  h+='<div class="card" style="margin-top:16px"><h3>Pendente por tipo × impacto na certificação</h3><div id="g_pendcert_'+slug(key)+'" class="grafico" style="height:320px"></div></div>';
+  h+='<div class="grid-2" style="margin-top:16px;align-items:start">'
+    +'<div>'
+      +'<div class="card"><h3>Executado × Pendente por tipo'+toggleBtnHTML('G1',key)+'</h3><div id="g_tipo_'+slug(key)+'" class="grafico"></div></div>'
+      +'<div class="card" style="margin-top:16px"><h3>Por tipo × impacto na certificação'+toggleBtnHTML('G4',key)+'</h3><div id="g_pendcert_'+slug(key)+'" class="grafico"></div></div>'
+    +'</div>'
+    +'<div>'
+      +'<div class="card"><h3>Composição da execução</h3><div id="g_comp_'+slug(key)+'" class="grafico"></div></div>'
+      +'<div class="card" style="margin-top:16px"><h3>Impacto na certificação'+toggleBtnHTML('IMPC',key)+'</h3><div id="g_impc_'+slug(key)+'" class="grafico"></div></div>'
+    +'</div>'
+    +'</div>';
 
   {
     const certTot=E.certGeral+E.naoCertGeral, pctCertE=certTot?(E.certGeral/certTot*100).toFixed(1):0;
@@ -995,6 +1010,81 @@ function renderEmpresa(key){
 
 function initChart(id){const el=document.getElementById(id);if(!el)return null;if(charts[id])charts[id].dispose();charts[id]=echarts.init(el);return charts[id];}
 function baseGrid(){return{left:'9%',right:'5%',top:'12%',bottom:'20%'};}
+
+// ============================================================
+// Toggles Pendente/Executado dos gráficos "por tipo" das abas de empresa —
+// cada gráfico guarda seu próprio modo por empresa (MODO_G1/G4/IMPC[key]),
+// alternado pelo ícone no título do card.
+// ============================================================
+const MODO_G1={}, MODO_G4={}, MODO_IMPC={};
+const CICLO_G1=['ambos','pendente','executado'];
+const CICLO_G4=['pendente','executado'];
+const CICLO_IMPC=['total','pendente','executado'];
+const LABEL_MODO={ambos:'Ambos',pendente:'Pendente',executado:'Executado',total:'Total'};
+const ICO_MODO={ambos:'⇄',pendente:'🟠',executado:'🟢',total:'⇄'};
+function toggleBtnHTML(grupo,key){
+  const mapa=grupo==='G1'?MODO_G1:grupo==='G4'?MODO_G4:MODO_IMPC;
+  const ciclo=grupo==='G1'?CICLO_G1:grupo==='G4'?CICLO_G4:CICLO_IMPC;
+  const modo=mapa[key]||ciclo[0];
+  return '<button type="button" class="chart-toggle" id="btn'+grupo+'_'+slug(key)+'" onclick="toggleModo(\''+grupo+'\',\''+key+'\')" title="Alternar visão">'+ICO_MODO[modo]+' '+LABEL_MODO[modo]+'</button>';
+}
+function toggleModo(grupo,key){
+  const mapa=grupo==='G1'?MODO_G1:grupo==='G4'?MODO_G4:MODO_IMPC;
+  const ciclo=grupo==='G1'?CICLO_G1:grupo==='G4'?CICLO_G4:CICLO_IMPC;
+  const atual=mapa[key]||ciclo[0];
+  const prox=ciclo[(ciclo.indexOf(atual)+1)%ciclo.length];
+  mapa[key]=prox;
+  const btn=document.getElementById('btn'+grupo+'_'+slug(key));
+  if(btn)btn.textContent=ICO_MODO[prox]+' '+LABEL_MODO[prox];
+  if(grupo==='G1')renderChartG1(key); else if(grupo==='G4')renderChartG4(key); else renderChartImpc(key);
+}
+
+function renderChartG1(key){
+  const E=D.EMP[key]; if(!E)return;
+  const tiposE=E.tiposGeral||[];
+  const modo=MODO_G1[key]||CICLO_G1[0];
+  const t=initChart('g_tipo_'+slug(key)); if(!t)return;
+  let series;
+  if(modo==='ambos'){
+    series=[{name:'Executado',type:'bar',stack:'t',color:CORES.verde,barWidth:'55%',label:{show:true,position:'inside',color:'#fff',fontSize:10,fontWeight:'bold',formatter:x=>x.value>0?x.value:''},data:tiposE.map(x=>x.exec)},
+      {name:'Pendente',type:'bar',stack:'t',color:CORES.laranja,barWidth:'55%',itemStyle:{borderRadius:[5,5,0,0]},label:{show:true,position:'inside',color:'#fff',fontSize:10,fontWeight:'bold',formatter:x=>x.value>0?x.value:''},data:tiposE.map(x=>x.total-x.exec)}];
+  }else if(modo==='pendente'){
+    series=[{name:'Pendente',type:'bar',color:CORES.laranja,barWidth:'55%',itemStyle:{borderRadius:[5,5,0,0]},label:{show:true,position:'top',color:CORES.navy,fontSize:10,fontWeight:'bold'},data:tiposE.map(x=>x.total-x.exec)}];
+  }else{
+    series=[{name:'Executado',type:'bar',color:CORES.verde,barWidth:'55%',itemStyle:{borderRadius:[5,5,0,0]},label:{show:true,position:'top',color:CORES.navy,fontSize:10,fontWeight:'bold'},data:tiposE.map(x=>x.exec)}];
+  }
+  t.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},legend:{data:series.map(s=>s.name),bottom:0,textStyle:{fontSize:11}},grid:baseGrid(),
+    xAxis:{type:'category',data:tiposE.map(x=>x.tipo),axisLabel:{fontSize:10,color:CORES.navy,interval:0}},
+    yAxis:{type:'value',axisLabel:{fontSize:10,color:'#8898B0'},splitLine:{lineStyle:{color:'#EEF'}}},series},true);
+}
+
+function renderChartG4(key){
+  const E=D.EMP[key]; if(!E)return;
+  const tiposE=E.tiposGeral||[];
+  const modo=MODO_G4[key]||CICLO_G4[0];
+  const pc=initChart('g_pendcert_'+slug(key)); if(!pc)return;
+  const base=modo==='executado'?x=>x.exec:x=>x.total-x.exec;
+  const impacta=modo==='executado'?x=>x.execCert||0:x=>x.pendExecCert||0;
+  pc.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},legend:{data:['Impacta certificação','Não impacta'],bottom:0,textStyle:{fontSize:11}},grid:baseGrid(),
+    xAxis:{type:'category',data:tiposE.map(x=>x.tipo),axisLabel:{fontSize:10,color:CORES.navy,interval:0}},
+    yAxis:{type:'value',name:modo==='executado'?'Executado':'Pendente de execução',nameTextStyle:{fontSize:10,color:CORES.navy},axisLabel:{fontSize:10,color:'#8898B0'},splitLine:{lineStyle:{color:'#EEF'}}},
+    series:[{name:'Impacta certificação',type:'bar',stack:'p',color:CORES.vermelho,barWidth:'55%',label:{show:true,position:'inside',color:'#fff',fontSize:10,fontWeight:'bold',formatter:x=>x.value>0?x.value:''},data:tiposE.map(x=>impacta(x))},
+      {name:'Não impacta',type:'bar',stack:'p',color:CORES.azul,barWidth:'55%',itemStyle:{borderRadius:[5,5,0,0]},label:{show:true,position:'inside',color:'#fff',fontSize:10,fontWeight:'bold',formatter:x=>x.value>0?x.value:''},data:tiposE.map(x=>base(x)-impacta(x))}]},true);
+}
+
+function renderChartImpc(key){
+  const E=D.EMP[key]; if(!E)return;
+  const modo=MODO_IMPC[key]||CICLO_IMPC[0];
+  const impc=initChart('g_impc_'+slug(key)); if(!impc)return;
+  let imp,naoImp,base;
+  if(modo==='pendente'){ base=E.totalGeral-E.execGeral; imp=E.pendExecCertGeral; naoImp=base-imp; }
+  else if(modo==='executado'){ base=E.execGeral; imp=E.execCertGeral; naoImp=base-imp; }
+  else{ base=E.certGeral+E.naoCertGeral; imp=E.certGeral; naoImp=E.naoCertGeral; }
+  impc.setOption({tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},legend:{bottom:0,textStyle:{fontSize:11}},
+    series:[{type:'pie',radius:['56%','78%'],center:['50%','44%'],avoidLabelOverlap:false,itemStyle:{borderRadius:6,borderColor:'#fff',borderWidth:3},
+      label:{show:true,position:'center',formatter:base+'\n'+(modo==='total'?'classificadas':LABEL_MODO[modo].toLowerCase()),fontSize:15,fontWeight:'bold',color:CORES.navy,lineHeight:19},
+      data:[{value:imp,name:'Impacta certificação',itemStyle:{color:CORES.vermelho}},{value:naoImp,name:'Não impacta',itemStyle:{color:CORES.azul}}]}]},true);
+}
 
 function renderCharts(){
   const PAC=D.PAC, ks=['p1','p1a','p1b','p1c','p2','p3','p5'].filter(k=>PAC[k]);
@@ -1044,33 +1134,17 @@ function renderCharts(){
 
   D.EMP_ORDER.forEach(key=>{
     const E=D.EMP[key];
-    const tiposE=E.tiposGeral||[];
-    const t=initChart('g_tipo_'+slug(key));
-    if(t)t.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},legend:{data:['Executado','Pendente'],bottom:0,textStyle:{fontSize:11}},grid:baseGrid(),
-      xAxis:{type:'category',data:tiposE.map(x=>x.tipo),axisLabel:{fontSize:10,color:CORES.navy,interval:0}},
-      yAxis:{type:'value',axisLabel:{fontSize:10,color:'#8898B0'},splitLine:{lineStyle:{color:'#EEF'}}},
-      series:[{name:'Executado',type:'bar',stack:'t',color:CORES.verde,barWidth:'55%',label:{show:true,position:'inside',color:'#fff',fontSize:10,fontWeight:'bold',formatter:x=>x.value>0?x.value:''},data:tiposE.map(x=>x.exec)},
-        {name:'Pendente',type:'bar',stack:'t',color:CORES.laranja,barWidth:'55%',itemStyle:{borderRadius:[5,5,0,0]},label:{show:true,position:'inside',color:'#fff',fontSize:10,fontWeight:'bold',formatter:x=>x.value>0?x.value:''},data:tiposE.map(x=>x.total-x.exec)}]});
+    renderChartG1(key);
     const d=initChart('g_comp_'+slug(key));
     const pctE=E.totalGeral?(E.execGeral/E.totalGeral*100).toFixed(1):0;
     if(d)d.setOption({tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},legend:{bottom:0,textStyle:{fontSize:11}},
       series:[{type:'pie',radius:['56%','78%'],center:['50%','44%'],avoidLabelOverlap:false,itemStyle:{borderRadius:6,borderColor:'#fff',borderWidth:3},
         label:{show:true,position:'center',formatter:pctE+'%\navanço',fontSize:18,fontWeight:'bold',color:CORES.navy,lineHeight:22},
         data:[{value:E.execGeral,name:'Executado',itemStyle:{color:CORES.verde}},{value:E.pendGeral,name:'Pendente',itemStyle:{color:CORES.laranja}}]}]});
-    const impc=initChart('g_impc_'+slug(key));
-    const certTotEmp=E.certGeral+E.naoCertGeral;
-    if(impc)impc.setOption({tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},legend:{bottom:0,textStyle:{fontSize:11}},
-      series:[{type:'pie',radius:['56%','78%'],center:['50%','44%'],avoidLabelOverlap:false,itemStyle:{borderRadius:6,borderColor:'#fff',borderWidth:3},
-        label:{show:true,position:'center',formatter:certTotEmp+'\nclassificadas',fontSize:15,fontWeight:'bold',color:CORES.navy,lineHeight:19},
-        data:[{value:E.certGeral,name:'Impacta certificação',itemStyle:{color:CORES.vermelho}},{value:E.naoCertGeral,name:'Não impacta',itemStyle:{color:CORES.azul}}]}]});
-    // Dentro do que ainda está pendente de execução (mesma base do gráfico "Executado ×
-    // Pendente por tipo"), quanto disso impacta certificação — para priorizar o que resta.
-    const pc=initChart('g_pendcert_'+slug(key));
-    if(pc)pc.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},legend:{data:['Impacta certificação','Não impacta'],bottom:0,textStyle:{fontSize:11}},grid:baseGrid(),
-      xAxis:{type:'category',data:tiposE.map(x=>x.tipo),axisLabel:{fontSize:10,color:CORES.navy,interval:0}},
-      yAxis:{type:'value',name:'Pendente de execução',nameTextStyle:{fontSize:10,color:CORES.navy},axisLabel:{fontSize:10,color:'#8898B0'},splitLine:{lineStyle:{color:'#EEF'}}},
-      series:[{name:'Impacta certificação',type:'bar',stack:'p',color:CORES.vermelho,barWidth:'55%',label:{show:true,position:'inside',color:'#fff',fontSize:10,fontWeight:'bold',formatter:x=>x.value>0?x.value:''},data:tiposE.map(x=>x.pendExecCert)},
-        {name:'Não impacta',type:'bar',stack:'p',color:CORES.azul,barWidth:'55%',itemStyle:{borderRadius:[5,5,0,0]},label:{show:true,position:'inside',color:'#fff',fontSize:10,fontWeight:'bold',formatter:x=>x.value>0?x.value:''},data:tiposE.map(x=>(x.total-x.exec)-x.pendExecCert)}]});
+    renderChartImpc(key);
+    // Dentro do que ainda está pendente (ou já executado) de cada tipo, quanto disso impacta
+    // certificação — para priorizar o que resta. Toggle Pendente/Executado no título do card.
+    renderChartG4(key);
     const certTotE=E.certGeral+E.naoCertGeral;
     const ce2=initChart('g_cert_'+slug(key));
     if(ce2)ce2.setOption({tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},legend:{bottom:0,textStyle:{fontSize:11}},
@@ -1218,7 +1292,7 @@ function aggregarBancoDeDados(rows,campoResp){
       'CERTIFICAÇÃO':0,'NÃO CERTIFICAÇÃO':0,'SEM CLASSIFICAÇÃO':0,
       'FISCALIZAÇÃO':0,'FUNDIÁRIO':0,'IMPLANTAÇÃO':0,'PROTOCOLO':0,'SEM ORIGEM':0,
       'FINALIZADO (SEM IMPACTO)':0,'FINALIZADO (CERTIFICAÇÃO)':0,'PENDENTE EXECUÇÃO':0,'PENDENTE FINALIZAÇÃO':0,
-      'PENDENTE EXECUÇÃO (CERTIFICAÇÃO)':0,'FINALIZADO (NÃO CERTIFICAÇÃO)':0};
+      'PENDENTE EXECUÇÃO (CERTIFICAÇÃO)':0,'FINALIZADO (NÃO CERTIFICAÇÃO)':0,'EXECUTADO (CERTIFICAÇÃO)':0};
     const g=grupos[key];
     g.TOTAL++;
     // Executado (coluna AB · Status_Encerramento) e Finalizado (coluna T · Status_Pendencia) são
@@ -1226,7 +1300,12 @@ function aggregarBancoDeDados(rows,campoResp){
     const finalizado=esc(r['Status_Pendencia']).trim().toUpperCase()==='ENCERRADO'; // coluna T
     const executado=esc(r['Status_Encerramento']).trim().toUpperCase()==='CONCLUÍDO'; // coluna AB
     const cert=esc(r['Certificação ?']).trim().toUpperCase(); // coluna B
-    if(executado)g.EXECUTADO++;
+    if(executado){
+      g.EXECUTADO++;
+      // Cruza executado (coluna AB) com certificação (coluna B) — espelha "Pendente execução
+      // (certificação)" pro toggle Pendente/Executado do gráfico "por tipo × certificação".
+      if(cert==='CERTIFICAÇÃO')g['EXECUTADO (CERTIFICAÇÃO)']++;
+    }
     // "Sem classificação"/"Sem origem" cobrem linhas em branco na planilha — somados aos demais,
     // sempre fecham 100% com o Total (é a própria checagem, não só uma promessa visual).
     if(cert==='CERTIFICAÇÃO')g['CERTIFICAÇÃO']++;
