@@ -316,12 +316,29 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         avanco:      avancoNum(cell(R.cab,13,c)),
         avanco_label:(cell(R.cab,14,c)||"").toString().trim(),
         status:      (cell(R.cab,16,c)||"").toString().trim() || (co.empty? "Aguardando dados":""),
-        desvio:      (cell(R.cab,15,c)||"").toString().trim(),
+        desvio:      pctBR(cell(R.cab,15,c)),
         // indicadores físicos do pacote (compartilhados entre as contratadas do mesmo pacote)
         retig: pf.retig, rnc: pf.rnc, asbuilt: pf.asbuilt, criticos: pf.criticos,
         semanas: pf.semanas, wk: pf.wk, mod: pf.mod, equip: pf.equip
       };
       P.plan = parsePlan(R, co.key, co.pacoteId);
+      // Cabeçalho não tem coluna própria de avanço para Civil Master/GSA em alguns casos e
+      // nunca teve para DR — quando não há % informado, calcula a partir da aderência média
+      // dos serviços do escopo (Plan-Escopo) daquela contratada.
+      if (P.avanco===null && P.plan.escopo.length){
+        var adSum=0; P.plan.escopo.forEach(function(s){ adSum+=(s.ad||0); });
+        var adAvg = Math.round(adSum/P.plan.escopo.length);
+        P.avanco = adAvg;
+        P.avanco_label = adAvg+"%";
+        P.desvio = (100-adAvg)+"%";
+        if (!P.status) P.status = adAvg>=99 ? "Concluído" : "Em execução";
+        P.avancoCalculado = true; // não veio do Cabeçalho — calculado a partir do escopo
+      }
+      // "Avanço físico do contrato" (seção de Planejamento) usa o mesmo número do cabeçalho do card,
+      // formatado de forma consistente — antes ficava sempre em branco (nunca era preenchido).
+      P.plan.avanco = avancoStr(P.avanco);
+      P.plan.desvio = P.desvio;
+      P.plan.prev_total = "100%";
       P.databooks = parseDatabooksMensal(R.dbm, dbmBlocks, R.dba, co.key);
       P.pendencias = parsePendenciasPorContratada(bdIdx, co.key);
       return P;
@@ -347,6 +364,14 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     if (isBlank(v)) return "";
     if (typeof v === "string") return v.trim();
     var s = (Number.isInteger(v)? String(v) : v.toFixed(2).replace(/0+$/,"").replace(/\.$/,"")).replace(".",",");
+    return s + "%";
+  }
+  // "% Desvio" do Cabeçalho vem como fração (0.0064 = 0,64%) — converte para rótulo BR
+  function pctBR(v){
+    if (isBlank(v)) return "";
+    if (typeof v === "string") return v.trim();
+    var n = Math.round(v*10000)/100;
+    var s = (Number.isInteger(n)? String(n) : n.toFixed(2).replace(/0+$/,"").replace(/\.$/,"")).replace(".",",");
     return s + "%";
   }
 
