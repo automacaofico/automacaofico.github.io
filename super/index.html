@@ -1076,44 +1076,56 @@
 
   // Pré-lastro em colchão drenante — trechos com status concluído/pendente.
   // Injetado pelo gerador a partir da seção PRÉ-LASTRO da aba ENTRADA.
-  let PRELASTRO_TRECHOS = [{kmStart:6820, kmFinal:7540, done:true}, {kmStart:7760, kmFinal:8580, done:true}, {kmStart:9680, kmFinal:9700, done:true}, {kmStart:9960, kmFinal:10160, done:true}, {kmStart:10780, kmFinal:10980, done:true}, {kmStart:11460, kmFinal:11760, done:true}, {kmStart:21540, kmFinal:23020, done:true}, {kmStart:23600, kmFinal:26440, done:true}, {kmStart:50280, kmFinal:50630, done:true}, {kmStart:53250, kmFinal:53420, done:true}, {kmStart:56240, kmFinal:56900, done:true}, {kmStart:80920, kmFinal:81100, done:false}, {kmStart:82660, kmFinal:82860, done:false}, {kmStart:83580, kmFinal:84000, done:false}, {kmStart:84750, kmFinal:85200, done:false}, {kmStart:89140, kmFinal:89400, done:false}, {kmStart:96100, kmFinal:96740, done:false}];
+  let PRELASTRO_TRECHOS = [{kmStart:6820, kmFinal:7540, done:true}, {kmStart:7760, kmFinal:8580, done:true}, {kmStart:9680, kmFinal:9700, done:true}, {kmStart:9960, kmFinal:10160, done:true}, {kmStart:10780, kmFinal:10980, done:true}, {kmStart:11460, kmFinal:11760, done:true}, {kmStart:21540, kmFinal:23020, done:true}, {kmStart:23600, kmFinal:26440, done:true}, {kmStart:50280, kmFinal:50630, done:true}, {kmStart:53250, kmFinal:53420, done:true}, {kmStart:56240, kmFinal:56900, done:true}, {kmStart:80920, kmFinal:81100, done:true}, {kmStart:82660, kmFinal:82860, done:true}, {kmStart:83580, kmFinal:84000, done:true}, {kmStart:84750, kmFinal:85200, done:true}, {kmStart:89140, kmFinal:89400, done:true}, {kmStart:96100, kmFinal:96740, done:false}];
 
   // ============================================================
-  // ATIVIDADES — definição fixa (nome, cor, planejado/linha de base).
-  // O "planejado" é contratual e não vem da planilha; só muda se alguém
-  // editar aqui manualmente. O "REAL_ATIVIDADES" abaixo é o que a
-  // atualização automática (fetch da planilha no GitHub) sobrescreve.
+  // ATIVIDADES — definição fixa (nome, cor). O conceito de "planejado"
+  // (meta contratual por atividade) foi eliminado — o diagrama mostra
+  // só o Real, executado, em trechos (podendo ter mais de um por
+  // atividade). O "REAL_ATIVIDADES" abaixo é o que a atualização
+  // automática (fetch da planilha no GitHub) sobrescreve.
   // ============================================================
   const ATIVIDADES_DEF = [
-    { nome: "Liberação de plataforma",   color: '#1a7a3a', planejado: { kmStart:0,     kmFinal:104500 } },
-    { nome: "Pré lastro em plataforma",  color: '#005a8a', planejado: { kmStart:71300, kmFinal:78400  } },
-    { nome: "Montagem de grade",         color: '#1a5fa8', planejado: { kmStart:0,     kmFinal:87337  } },
-    { nome: "1ª Descarga de brita",      color: '#b87800', planejado: { kmStart:0,     kmFinal:80253  } },
-    { nome: "Socaria - 1º levante",      color: '#c04a00', planejado: { kmStart:0,     kmFinal:71300  } },
-    { nome: "Socaria - 2º levante",      color: '#b02020', planejado: { kmStart:0,     kmFinal:71300  } },
-    { nome: "2ª Descarga de brita",      color: '#8a5a00', planejado: { kmStart:0,     kmFinal:75776  } },
-    { nome: "Socaria - 3º levante",      color: '#6b3db5', planejado: { kmStart:0,     kmFinal:71300  } },
-    { nome: "Socaria - 4º levante",      color: '#1178a0', planejado: { kmStart:0,     kmFinal:67283  } },
-    { nome: "3ª Descarga de brita",      color: '#665500', planejado: { kmStart:0,     kmFinal:75776  } },
-    { nome: "Solda aluminotérmica",      color: '#b55a00', planejado: { kmStart:0,     kmFinal:52187  } },
-    { nome: "Alívio de tensão",          color: '#2a8a50', planejado: { kmStart:0,     kmFinal:52948  } },
+    { nome: "Liberação de plataforma",   color: '#1a7a3a' },
+    { nome: "Pré lastro em plataforma",  color: '#005a8a' },
+    { nome: "Montagem de grade",         color: '#1a5fa8' },
+    { nome: "1ª Descarga de brita",      color: '#b87800' },
+    { nome: "Socaria - 1º levante",      color: '#c04a00' },
+    { nome: "Socaria - 2º levante",      color: '#b02020' },
+    { nome: "2ª Descarga de brita",      color: '#8a5a00' },
+    { nome: "Socaria - 3º levante",      color: '#6b3db5' },
+    { nome: "Socaria - 4º levante",      color: '#1178a0' },
+    { nome: "3ª Descarga de brita",      color: '#665500' },
+    { nome: "Socaria - 5º levante",      color: '#7b6a00' },
+    { nome: "4º Descarga de brita",      color: '#883366' },
+    { nome: "Socaria - 6º levante",      color: '#3a7050' },
+    { nome: "5º Descarga de brita",      color: '#4a6b8a' },
+    { nome: "Solda aluminotérmica",      color: '#b55a00' },
+    { nome: "Alívio de tensão",          color: '#2a8a50' },
   ];
 
   // Estado REAL/executado (fallback = último estado publicado; a atualização
   // automática a partir da aba ENTRADA da planilha sobrescreve isto).
+  // "segments" = trechos descontínuos (com gaps) lidos da aba ENTRADA —
+  // toda atividade suporta múltiplos trechos agora, não só Liberação de
+  // plataforma. kmStart/kmFinal = extremos (mínimo/máximo) dos trechos.
   let REAL_ATIVIDADES = {
-    "Liberação de plataforma":  { kmStart:0,     kmFinal:80240, segments:[{kmStart:0,kmFinal:80240}] },
-    "Pré lastro em plataforma": { kmStart:71300, kmFinal:78400 },
-    "Montagem de grade":        { kmStart:0,     kmFinal:56145 },
-    "1ª Descarga de brita":     { kmStart:0,     kmFinal:38760 },
-    "Socaria - 1º levante":     { kmStart:0,     kmFinal:38760 },
-    "Socaria - 2º levante":     { kmStart:0,     kmFinal:36730 },
-    "2ª Descarga de brita":     { kmStart:0,     kmFinal:19480 },
-    "Socaria - 3º levante":     { kmStart:0,     kmFinal:19480 },
-    "Socaria - 4º levante":     { kmStart:0,     kmFinal:19000 },
-    "3ª Descarga de brita":     { kmStart:0,     kmFinal:19000 },
+    "Liberação de plataforma":  { kmStart:0,     kmFinal:114720, segments:[{kmStart:0,kmFinal:95640},{kmStart:97140,kmFinal:104980},{kmStart:110100,kmFinal:110680},{kmStart:113700,kmFinal:114720}] },
+    "Pré lastro em plataforma": { kmStart:71220, kmFinal:98340,  segments:[{kmStart:71220,kmFinal:95560},{kmStart:97180,kmFinal:98340}] },
+    "Montagem de grade":        { kmStart:0,     kmFinal:84460,  segments:[{kmStart:0,kmFinal:84460}] },
+    "1ª Descarga de brita":     { kmStart:0,     kmFinal:74800,  segments:[{kmStart:0,kmFinal:74800}] },
+    "Socaria - 1º levante":     { kmStart:0,     kmFinal:74800,  segments:[{kmStart:0,kmFinal:74800}] },
+    "Socaria - 2º levante":     { kmStart:0,     kmFinal:74800,  segments:[{kmStart:0,kmFinal:50260},{kmStart:50540,kmFinal:57660},{kmStart:58560,kmFinal:64880},{kmStart:65400,kmFinal:74800}] },
+    "2ª Descarga de brita":     { kmStart:0,     kmFinal:41300,  segments:[{kmStart:0,kmFinal:41300}] },
+    "Socaria - 3º levante":     { kmStart:0,     kmFinal:39000,  segments:[{kmStart:0,kmFinal:21600},{kmStart:23000,kmFinal:39000}] },
+    "Socaria - 4º levante":     { kmStart:0,     kmFinal:37110,  segments:[{kmStart:0,kmFinal:21600},{kmStart:23000,kmFinal:31700},{kmStart:35000,kmFinal:37110}] },
+    "3ª Descarga de brita":     { kmStart:0,     kmFinal:37100,  segments:[{kmStart:0,kmFinal:37100}] },
+    "Socaria - 5º levante":     { kmStart:0,     kmFinal:28668,  segments:[{kmStart:0,kmFinal:20050},{kmStart:23000,kmFinal:28668}] },
+    "4º Descarga de brita":     { kmStart:0,     kmFinal:34980,  segments:[{kmStart:0,kmFinal:18080},{kmStart:34600,kmFinal:34980}] },
+    "Socaria - 6º levante":     { kmStart:7000,  kmFinal:20000,  segments:[{kmStart:7000,kmFinal:10700},{kmStart:11100,kmFinal:15160},{kmStart:16000,kmFinal:17200},{kmStart:17360,kmFinal:18040},{kmStart:18540,kmFinal:20000}] },
+    "5º Descarga de brita":     { kmStart:8150,  kmFinal:8700,   segments:[{kmStart:8150,kmFinal:8700}] },
     "Solda aluminotérmica":     { kmStart:0,     kmFinal:32035 },
-    "Alívio de tensão":         { kmStart:0,     kmFinal:6780  },
+    "Alívio de tensão":         { kmStart:0,     kmFinal:13519,  segments:[{kmStart:0,kmFinal:10661},{kmStart:11607,kmFinal:13519}] },
   };
 
   // pct = % sobre a extensão total da obra (campo informativo; não é usado
@@ -1126,8 +1138,7 @@
       var r = REAL_ATIVIDADES[def.nome] || { kmStart:0, kmFinal:0 };
       var out = {
         name: def.nome, color: def.color,
-        real:      { kmStart:r.kmStart, kmFinal:r.kmFinal, pct: pctObra(r.kmFinal) },
-        planejado: { kmStart:def.planejado.kmStart, kmFinal:def.planejado.kmFinal, pct: pctObra(def.planejado.kmFinal) }
+        real:      { kmStart:r.kmStart, kmFinal:r.kmFinal, pct: pctObra(r.kmFinal) }
       };
       if (r.segments) out.real.segments = r.segments;
       return out;
@@ -1159,61 +1170,54 @@
   // de cada pacote. O ponto de "entregue" indica até qual pacote a obra chegou
   // (avanço linear conforme a quantidade por pacote).
   // ============================================================
+  // Fonte: Modelo Acompanhamento Super - FINAL (3).xlsx, aba MATERIAIS (24/08/2026).
+  // porPacote[0] = soma de PCT 01.1 + PCT 01.2 da planilha (o painel usa 8 baldes
+  // fixos PCT01..08; a planilha nova detalhou o PCT01 em duas frentes).
+  // 4 materiais saíram da planilha nova (Placa de apoio, Tirefond Quad. Inclina/
+  // Chato, Arruela de pressão) — removidos do painel a pedido.
   let MATERIAIS = [
     { nome: 'Trilho',        unidade: 't', icone: '🚄',
-      porPacote: [3095.56, 4304.07, 4331.22, 3487.24, 4599.99, 7716.24, 2066.23, 6521.77],
-      previsto: 37087.9, entregue: 13557.5, consumido: 3598.56, entrPlan: 0, consPlan: 0, estoque: 9958.93, destaque: true },
+      porPacote: [4061.13, 4304.07, 4331.22, 3487.24, 4599.99, 7716.24, 2066.23, 6521.77],
+      previsto: 37087.89, entregue: 13557.49, consumido: 6204.96, entrPlan: 0, consPlan: 0, estoque: 7352.53, destaque: true },
     { nome: 'Dormente de concreto',        unidade: 'un', icone: '🪵',
-      porPacote: [42444, 59170, 59546, 47865, 63266, 105516, 28198, 89864],
-      previsto: 509033, entregue: 192705, consumido: 97068, entrPlan: 0, consPlan: 0, estoque: 95637, destaque: true },
+      porPacote: [55608, 59170, 59546, 47865, 63266, 105516, 28198, 89864],
+      previsto: 509033, entregue: 228789, consumido: 139476, entrPlan: 0, consPlan: 0, estoque: 89313, destaque: true },
     { nome: 'Ombreira',        unidade: 'un', icone: '📦',
-      porPacote: [169776, 236680, 238184, 191460, 253064, 422064, 112792, 359456],
-      previsto: 2.03613e+06, entregue: 917658, consumido: 770820, entrPlan: 0, consPlan: 0, estoque: 146838, destaque: false },
+      porPacote: [222432, 236680, 238184, 191460, 253064, 422064, 112792, 359456],
+      previsto: 2036132, entregue: 1150458, consumido: 915156, entrPlan: 0, consPlan: 0, estoque: 235302, destaque: false },
     { nome: 'Palmilha',        unidade: 'un', icone: '📦',
-      porPacote: [84888, 118340, 119092, 95730, 126532, 211032, 56396, 179728],
-      previsto: 1.01807e+06, entregue: 198335, consumido: 194136, entrPlan: 0, consPlan: 0, estoque: 4199, destaque: false },
+      porPacote: [111216, 118340, 119092, 95730, 126532, 211032, 56396, 179728],
+      previsto: 1018066, entregue: 309535, consumido: 279649, entrPlan: 0, consPlan: 0, estoque: 29886, destaque: false },
     { nome: 'Isolador',        unidade: 'un', icone: '📦',
-      porPacote: [169776, 236680, 238184, 191460, 253064, 422064, 112792, 359456],
-      previsto: 2.03613e+06, entregue: 398250, consumido: 388272, entrPlan: 0, consPlan: 0, estoque: 9978, destaque: false },
+      porPacote: [222432, 236680, 238184, 191460, 253064, 422064, 112792, 359456],
+      previsto: 2036132, entregue: 622250, consumido: 561034, entrPlan: 0, consPlan: 0, estoque: 61216, destaque: false },
     { nome: 'Gampo E-2039',        unidade: 'un', icone: '📦',
-      porPacote: [171240, 238144, 239648, 192924, 254528, 426384, 114256, 360920],
-      previsto: 2.05143e+06, entregue: 690000, consumido: 388272, entrPlan: 0, consPlan: 0, estoque: 301728, destaque: false },
+      porPacote: [224628, 238144, 239648, 192924, 254528, 426384, 114256, 360920],
+      previsto: 2051432, entregue: 750000, consumido: 557904, entrPlan: 0, consPlan: 0, estoque: 192096, destaque: false },
     { nome: 'Tala',        unidade: 'un', icone: '📦',
-      porPacote: [82, 92, 92, 85, 38, 65, 17, 0],
-      previsto: 1395, entregue: 1694, consumido: 606, entrPlan: 0, consPlan: 0, estoque: 1088, destaque: false },
+      porPacote: [1006, 92, 92, 85, 38, 65, 17, 0],
+      previsto: 1395, entregue: 1694, consumido: 858, entrPlan: 0, consPlan: 0, estoque: 836, destaque: false },
     { nome: 'Cj Fixação',        unidade: 'cj', icone: '📦',
-      porPacote: [487, 613, 616, 528, 643, 1419, 380, 168],
-      previsto: 6813, entregue: 7151, consumido: 2424, entrPlan: 0, consPlan: 0, estoque: 4727, destaque: false },
+      porPacote: [2446, 613, 616, 528, 643, 1419, 380, 168],
+      previsto: 6813, entregue: 7151, consumido: 3432, entrPlan: 0, consPlan: 0, estoque: 3719, destaque: false },
     { nome: 'AMV 1:14',        unidade: 'cj', icone: '📦',
-      porPacote: [2, 2, 2, 2, 2, 4, 2, 2],
-      previsto: 19, entregue: 13, consumido: 5, entrPlan: 0, consPlan: 0, estoque: 8, destaque: false },
+      porPacote: [3, 2, 2, 2, 2, 4, 2, 2],
+      previsto: 19, entregue: 13, consumido: 7, entrPlan: 0, consPlan: 0, estoque: 6, destaque: false },
     { nome: 'AMV 1:8',        unidade: 'cj', icone: '📦',
       porPacote: [0, 0, 0, 0, 0, 4, 0, 0],
       previsto: 4, entregue: 0, consumido: 0, entrPlan: 0, consPlan: 0, estoque: 0, destaque: false },
     { nome: 'Dor. de madeira 1:14',        unidade: 'jg', icone: '📦',
-      porPacote: [2, 2, 2, 2, 2, 4, 2, 2],
-      previsto: 19, entregue: 5, consumido: 4, entrPlan: 0, consPlan: 0, estoque: 1, destaque: false },
+      porPacote: [3, 2, 2, 2, 2, 4, 2, 2],
+      previsto: 19, entregue: 9, consumido: 6, entrPlan: 0, consPlan: 0, estoque: 3, destaque: false },
     { nome: 'Dor. de madeira 1:8',        unidade: 'jg', icone: '📦',
       porPacote: [0, 0, 0, 0, 0, 4, 0, 0],
       previsto: 4, entregue: 0, consumido: 0, entrPlan: 0, consPlan: 0, estoque: 0, destaque: false },
-    { nome: 'Placa de apoio',        unidade: 'un', icone: '📦',
-      porPacote: [2052, 3252, 452, 452, 452, 1392, 452, 96],
-      previsto: 8826, entregue: 0, consumido: 0, entrPlan: 0, consPlan: 0, estoque: 0, destaque: false },
-    { nome: 'Tirefond Quad. Inclina',        unidade: 'un', icone: '📦',
-      porPacote: [68, 68, 68, 68, 68, 136, 68, 68],
-      previsto: 646, entregue: 0, consumido: 0, entrPlan: 0, consPlan: 0, estoque: 0, destaque: false },
-    { nome: 'Tirefond Quad. Chato',        unidade: 'un', icone: '📦',
-      porPacote: [6168, 2968, 2968, 2968, 2968, 9988, 2968, 2968],
-      previsto: 35448, entregue: 0, consumido: 0, entrPlan: 0, consPlan: 0, estoque: 0, destaque: false },
-    { nome: 'Arruela de pressão',        unidade: 'un', icone: '📦',
-      porPacote: [6236, 3036, 3036, 3036, 3036, 10124, 3036, 3036],
-      previsto: 36094, entregue: 0, consumido: 0, entrPlan: 0, consPlan: 0, estoque: 0, destaque: false },
     { nome: 'Solda Aluminotérmica',        unidade: 'pç', icone: '🔥',
-      porPacote: [279, 384, 386, 313, 409, 712, 190, 575],
-      previsto: 3403, entregue: 329, consumido: 301, entrPlan: 0, consPlan: 0, estoque: 28, destaque: false },
+      porPacote: [434, 384, 386, 313, 409, 712, 190, 575],
+      previsto: 3403, entregue: 1592, consumido: 403, entrPlan: 0, consPlan: 0, estoque: 1189, destaque: false },
     { nome: 'Lastro',        unidade: 'm3', icone: '🪨',
-      porPacote: [60526.3, 83599.3, 83466.2, 67666.1, 88569.6, 150758, 40440.9, 125181],
-      previsto: 718237, entregue: 123686, consumido: 72004, entrPlan: 0, consPlan: 0, estoque: 51682, destaque: true },
+      porPacote: [78555.79, 83599.32, 83466.22, 67666.07, 88569.56, 150758.3, 40440.95, 125180.55],
+      previsto: 718236.77, entregue: 189335.96, consumido: 182149.39, entrPlan: 0, consPlan: 0, estoque: 7186.57, destaque: true },
   ];
 
   // ============================================================
@@ -1260,32 +1264,13 @@
     return incons;
   }
 
-  // GAP em metros = planejado − real. Positivo = atrasado (real ficou atrás).
-  function gapMeters(act) {
-    return (act.planejado.kmFinal - act.planejado.kmStart)
-         - (act.real.kmFinal - act.real.kmStart);
-  }
-  // Cor semafórica do GAP — limites em metros (≤ 1500 verde, ≤ 3000 amarelo, > 3000 vermelho)
-  function gapColor(gap) {
-    // Escala calibrada para meta de fim-de-obra (GAPs típicos: 5–40 km)
-    if (gap <=  5000) return '#1a7a3a';  // próximo da meta / adiantado
-    if (gap <= 15000) return '#b87800';  // atenção
-    return '#b02020';                     // distante da meta
-  }
-  function formatGap(gap) {
-    const sign = gap > 0 ? '−' : (gap < 0 ? '+' : '±');
-    const km = (Math.abs(gap) / 1000).toFixed(1);
-    return `${sign}${km} km`;
-  }
-
   // ============================================================
   // DATAS
   // ============================================================
-  let DADOS_DATA = '13/07/2026';   // data de atualização da fonte (aba ATIVIDADES)
-  const GERADO_EM  = '14/07/2026 18:12';   // carimbo fixo de geração (preenchido pelo gerador)
+  let DADOS_DATA = '24/08/2026';   // data de atualização da fonte (aba ENTRADA)
+  const GERADO_EM  = '27/08/2026 00:00';   // carimbo fixo de geração (preenchido pelo gerador)
   // Avanço oficial do projeto — lido direto da aba ATIVIDADES (F1 e K1)
   const AVANCO_REAL_PROJ = 3.92;   // % real do projeto
-  const AVANCO_PLAN_PROJ = 13.76;  // % planejado do projeto
   // ── Dados do contrato (bloco do cabeçalho) ──
   const CONTRATO_INICIO = '01/12/2025';     // dd/mm/aaaa
   const CONTRATO_DIAS    = 685;             // duração em dias corridos
@@ -1329,22 +1314,17 @@
 
   // Estado de execução de um pacote:
   //  'executing'   = tem atividade com Real dentro do trecho do pacote
-  //  'planned'     = só tem meta (planejado) caindo no pacote, Real ainda não chegou
-  //  'not_started' = nenhuma atividade (real ou planejada) alcança este pacote
+  //  'not_started' = nenhuma atividade real alcança este pacote ainda
   //  'pending'     = sem nenhuma atividade cadastrada (caso extremo)
   function _dentroDoPacote(v, pkg) { return v > pkg.kmStart && v <= pkg.kmEnd; }
   function pkgState(pkg) {
     if (!pkg.activities.length) return 'pending';
     const algumExec = pkg.activities.some(a =>
       a.real.kmFinal > a.real.kmStart && _dentroDoPacote(Math.min(a.real.kmFinal, pkg.kmEnd), pkg));
-    if (algumExec) return 'executing';
-    const algumPlanejado = pkg.activities.some(a =>
-      a.planejado && a.planejado.kmFinal > pkg.kmStart);
-    return algumPlanejado ? 'planned' : 'not_started';
+    return algumExec ? 'executing' : 'not_started';
   }
   const STATUS_LABEL = {
     executing:   ['● EM EXECUÇÃO',  'active-status'],
-    planned:     ['◐ PLANEJADO',    'planned-status'],
     not_started: ['○ NÃO INICIADO', 'pending-status'],
     pending:     ['○ AGUARDANDO',   'pending-status'],
   };
@@ -1381,11 +1361,6 @@
     const fim = Math.min(s.real.kmFinal, pkg.kmEnd);
     const dentro = Math.max(0, fim - ini);
     return (dentro / ext) * 100;
-  }
-  // GAP do trecho concluído = planejado − real do Alívio de tensão (metros)
-  function pkgConcludedGap(pkg) {
-    const s = ultimaAtividade(pkg);
-    return s ? gapMeters(s) : 0;
   }
 
   PACKAGES.forEach((pkg, idx) => {
@@ -1608,7 +1583,7 @@
   // ============================================================
   function buildPanelInto(panel, pkg) {
     const hasData = pkg.activities.length > 0;
-    const state   = pkgState(pkg);            // 'executing' | 'planned' | 'pending'
+    const state   = pkgState(pkg);            // 'executing' | 'not_started' | 'pending'
     const extKm   = ((pkg.kmEnd - pkg.kmStart) / 1000).toFixed(1);
     const isObra  = pkg.id === 'geral';
     const avgPct  = (state === 'executing')
@@ -1629,24 +1604,12 @@
         <p>${pkg.label} (${formatKm(pkg.kmStart)} → ${formatKm(pkg.kmEnd)}) ainda não possui atividades lançadas.</p>
       </div>` : '';
 
-    const plannedNote = (state === 'planned') ? `
-      <div class="inconsistencies" style="background:rgba(31,79,138,0.06);border-color:#a8c0e0;border-left-color:var(--blue-dark);">
-        <h3 style="color:var(--blue-dark);">Pacote em Planejamento</h3>
-        <p style="font-size:11px;color:var(--text-mid);margin:0;">
-          Nenhuma atividade chegou fisicamente a este pacote ainda.
-          As barras abaixo mostram as <b>metas de fim de obra</b> que se estendem para dentro do P02.
-        </p>
-      </div>` : (state === 'not_started' ? `
+    const plannedNote = (state === 'not_started') ? `
       <div class="no-data">
         <div class="nd-icon">🛤️</div>
         <strong>Não iniciado</strong>
-        <p>${pkg.label} (${formatKm(pkg.kmStart)} → ${formatKm(pkg.kmEnd)}) ainda não possui atividade real ou planejada.</p>
-      </div>` : '');
-
-    const avgGap  = (state === 'executing')
-      ? (isObra ? Math.round(pkg.activities.reduce((s,a) => s+gapMeters(a), 0) / pkg.activities.length)
-                : Math.round(pkgConcludedGap(pkg)))
-      : 0;
+        <p>${pkg.label} (${formatKm(pkg.kmStart)} → ${formatKm(pkg.kmEnd)}) ainda não possui atividade real registrada.</p>
+      </div>` : '';
 
     // Conteúdo do 2º e 3º summary card dependem do estado
     let card2, card3;
@@ -1660,24 +1623,10 @@
           <div class="card-sub">Oficial da planilha</div>
         </div>` : ``;
       card3 = `
-        <div class="summary-card" style="--accent:${gapColor(avgGap)}">
-          <div class="card-label">${isObra ? 'GAP (Real × Plan.)' : 'GAP Médio (Trecho Concluído)'}</div>
-          <div class="card-value" style="color:${gapColor(avgGap)}">${formatGap(avgGap)}</div>
-          <div class="card-sub">${isObra ? 'Distância média ao planejado' : 'Plan. − Real do alívio de tensão'}</div>
-        </div>`;
-    } else if (state === 'planned') {
-      const qtdAtiv = pkg.activities.length;
-      card2 = `
-        <div class="summary-card" style="--accent:var(--blue-dark)">
-          <div class="card-label">Atividades Planejadas</div>
-          <div class="card-value">${qtdAtiv}</div>
-          <div class="card-sub">Metas que entram no pacote</div>
-        </div>`;
-      card3 = `
-        <div class="summary-card" style="--accent:#f89b32">
-          <div class="card-label">Execução no Pacote</div>
-          <div class="card-value">0%</div>
-          <div class="card-sub">Aguardando início da obra</div>
+        <div class="summary-card" style="--accent:#2a8a50">
+          <div class="card-label">Trecho 100% Concluído</div>
+          <div class="card-value" style="color:#2a8a50">${pkgConcludedPct(pkg).toFixed(1)}%</div>
+          <div class="card-sub">Passou por todas as etapas (até Alívio de tensão)</div>
         </div>`;
     } else {
       card2 = `
@@ -1687,8 +1636,8 @@
           <div class="card-sub">Sem dados registrados</div>
         </div>`;
       card3 = `
-        <div class="summary-card" style="--accent:#f89b32">
-          <div class="card-label">GAP Médio (Real × Plan.)</div>
+        <div class="summary-card" style="--accent:#2a8a50">
+          <div class="card-label">Trecho 100% Concluído</div>
           <div class="card-value">—</div>
           <div class="card-sub">Sem dados registrados</div>
         </div>`;
@@ -1745,21 +1694,20 @@
     const acts = rows;
     const KM_MIN  = pkg.kmStart;
     // Régua dinâmica da OBRA: estende só até o fim do pacote que contém o
-    // ponto mais avançado (real ou planejado). Cresce sozinha quando o
-    // planejado avançar para P5, P6, etc.
+    // ponto mais avançado (real). Cresce sozinha quando o real avançar
+    // para P5, P6, etc.
     let KM_MAX = pkg.kmEnd;
     if (pkg.id === 'geral' && typeof PACOTE_LIMITES !== 'undefined') {
       let maxPt = 0;
       pkg.activities.forEach(a => {
         if (a.real && a.real.kmFinal)      maxPt = Math.max(maxPt, a.real.kmFinal);
-        if (a.planejado && a.planejado.kmFinal) maxPt = Math.max(maxPt, a.planejado.kmFinal);
         if (a.real && a.real.segments) a.real.segments.forEach(s => { maxPt = Math.max(maxPt, s.kmFinal); });
       });
-      // acha o pacote que contém o ponto mais avançado (real ou planejado)
+      // acha o pacote que contém o ponto mais avançado
       let idxLim = PACOTE_LIMITES.findIndex(p => p.kmEnd >= maxPt);
       if (idxLim < 0) idxLim = PACOTE_LIMITES.length - 1;
       // Piso: mostrar até o Pacote 3 (índice 2, km 104+500), acompanhando o
-      // corte dos Serviços Notáveis. Cresce sozinho se o planejado avançar
+      // corte dos Serviços Notáveis. Cresce sozinho se o real avançar
       // para P4 em diante.
       idxLim = Math.max(idxLim, 2);
       KM_MAX = PACOTE_LIMITES[idxLim].kmEnd;
@@ -1938,14 +1886,8 @@
         return;  // não desenha barras normais nesta linha
       }
 
-      // Real centralizado na linha (Planejado removido do diagrama)
+      // Real centralizado na linha (não há mais barra de Planejado/GAP)
       const yReal = cy - BAR_H/2;
-
-      const gap   = gapMeters(act);
-      // Se o pacote inteiro está em 'planned', o GAP é meramente "extensão a executar
-      // dentro do pacote" — não um atraso comparativo. Cor neutra (azul).
-      const isPlannedPkg = pkgState(pkg) === 'planned';
-      const gCol  = isPlannedPkg ? '#1f4f8a' : gapColor(gap);
 
       // Nome da atividade — alinhado à ESQUERDA, encostado na borda
       labelsG.appendChild(el('text', {
@@ -2007,12 +1949,8 @@
       gReal.addEventListener('mouseleave', hideTooltip);
       barsG.appendChild(gReal);
 
-      // (conector de GAP removido junto com a barra de Planejado)
-
-
       // Só mostra "SEM EXECUÇÃO" se o pacote estiver em estado executing
-      // (numa atividade isolada sem real). Se o pacote inteiro está em 'planned',
-      // a faixa azul "Pacote em Planejamento" já explica o contexto.
+      // (numa atividade isolada sem real).
       if (act.real.kmFinal <= act.real.kmStart && pkgState(pkg) === 'executing') {
         barsG.appendChild(el('text', {
           x:TRACK_X+TRACK_W/2, y:cy+1,
@@ -2983,28 +2921,36 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     var materiaisRows = xsRowsOf(xsFindSheet(wb, "MATERIAIS"));
     if (!entrada.length) throw new Error("Aba ENTRADA não encontrada na planilha");
 
-    // -------- Data de atualização (C10) --------
-    var dadosData = xsFmtDate(xsCell(entrada, 10, 3)) || DADOS_DATA;
+    // -------- Data de atualização (B10 — "Data do levantamento:") --------
+    var dadosData = xsFmtDate(xsCell(entrada, 10, 2)) || DADOS_DATA;
 
-    // -------- Atividades simples (linhas 14-24 aprox., B=nome, C=KM Real) --------
+    // -------- Atividades (linhas 14-27, A=nome, B..M = até 6 pares KM INÍCIO/KM FINAL) --------
+    // Cada atividade pode ter trechos descontínuos (com gaps) — lê todos os pares
+    // preenchidos e guarda em "segments"; kmStart/kmFinal = extremos (min/max).
     var real = {};
     for (var r=13; r<=30; r++){
-      var nome = xsCell(entrada, r, 2);
+      var nome = xsCell(entrada, r, 1);
       if (xsIsBlank(nome)) continue;
       if (xsNorm(nome).indexOf('atividade') !== -1) continue; // linha de cabeçalho
-      if (xsNorm(nome).indexOf('liber') !== -1) continue;     // Liberação: tratada à parte (trechos)
+      if (xsNorm(nome).indexOf('liber') !== -1) continue;     // Liberação: tratada à parte (seção própria)
       var alvo = xsMatchAtividade(nome);
       if (!alvo) continue;
-      var kmReal = xsCell(entrada, r, 3);
-      if (xsIsBlank(kmReal) || typeof kmReal !== 'number') continue;
-      var base = REAL_ATIVIDADES[alvo] || {kmStart:0};
-      real[alvo] = { kmStart: base.kmStart, kmFinal: xsNum(kmReal) };
+      var segs = [];
+      for (var pc=2; pc<=12; pc+=2){
+        var sIni = xsCell(entrada, r, pc), sFim = xsCell(entrada, r, pc+1);
+        if (xsIsBlank(sIni) || xsIsBlank(sFim) || typeof sIni !== 'number' || typeof sFim !== 'number') continue;
+        segs.push({ kmStart: xsNum(sIni), kmFinal: xsNum(sFim) });
+      }
+      if (!segs.length) continue;
+      var kmF = Math.max.apply(null, segs.map(function(s){return s.kmFinal;}));
+      var kmI = Math.min.apply(null, segs.map(function(s){return s.kmStart;}));
+      real[alvo] = { kmStart: kmI, kmFinal: kmF, segments: segs };
     }
 
-    // -------- Liberação de plataforma: trechos realizados (até 8 linhas) --------
+    // -------- Liberação de plataforma: trechos realizados (seção 3, até 8 linhas) --------
     var segLib = [];
-    for (var rl=29; rl<=38; rl++){
-      var ini = xsCell(entrada, rl, 3), fim = xsCell(entrada, rl, 4);
+    for (var rl=33; rl<=40; rl++){
+      var ini = xsCell(entrada, rl, 2), fim = xsCell(entrada, rl, 3);
       if (xsIsBlank(ini) || xsIsBlank(fim) || typeof ini !== 'number' || typeof fim !== 'number') continue;
       segLib.push({ kmStart: xsNum(ini), kmFinal: xsNum(fim) });
     }
@@ -3014,16 +2960,19 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       real["Liberação de plataforma"] = { kmStart:kmStartLib, kmFinal:kmFinalLib, segments:segLib };
     }
 
-    // -------- Pré-lastro em colchão drenante (até 17 linhas) --------
+    // -------- Pré-lastro em colchão drenante (seção 5, até 17 linhas) --------
     var prelastro = [];
-    for (var rp=41; rp<=60; rp++){
-      var pini = xsCell(entrada, rp, 3), pfim = xsCell(entrada, rp, 4);
+    for (var rp=45; rp<=61; rp++){
+      var pini = xsCell(entrada, rp, 2), pfim = xsCell(entrada, rp, 3);
       if (xsIsBlank(pini) || xsIsBlank(pfim) || typeof pini !== 'number' || typeof pfim !== 'number') continue;
-      var status = (xsCell(entrada, rp, 5) || '').toString().trim().toUpperCase();
+      var status = (xsCell(entrada, rp, 4) || '').toString().trim().toUpperCase();
       prelastro.push({ kmStart:xsNum(pini), kmFinal:xsNum(pfim), done: status==='C' });
     }
 
     // -------- Materiais --------
+    // Colunas: A=Descrição, B=Unidade, C=PCT01.1, D=PCT01.2, E..K=PCT02..08,
+    // L=TOTAL 1-8, M=Qnde Recebida, N=Qnde Consumida. O painel usa 8 baldes
+    // fixos PCT01..08 — soma PCT01.1+PCT01.2 no primeiro balde.
     var materiais = [];
     if (materiaisRows.length){
       for (var rm=2; rm<=materiaisRows.length; rm++){
@@ -3031,7 +2980,8 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         if (xsIsBlank(nomeM)) continue;
         var nomeMStr = nomeM.toString().trim();
         var meta = MATERIAIS_META[nomeMStr] || {icone:'📦', destaque:false, unidade:''};
-        var porPacote = [4,5,6,7,8,9,10,11].map(function(c){ return xsNum(xsCell(materiaisRows, rm, c)); });
+        var pct01 = xsNum(xsCell(materiaisRows, rm, 3)) + xsNum(xsCell(materiaisRows, rm, 4));
+        var porPacote = [pct01].concat([5,6,7,8,9,10,11].map(function(c){ return xsNum(xsCell(materiaisRows, rm, c)); }));
         var entregue = xsNum(xsCell(materiaisRows, rm, 13));
         var consumido = xsNum(xsCell(materiaisRows, rm, 14));
         materiais.push({
