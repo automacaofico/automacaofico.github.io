@@ -176,7 +176,7 @@ svg{display:block;max-width:100%;height:auto;overflow:visible}
 </style>
 </head>
 <body>
-<div class="fico-auth-gate" id="ficoAccessGate"><form class="fico-auth-card" id="ficoAccessForm"><h1>Pacotes 09 e 10</h1><p>Acesso restrito à equipe de contratação FICO.</p><label>Senha de acesso<input id="ficoAccessPassword" type="password" autocomplete="current-password" required></label><label class="fico-auth-remember"><input id="ficoRememberAccess" type="checkbox">Lembrar acesso neste dispositivo</label><button type="submit">Acessar análise</button><div class="fico-auth-error" id="ficoAccessError" role="alert"></div><details class="fico-auth-hint"><summary>Relembrar senha</summary><p>Contrato + números dos pacotes, sem espaços.</p></details></form></div>
+<div class="fico-auth-gate" id="ficoAccessGate"><form class="fico-auth-card" id="ficoAccessForm"><h1>Pacotes 09 e 10</h1><p>A senha é exigida em toda nova abertura.</p><label>Senha de acesso<input id="ficoAccessPassword" type="password" autocomplete="current-password" required></label><button type="submit">Acessar análise</button><div class="fico-auth-error" id="ficoAccessError" role="alert"></div><details class="fico-auth-hint"><summary>Relembrar senha</summary><p>Contrato + números dos pacotes, sem espaços.</p></details></form></div>
 <div class="app">
   <aside>
     <div class="brand">
@@ -1624,13 +1624,10 @@ render();
   const gate = document.getElementById('ficoAccessGate');
   const form = document.getElementById('ficoAccessForm');
   const password = document.getElementById('ficoAccessPassword');
-  const remember = document.getElementById('ficoRememberAccess');
   const error = document.getElementById('ficoAccessError');
-  const sessionKey = 'fico_propostas_session';
   const accessApi = 'https://fico-versioning-api.automacaofico.workers.dev';
   const unlock = () => { gate.hidden = true; document.documentElement.style.overflow = ''; };
   document.documentElement.style.overflow = 'hidden';
-  if (localStorage.getItem(sessionKey) || sessionStorage.getItem(sessionKey)) unlock();
   form.addEventListener('submit', async event => {
     event.preventDefault();
     const button = form.querySelector('button');
@@ -1638,9 +1635,7 @@ render();
     try {
       const response = await fetch(accessApi + '/api/v1/auth/session', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:password.value,user:'contratacao-fico'})});
       if (!response.ok) throw new Error('Senha inválida ou acesso indisponível.');
-      const session = await response.json();
-      sessionStorage.setItem(sessionKey, session.token);
-      if (remember.checked) localStorage.setItem(sessionKey, session.token); else localStorage.removeItem(sessionKey);
+      await response.json();
       unlock();
     } catch (cause) { error.textContent = cause.message; }
     finally { button.disabled = false; button.textContent = 'Acessar análise'; }
