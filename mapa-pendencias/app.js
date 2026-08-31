@@ -26,6 +26,7 @@
     sourceName: "Base inicial",
     sourceDate: null,
     activeBasemap: "street",
+    viewMode: "points",
   };
 
   const $ = (selector) => document.querySelector(selector);
@@ -325,6 +326,30 @@
         "circle-stroke-color": "#ffffff",
       },
     });
+    // Mapa de calor: densidade de pendências por Km, alternável com os pontos/clusters
+    // pelo controle "Pontos / Mapa de calor". Inserido abaixo dos clusters na pilha de
+    // camadas para não cobrir os pontos caso as duas fiquem visíveis ao mesmo tempo.
+    map.addLayer({
+      id: "issue-heat",
+      type: "heatmap",
+      source: "issues",
+      layout: { visibility: "none" },
+      paint: {
+        "heatmap-weight": 1,
+        "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 7, 1, 15, 3.2],
+        "heatmap-color": [
+          "interpolate", ["linear"], ["heatmap-density"],
+          0, "rgba(53,120,188,0)",
+          0.2, "#3578bc",
+          0.4, "#1f7a4d",
+          0.6, "#f4c430",
+          0.8, "#f89b32",
+          1, "#b7403b",
+        ],
+        "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 7, 14, 15, 40],
+        "heatmap-opacity": 0.85,
+      },
+    }, "clusters");
 
     map.on("click", "clusters", async (event) => {
       const feature = map.queryRenderedFeatures(event.point, { layers: ["clusters"] })[0];
@@ -376,6 +401,24 @@
     if (!bounds.isEmpty()) state.map.fitBounds(bounds, { padding: 52, duration: 650, maxZoom: 13 });
   };
 
+  const setViewMode = (mode) => {
+    state.viewMode = mode;
+    const isHeat = mode === "heat";
+    if (state.isMapReady) {
+      state.map.setLayoutProperty("issue-heat", "visibility", isHeat ? "visible" : "none");
+      ["clusters", "cluster-count", "issue-points"].forEach((layer) => {
+        state.map.setLayoutProperty(layer, "visibility", isHeat ? "none" : "visible");
+      });
+    }
+    $("#pointsLegend").classList.toggle("hidden", isHeat);
+    $("#heatLegend").classList.toggle("hidden", !isHeat);
+    $$('[data-viewmode]').forEach((button) => {
+      const isActive = button.dataset.viewmode === mode;
+      button.classList.toggle("active", isActive);
+      button.setAttribute("aria-pressed", String(isActive));
+    });
+  };
+
   const setBasemap = (mode) => {
     state.activeBasemap = mode;
     if (state.isMapReady) {
@@ -402,12 +445,19 @@
     state.map.addControl(new maplibregl.ScaleControl({ maxWidth: 110, unit: "metric" }), "bottom-left");
     state.map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
     state.map.on("load", () => {
-      state.isMapReady = true;
-      addMapLayers();
-      setBasemap(state.activeBasemap);
-      updateDashboard();
-      fitRailway();
-      $("#loadingMap").classList.add("hidden");
+      try {
+        state.isMapReady = true;
+        addMapLayers();
+        setBasemap(state.activeBasemap);
+        setViewMode(state.viewMode);
+        updateDashboard();
+        fitRailway();
+      } catch (error) {
+        console.error("Falha ao montar as camadas do mapa:", error);
+        showToast("Falha ao montar as camadas do mapa.");
+      } finally {
+        $("#loadingMap").classList.add("hidden");
+      }
     });
     state.map.on("error", (event) => {
       if (!event?.error?.message?.includes("tile")) console.error(event.error);
@@ -429,6 +479,7 @@
     setOptions("#sectionFilter", distinct("section"), "Todos");
     setOptions("#statusFilter", distinct("status"), "Todos");
     setOptions("#specialtyFilter", distinct("specialty"), "Todas");
+    setOptions("#certificationFilter", distinct("certification"), "Todas");
   };
 
   const filterRecords = () => {
@@ -437,13 +488,15 @@
     const section = $("#sectionFilter").value;
     const status = $("#statusFilter").value;
     const specialty = $("#specialtyFilter").value;
+    const certification = $("#certificationFilter").value;
     state.filtered = state.records.filter((record) => {
       const searchable = normalizeText([record.id, record.company, record.asset, record.description, record.specialty, record.ficoOwner].join(" "));
       return (!query || searchable.includes(query))
         && (!company || record.company === company)
         && (!section || record.section === section)
         && (!status || record.status === status)
-        && (!specialty || record.specialty === specialty);
+        && (!specialty || record.specialty === specialty)
+        && (!certification || record.certification === certification);
     });
     updateDashboard();
   };
@@ -554,6 +607,71 @@
     $("#drawerOverlay").classList.add("hidden");
     $("#detailDrawer").classList.remove("open");
     $("#detailDrawer").setAttribute("aria-hidden", "true");
+  };
+
+  // ============================================================
+  // RELATÓRIO DE CONCENTRAÇÃO — agrupa as pendências do recorte filtrado atual (mesmos
+  // filtros de empresa/trecho/status/especialidade/certificação da tela) por especialidade
+  // e por faixa de Km, pra apontar onde compensa deslocar uma única equipe: muitas
+  // pendências do mesmo tipo perto uma da outra = 1 mutirão resolve várias de uma vez.
+  // ============================================================
+  const CONCENTRATION_BIN_METERS = 1000; // faixas de 1 km
+
+  const buildConcentrationReport = () => {
+    const bins = new Map();
+    state.filtered.forEach((record) => {
+      const location = state.locations.get(String(record.id));
+      if (!location) return;
+      const binStart = Math.floor(location.stationMeters / CONCENTRATION_BIN_METERS) * CONCENTRATION_BIN_METERS;
+      const key = `${record.specialty}||${binStart}`;
+      if (!bins.has(key)) {
+        bins.set(key, { specialty: record.specialty, binStart, total: 0, open: 0, companies: new Set(), sections: new Set() });
+      }
+      const bin = bins.get(key);
+      bin.total += 1;
+      if (!isClosed(record.status)) bin.open += 1;
+      bin.companies.add(record.company);
+      if (record.section) bin.sections.add(record.section);
+    });
+    return [...bins.values()]
+      .filter((bin) => bin.open > 1)
+      .sort((left, right) => right.open - left.open || right.total - left.total)
+      .slice(0, 25);
+  };
+
+  const renderReport = () => {
+    const rows = buildConcentrationReport();
+    const locatedCount = state.filtered.filter((record) => state.locations.has(String(record.id))).length;
+    const intro = `<p class="report-intro">Agrupamento das <strong>${numberFormat.format(locatedCount)}</strong> pendências localizadas no recorte atual (respeita os filtros de empresa, trecho, status, especialidade e certificação ativos na tela), em faixas de ${CONCENTRATION_BIN_METERS / 1000} km. Faixas com mais pendências em aberto do mesmo tipo indicam onde uma única equipe resolve várias de uma vez — ex.: várias pendências de Drenagem próximas facilitam mobilizar 1 equipe de drenagem para aquele trecho.</p>`;
+    if (!rows.length) {
+      $("#reportBody").innerHTML = `${intro}<p class="empty-results">Nenhuma faixa com mais de 1 pendência em aberto do mesmo tipo no recorte atual. Ajuste os filtros e tente novamente.</p>`;
+      return;
+    }
+    const table = `<table class="report-table">
+      <thead><tr><th>#</th><th>Especialidade</th><th>Trecho (Km)</th><th>Abertas</th><th>Total</th><th>Empresa(s)</th></tr></thead>
+      <tbody>${rows.map((row, index) => `<tr>
+        <td><span class="report-rank">${index + 1}</span></td>
+        <td>${escapeHtml(row.specialty || "Não informada")}</td>
+        <td>${escapeHtml(stationLabel(row.binStart))} – ${escapeHtml(stationLabel(row.binStart + CONCENTRATION_BIN_METERS))}</td>
+        <td><strong>${row.open}</strong></td>
+        <td>${row.total}</td>
+        <td>${escapeHtml([...row.companies].join(", "))}</td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+    $("#reportBody").innerHTML = intro + table;
+  };
+
+  const openReport = () => {
+    renderReport();
+    $("#drawerOverlay").classList.remove("hidden");
+    $("#reportDrawer").classList.add("open");
+    $("#reportDrawer").setAttribute("aria-hidden", "false");
+  };
+
+  const closeReport = () => {
+    $("#drawerOverlay").classList.add("hidden");
+    $("#reportDrawer").classList.remove("open");
+    $("#reportDrawer").setAttribute("aria-hidden", "true");
   };
 
   let toastTimer;
@@ -675,18 +793,21 @@
         event.target.value = "";
       }
     });
-    ["#companyFilter", "#sectionFilter", "#statusFilter", "#specialtyFilter"].forEach((selector) => $(selector).addEventListener("change", filterRecords));
+    ["#companyFilter", "#sectionFilter", "#statusFilter", "#specialtyFilter", "#certificationFilter"].forEach((selector) => $(selector).addEventListener("change", filterRecords));
     $("#searchInput").addEventListener("input", filterRecords);
     $("#clearFilters").addEventListener("click", () => {
       $("#searchInput").value = "";
-      ["#companyFilter", "#sectionFilter", "#statusFilter", "#specialtyFilter"].forEach((selector) => { $(selector).value = ""; });
+      ["#companyFilter", "#sectionFilter", "#statusFilter", "#specialtyFilter", "#certificationFilter"].forEach((selector) => { $(selector).value = ""; });
       filterRecords();
     });
     $$('[data-basemap]').forEach((button) => button.addEventListener("click", () => setBasemap(button.dataset.basemap)));
+    $$('[data-viewmode]').forEach((button) => button.addEventListener("click", () => setViewMode(button.dataset.viewmode)));
     $("#fitButton").addEventListener("click", fitRailway);
     $("#closeDrawer").addEventListener("click", closeDetails);
-    $("#drawerOverlay").addEventListener("click", closeDetails);
-    document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeDetails(); });
+    $("#reportButton").addEventListener("click", openReport);
+    $("#closeReport").addEventListener("click", closeReport);
+    $("#drawerOverlay").addEventListener("click", () => { closeDetails(); closeReport(); });
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape") { closeDetails(); closeReport(); } });
   };
 
   const start = async () => {
