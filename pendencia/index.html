@@ -871,6 +871,10 @@ function renderConsolidado(){
     const pacotesLista=Object.keys(E.pacotes).sort().map(k=>labelPacote(k)).join(' · ')||'—';
     const cabBg=E.isVale?'linear-gradient(135deg,#007E7A,#00615E)':'linear-gradient(135deg,var(--navy),#24467a)';
     const gcls=pctp>=70?'verde':(pctp>=40?'amarelo':'vermelho');
+    // Impacta/Não impacta certificação aqui é sobre o que ainda RESTA (não sobre o total já
+    // classificado) — desconta o que já foi finalizado (Status_Pendencia) de cada classificação,
+    // mesmo cálculo já usado no card "Impacto na certificação" mais acima na página.
+    const certRestante=E.certGeral-E.finCertGeral, naoCertRestante=E.naoCertGeral-E.finSemImpGeral;
     h+='<div class="comp-card">'
       +'<div class="cab" style="background:'+cabBg+'"><div style="display:flex;align-items:center;gap:14px">'+logo+'<div><div class="nome">'+nomeExibicao(E.key)+'</div><div class="empresa">'+pacotesLista+'</div></div></div></div>'
       +'<div class="corpo">'
@@ -878,8 +882,8 @@ function renderConsolidado(){
       +'<div class="linha"><span class="lab">Executadas</span><span class="num">'+E.execGeral+' ('+pctp+'%)</span></div>'
       +'<div class="linha"><span class="lab">Restantes</span><span class="num" style="color:var(--vermelho)">'+E.pendGeral+'</span></div>'
       +'<div class="barra-avanco"><div class="fill" style="width:'+pctp+'%;background:'+fillGrad(gcls)+'"></div></div>'
-      +'<div class="linha"><span class="lab">Impacta certificação</span><span class="num" style="color:var(--vermelho)">'+E.certGeral+'</span></div>'
-      +'<div class="linha"><span class="lab">Não impacta certificação</span><span class="num">'+E.naoCertGeral+'</span></div>'
+      +'<div class="linha"><span class="lab">Impacta certificação</span><span class="num" style="color:var(--vermelho)">'+certRestante+'</span></div>'
+      +'<div class="linha"><span class="lab">Não impacta certificação</span><span class="num">'+naoCertRestante+'</span></div>'
       +'</div></div>';
   });
   h+='</div>';
