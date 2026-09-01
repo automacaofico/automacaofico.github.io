@@ -1198,53 +1198,58 @@ function renderCharts(){
 // quem mantém a planilha; por ora os números ficam fixos aqui (mesmo padrão
 // de mobilização/cenários/alertas, que também não vêm da planilha).
 // ============================================================
-const TENDENCIA_EMPRESAS=['GSA','EMPA','ATERPA','ÁPIA','CIVIL MASTER','VALE'];
-// [meta,real,%,tend] — a meta exibida na planilha é arredondada (ex.: GSA "5"/semana vem de
-// 5,4 real), então a % vem pronta da planilha em vez de recalculada a partir do inteiro
-// arredondado (senão diverge: 3/5=60% ≠ 56% que a planilha mostra com a meta real 5,4).
-// "tend" é a coluna "Tend." da própria planilha (indicador calculado lá, não refeito aqui);
-// null quando a planilha mostra "-".
+const TENDENCIA_EMPRESAS=['GSA','EMPA','ATERPA','ÁPIA','CIVIL MASTER','VALE','SOMAFEL'];
+// [meta,real,%] — a % vem pronta da planilha (a meta exibida é arredondada, então recalcular a
+// partir do inteiro diverge do valor real da planilha). A coluna "Tend." que existia antes foi
+// removida pela própria planilha nesta atualização; "total" por empresa é a soma de Real no mês
+// (coluna "Total Encerradas" da planilha).
 const TENDENCIA_DATA={
-  atualizadoAte:'22/08/2026 (S3 de agosto)',
+  atualizadoAte:'31/08/2026 (fim de agosto)',
   meses:[
-    {mes:'Junho/26',total:109,semanas:[
-      {label:'S1 (01/06 a 08/06)',encerradas:0,dados:{GSA:[5,0,0,0],EMPA:[55,0,0,0],ATERPA:[55,0,0,0],'ÁPIA':[71,0,0,0],'CIVIL MASTER':[2,0,0,null],VALE:[10,0,0,null]}},
-      {label:'S2 (10/06 a 15/06)',encerradas:5,dados:{GSA:[5,0,0,0],EMPA:[55,0,0,0],ATERPA:[55,5,9,3],'ÁPIA':[71,0,0,0],'CIVIL MASTER':[2,0,0,null],VALE:[10,0,0,null]}},
-      {label:'S3 (17/06 a 22/06)',encerradas:22,dados:{GSA:[5,0,0,0],EMPA:[55,8,15,3],ATERPA:[55,14,26,7],'ÁPIA':[71,0,0,0],'CIVIL MASTER':[2,0,0,null],VALE:[10,0,0,null]}},
-      {label:'S4 (24/06 a 30/06)',encerradas:82,dados:{GSA:[5,0,0,0],EMPA:[55,16,29,6],ATERPA:[55,11,20,8],'ÁPIA':[71,55,77,14],'CIVIL MASTER':[2,0,0,null],VALE:[10,0,0,null]}}
-    ]},
-    {mes:'Julho/26',total:458,semanas:[
-      {label:'S1 (01/07 a 08/07)',encerradas:104,dados:{GSA:[5,0,0,0],EMPA:[55,83,151,83],ATERPA:[55,21,39,21],'ÁPIA':[71,0,0,0],'CIVIL MASTER':[2,0,0,null],VALE:[10,0,0,null]}},
-      {label:'S2 (10/07 a 15/07)',encerradas:110,dados:{GSA:[5,0,0,0],EMPA:[55,36,66,60],ATERPA:[55,38,70,30],'ÁPIA':[71,36,50,18],'CIVIL MASTER':[2,0,0,null],VALE:[10,0,0,null]}},
-      {label:'S3 (17/07 a 22/07)',encerradas:61,dados:{GSA:[5,2,37,1],EMPA:[55,41,75,54],ATERPA:[55,18,33,26],'ÁPIA':[71,0,0,12],'CIVIL MASTER':[2,0,0,null],VALE:[10,0,0,null]}},
-      {label:'S4 (24/07 a 31/07)',encerradas:183,dados:{GSA:[5,1,19,1],EMPA:[55,119,217,70],ATERPA:[55,46,84,31],'ÁPIA':[71,17,24,14],'CIVIL MASTER':[2,0,0,null],VALE:[10,0,0,null]}}
-    ]},
-    {mes:'Agosto/26',total:431,semanas:[
-      {label:'S1 (01/08 a 08/08)',encerradas:182,dados:{GSA:[5,0,0,0],EMPA:[55,32,58,32],ATERPA:[55,38,70,38],'ÁPIA':[71,112,157,112],'CIVIL MASTER':[2,0,0,null],VALE:[10,0,0,null]}},
-      {label:'S2 (10/08 a 15/08)',encerradas:77,dados:{GSA:[5,2,40,1],EMPA:[55,35,64,34],ATERPA:[55,38,70,38],'ÁPIA':[71,1,1,57],'CIVIL MASTER':[2,0,0,null],VALE:[10,1,10,1]}},
-      {label:'S3 (17/08 a 22/08)',encerradas:172,dados:{GSA:[5,3,56,2],EMPA:[55,67,122,45],ATERPA:[55,66,121,48],'ÁPIA':[71,35,49,50],'CIVIL MASTER':[2,0,0,null],VALE:[10,1,10,1]}},
-      {label:'S4 (24/08 a 30/08)',encerradas:0,dados:{GSA:[5,null,null,2],EMPA:[55,null,null,45],ATERPA:[55,null,null,48],'ÁPIA':[71,null,null,50],'CIVIL MASTER':[2,null,null,null],VALE:[10,null,null,1]}}
-    ],saldo:{GSA:[21,5],EMPA:[220,134],ATERPA:[218,142],'ÁPIA':[285,148],'CIVIL MASTER':[8,0],VALE:[40,2]}}
+    {mes:'Junho/26',encerradas:111,semanas:[
+      {label:'S1 (01/06 a 08/06)',encerradas:0,dados:{GSA:[4,0,0],EMPA:[13,0,0],ATERPA:[7,0,0],'ÁPIA':[21,0,0],'CIVIL MASTER':[14,0,0],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
+      {label:'S2 (10/06 a 15/06)',encerradas:13,dados:{GSA:[5,1,22],EMPA:[14,7,49],ATERPA:[7,4,54],'ÁPIA':[22,0,0],'CIVIL MASTER':[15,1,7],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
+      {label:'S3 (17/06 a 22/06)',encerradas:19,dados:{GSA:[5,2,41],EMPA:[15,5,34],ATERPA:[8,12,158],'ÁPIA':[24,0,0],'CIVIL MASTER':[15,0,0],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
+      {label:'S4 (24/06 a 30/06)',encerradas:79,dados:{GSA:[5,0,0],EMPA:[15,13,86],ATERPA:[7,10,136],'ÁPIA':[25,55,219],'CIVIL MASTER':[16,1,6],VALE:[1,0,0],SOMAFEL:[1,0,0]}}
+    ],totais:{GSA:3,EMPA:25,ATERPA:26,'ÁPIA':55,'CIVIL MASTER':2,VALE:0,SOMAFEL:0}},
+    {mes:'Julho/26',encerradas:455,semanas:[
+      {label:'S1 (01/07 a 08/07)',encerradas:168,dados:{GSA:[6,0,0],EMPA:[17,101,599],ATERPA:[9,1,11],'ÁPIA':[27,29,109],'CIVIL MASTER':[17,37,214],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
+      {label:'S2 (10/07 a 15/07)',encerradas:50,dados:{GSA:[6,0,0],EMPA:[11,21,183],ATERPA:[10,7,74],'ÁPIA':[27,7,26],'CIVIL MASTER':[16,15,92],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
+      {label:'S3 (17/07 a 22/07)',encerradas:105,dados:{GSA:[6,3,47],EMPA:[11,85,788],ATERPA:[10,6,62],'ÁPIA':[29,0,0],'CIVIL MASTER':[16,11,67],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
+      {label:'S4 (24/07 a 31/07)',encerradas:132,dados:{GSA:[7,0,0],EMPA:[5,69,1393],ATERPA:[10,15,150],'ÁPIA':[31,17,55],'CIVIL MASTER':[17,31,185],VALE:[1,0,0],SOMAFEL:[1,0,0]}}
+    ],totais:{GSA:3,EMPA:276,ATERPA:29,'ÁPIA':53,'CIVIL MASTER':94,VALE:0,SOMAFEL:0}},
+    {mes:'Agosto/26',encerradas:523,semanas:[
+      {label:'S1 (01/08 a 08/08)',encerradas:184,dados:{GSA:[8,0,0],EMPA:[23,33,141],ATERPA:[12,39,320],'ÁPIA':[37,112,304],'CIVIL MASTER':[24,0,0],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
+      {label:'S2 (10/08 a 15/08)',encerradas:79,dados:{GSA:[9,3,35],EMPA:[23,34,148],ATERPA:[10,1,10],'ÁPIA':[31,1,3],'CIVIL MASTER':[27,40,149],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
+      {label:'S3 (17/08 a 22/08)',encerradas:169,dados:{GSA:[9,4,44],EMPA:[22,65,297],ATERPA:[11,19,175],'ÁPIA':[34,35,104],'CIVIL MASTER':[25,46,181],VALE:[1,0,0],SOMAFEL:[2,0,0]}},
+      // % de S4/ago vinha quebrada na planilha (formula com erro); recalculada aqui a partir de Real÷Meta.
+      {label:'S4 (24/08 a 30/08)',encerradas:91,dados:{GSA:[10,1,10],EMPA:[17,64,376],ATERPA:[10,4,40],'ÁPIA':[34,17,50],'CIVIL MASTER':[23,5,22],VALE:[2,0,0],SOMAFEL:[2,0,0]}}
+    ],totais:{GSA:8,EMPA:196,ATERPA:63,'ÁPIA':165,'CIVIL MASTER':91,VALE:0,SOMAFEL:0}},
+    {mes:'Setembro/26',encerradas:2,semanas:[
+      {label:'S1 (01/09 a 08/09)',encerradas:2,dados:{GSA:[12,0,0],EMPA:[38,2,5],ATERPA:[20,0,0],'ÁPIA':[60,0,0],'CIVIL MASTER':[39,0,0],VALE:[2,0,0],SOMAFEL:[2,0,0]}},
+      {label:'S2 (10/09 a 15/09)',encerradas:0,dados:{GSA:[15,0,0],EMPA:[46,0,0],ATERPA:[24,0,0],'ÁPIA':[73,0,0],'CIVIL MASTER':[47,0,0],VALE:[2,0,0],SOMAFEL:[2,0,0]}},
+      {label:'S3 (17/09 a 22/09)',encerradas:0,dados:{GSA:[18,0,0],EMPA:[55,0,0],ATERPA:[29,0,0],'ÁPIA':[88,0,0],'CIVIL MASTER':[57,0,0],VALE:[3,0,0],SOMAFEL:[3,0,0]}},
+      {label:'S4 (24/09 a 30/09)',encerradas:0,dados:{GSA:[23,0,0],EMPA:[69,0,0],ATERPA:[37,0,0],'ÁPIA':[111,0,0],'CIVIL MASTER':[72,0,0],VALE:[3,0,0],SOMAFEL:[4,0,0]}}
+    ],totais:{GSA:0,EMPA:2,ATERPA:0,'ÁPIA':0,'CIVIL MASTER':0,VALE:0,SOMAFEL:0}}
   ]
 };
 
-// "Análise do cenário atual e meta de encerramento" — bloco novo da aba "Tendência - Protocolo",
-// com o ritmo real das últimas 4 semanas projetado até o prazo final. Também não vem da
-// planilha "Banco de Dados" (é exclusivo dessa aba de tendência), fixo aqui como o resto.
+// "Análise do cenário atual e meta de encerramento" — bloco da aba "Tendência - Protocolo", com o
+// ritmo real das últimas 4 semanas projetado até o prazo final. Também não vem da planilha "Banco
+// de Dados" (é exclusivo dessa aba de tendência), fixo aqui como o resto.
 const CENARIO_ATUAL={
   dataReferencia:'31/07/2026', metaFinal:'17/10/2026', regime:'segunda a sábado',
-  totalRegistradas:2861, fechadas:1090, emAberto:1770, pctEmAberto:'61,9%',
-  diasTrabalhoRestantes:46, metaMediaDiaria:38, metaMediaSemanal:231, prazoFinal:'17/10/2026',
-  ritmoRealDiario:'19,0', ritmoRealSemanal:114, diasUteisZerar:94, tendenciaPrazoFinal:'14/12/2026',
-  desvioTexto:'Desvio vs meta final (17/10/2026): 58 dias corridos de ATRASO'
+  totalRegistradas:2862, fechadas:1215, emAberto:1646, pctEmAberto:'57,5%',
+  diasTrabalhoRestantes:41, metaMediaDiaria:40, metaMediaSemanal:241, prazoFinal:'21/10/2026',
+  ritmoRealDiario:'17,0', ritmoRealSemanal:102, diasUteisZerar:97, tendenciaPrazoFinal:'21/11/2026',
+  desvioTexto:'Desvio vs meta final (17/10/2026): 35 dias corridos de ATRASO'
 };
 
 function tendPctCls(pct){ if(pct>=100)return 'verde'; if(pct>=70)return 'amarelo'; return 'vermelho'; }
 function tendCelula(t){
-  const meta=t[0], real=t[1], pct=t[2], tend=t[3];
-  const tendTxt='<td class="tend-col">'+(tend==null?'—':tend)+'</td>';
-  if(real==null)return '<td>'+meta+'</td><td>—</td><td>—</td>'+tendTxt;
-  return '<td>'+meta+'</td><td>'+real+'</td><td><span class="tend-pct '+tendPctCls(pct)+'">'+pct+'%</span></td>'+tendTxt;
+  const meta=t[0], real=t[1], pct=t[2];
+  if(real==null)return '<td>'+meta+'</td><td>—</td><td>—</td>';
+  return '<td>'+meta+'</td><td>'+real+'</td><td><span class="tend-pct '+tendPctCls(pct)+'">'+pct+'%</span></td>';
 }
 function renderTendencia(){
   const alvo=document.getElementById('tendencia'); if(!alvo)return;
@@ -1279,20 +1284,19 @@ function renderTendencia(){
   }
 
   TENDENCIA_DATA.meses.forEach(m=>{
-    const temSaldo=!!m.saldo;
     h+='<div class="tend-mes"><h3>'+m.mes+'</h3><div style="overflow-x:auto"><table class="tend-tabela"><thead>'
-      +'<tr><th rowspan="2">Empresa</th>'+m.semanas.map(s=>'<th colspan="4">'+s.label+'</th>').join('')+(temSaldo?'<th colspan="2" rowspan="1">Saldo do mês</th>':'')+'</tr>'
-      +'<tr class="tend-semanas">'+m.semanas.map(()=>'<th>Meta</th><th>Real</th><th>%</th><th title="Indicador de tendência calculado na própria planilha">Tend.</th>').join('')+(temSaldo?'<th>Meta</th><th>Real</th>':'')+'</tr>'
+      +'<tr><th rowspan="2">Empresa</th>'+m.semanas.map(s=>'<th colspan="3">'+s.label+'</th>').join('')+'<th rowspan="2">Total encerradas</th></tr>'
+      +'<tr class="tend-semanas">'+m.semanas.map(()=>'<th>Meta</th><th>Real</th><th>%</th>').join('')+'</tr>'
       +'</thead><tbody>';
     TENDENCIA_EMPRESAS.forEach(emp=>{
       h+='<tr><td>'+nomeExibicao(emp)+'</td>'
-        +m.semanas.map(s=>tendCelula(s.dados[emp]||[0,0,0,null])).join('')
-        +(temSaldo?'<td>'+m.saldo[emp][0]+'</td><td>'+m.saldo[emp][1]+'</td>':'')
+        +m.semanas.map(s=>tendCelula(s.dados[emp]||[0,0,0])).join('')
+        +'<td>'+(m.totais[emp]||0)+'</td>'
         +'</tr>';
     });
     h+='</tbody><tfoot><tr><td>Encerradas na semana</td>'
-      +m.semanas.map(s=>'<td colspan="4">'+s.encerradas+'</td>').join('')
-      +(temSaldo?'<td colspan="2">Total: '+m.total+'</td>':'<td colspan="1" style="text-align:right">Total: '+m.total+'</td>')
+      +m.semanas.map(s=>'<td colspan="3">'+s.encerradas+'</td>').join('')
+      +'<td>Total: '+m.encerradas+'</td>'
       +'</tr></tfoot></table></div></div>';
   });
   h+='<div class="tend-legenda">'
