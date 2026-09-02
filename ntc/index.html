@@ -921,6 +921,10 @@ let sharedReady = false;
 let sharedDirty = false;
 let sharedSaveTimer;
 let sharedSaveInFlight = Promise.resolve();
+// Última versão integral recebida do servidor. Ela é a referência para
+// identificar apenas as alterações feitas neste navegador antes de um save.
+// Nunca use o cache local como referência: ele pode estar semanas defasado.
+let sharedBaseState = null;
 
 async function api(path, options = {}){
   const response = await fetch(`${API_BASE}${path}`, {
@@ -953,23 +957,19 @@ async function loadShared(){
     sharedRevision = Number(data.revision || 0);
     sharedUpdatedAt = data.updatedAt || '';
     sharedReady = true;
-    if(sharedDirty){
-      // Há uma edição local ainda não confirmada no servidor (ex.: o
-      // usuário salvou um apontamento enquanto esta busca ainda estava em
-      // andamento). Não descartar essa edição — só adota a revisão mais
-      // recente conhecida e tenta salvar por cima dela.
-      setSyncStatus('há alterações locais pendentes · salvando…', 'connecting');
-      flushSharedSave({ force: true });
-    } else if(data.state && Array.isArray(data.state.rows)){
-      appRows = data.state.rows;
-      if(data.state.settings && typeof data.state.settings === 'object'){
-        targetSettings = Object.assign(targetSettings, data.state.settings);
+    if(data.state && Array.isArray(data.state.rows)){
+      // Ao abrir o painel, o servidor é sempre a fonte oficial. Sem uma base
+      // compartilhada de referência, não é seguro considerar um cache local
+      // como edição pendente: ele poderia sobrescrever meses de lançamentos.
+      if(sharedDirty && sharedBaseState){
+        mergeServerState(data.state);
+        setSyncStatus('alterações locais mescladas · salvando…', 'connecting');
+        flushSharedSave({ force: true });
+      } else {
+        adoptServerState(data.state);
+        sharedDirty = false;
+        setSyncStatus('sincronizado com a base compartilhada', 'ok');
       }
-      try {
-        localStorage.setItem('fico_ntc_real_app', JSON.stringify(appRows));
-        localStorage.setItem('fico_ntc_target_settings', JSON.stringify(targetSettings));
-      } catch(e){}
-      setSyncStatus('sincronizado com a base compartilhada', 'ok');
       refreshAll();
     } else {
       // Ainda não existe base compartilhada: publica a base local atual como
@@ -981,6 +981,61 @@ async function loadShared(){
     sharedReady = false;
     setSyncStatus('sem conexão · usando cópia local deste navegador', 'warn');
   }
+}
+
+function cloneState(state){
+  return JSON.parse(JSON.stringify(state || { rows: [], settings: {} }));
+}
+
+function currentState(){
+  return { rows: cloneState({ rows: appRows }).rows, settings: cloneState(targetSettings) };
+}
+
+function persistLocalCache(){
+  try {
+    localStorage.setItem('fico_ntc_real_app', JSON.stringify(appRows));
+    localStorage.setItem('fico_ntc_target_settings', JSON.stringify(targetSettings));
+  } catch(e){}
+}
+
+function adoptServerState(state){
+  const clean = cloneState(state);
+  appRows = clean.rows;
+  targetSettings = Object.assign(targetSettings, clean.settings || {});
+  sharedBaseState = currentState();
+  persistLocalCache();
+}
+
+// Retorna somente inclusões, alterações e exclusões deliberadas desde a
+// última versão do servidor. A chave é dateISO, que já é única no diário.
+function getLocalPatch(){
+  if(!sharedBaseState) return null;
+  const baseRows = new Map((sharedBaseState.rows || []).map(r => [r.dateISO, r]));
+  const localRows = new Map(appRows.map(r => [r.dateISO, r]));
+  const upserts = [];
+  const deletes = [];
+  localRows.forEach((row, dateISO) => {
+    if(JSON.stringify(row) !== JSON.stringify(baseRows.get(dateISO))) upserts.push(cloneState(row));
+  });
+  baseRows.forEach((_, dateISO) => { if(!localRows.has(dateISO)) deletes.push(dateISO); });
+  const settings = {};
+  Object.keys(targetSettings).forEach(key => {
+    if(JSON.stringify(targetSettings[key]) !== JSON.stringify((sharedBaseState.settings || {})[key])) settings[key] = targetSettings[key];
+  });
+  return { upserts, deletes, settings };
+}
+
+function mergeServerState(serverState){
+  const patch = getLocalPatch();
+  const server = cloneState(serverState);
+  if(!patch){ adoptServerState(server); return; }
+  const rows = new Map(server.rows.map(r => [r.dateISO, r]));
+  patch.deletes.forEach(dateISO => rows.delete(dateISO));
+  patch.upserts.forEach(row => rows.set(row.dateISO, row));
+  appRows = [...rows.values()].sort((a, b) => (a.dateISO || '').localeCompare(b.dateISO || ''));
+  targetSettings = Object.assign(targetSettings, server.settings || {}, patch.settings);
+  sharedBaseState = server;
+  persistLocalCache();
 }
 
 const AUTOSAVE_INTERVAL_MS = 60_000;
@@ -995,31 +1050,55 @@ function flushSharedSave({ force = false, keepalive = false } = {}){
   // Só marca como "salvo" depois de confirmar que o servidor aceitou —
   // assim, se a gravação falhar (rede ou conflito de revisão), a edição
   // continua marcada como pendente em vez de ser descartada em silêncio.
-  const payload = { rows: JSON.parse(JSON.stringify(appRows)), settings: JSON.parse(JSON.stringify(targetSettings)) };
   sharedSaveInFlight = sharedSaveInFlight.then(async () => {
-    setSyncStatus('salvando na base compartilhada…', 'connecting');
-    try {
-      const data = await api('/api/v1/ntc/state', {
-        method: 'POST',
-        body: JSON.stringify({ state: payload, expectedRevision: sharedRevision }),
-        keepalive
-      });
-      sharedRevision = Number(data.revision);
-      sharedUpdatedAt = data.updatedAt || new Date().toISOString();
-      sharedReady = true;
-      sharedDirty = false;
-      setSyncStatus('salvo para todos', 'ok');
-    } catch(error){
-      if(error.status === 409){
-        // Outra pessoa salvou entre a nossa leitura e a nossa gravação:
-        // busca a revisão mais recente e tenta salvar de novo por cima
-        // dela (a edição local continua marcada como pendente).
-        setSyncStatus('sincronizando com a versão mais recente…', 'connecting');
-        try { await loadShared(); } catch(e){}
+    for(let attempt = 0; attempt < 3; attempt++){
+      const payload = currentState();
+      setSyncStatus('salvando na base compartilhada…', 'connecting');
+      try {
+        const data = await api('/api/v1/ntc/state', {
+          method: 'POST',
+          body: JSON.stringify({ state: payload, expectedRevision: sharedRevision }),
+          keepalive
+        });
+        sharedRevision = Number(data.revision);
+        sharedUpdatedAt = data.updatedAt || new Date().toISOString();
+        sharedReady = true;
+        sharedDirty = false;
+        sharedBaseState = cloneState(payload);
+        setSyncStatus('salvo para todos', 'ok');
         return;
+      } catch(error){
+        if(error.status !== 409){
+          setSyncStatus('sem conexão · alterações salvas só neste navegador', 'warn');
+          return;
+        }
+        // Conflito: mescla somente o que mudou neste navegador com a versão
+        // atual. Dias que existam apenas no servidor são preservados.
+        setSyncStatus('conflito detectado · mesclando atualizações…', 'connecting');
+        try {
+          const latest = await api('/api/v1/ntc/state');
+          if(!latest.state || !Array.isArray(latest.state.rows)) throw new Error('Base compartilhada indisponível.');
+          if(!sharedBaseState){
+            adoptServerState(latest.state);
+            sharedRevision = Number(latest.revision || 0);
+            sharedUpdatedAt = latest.updatedAt || '';
+            sharedDirty = false;
+            setSyncStatus('versão atual recebida; recarregue antes de editar', 'warn');
+            refreshAll();
+            return;
+          }
+          mergeServerState(latest.state);
+          sharedRevision = Number(latest.revision || 0);
+          sharedUpdatedAt = latest.updatedAt || '';
+          sharedReady = true;
+          refreshAll();
+        } catch(e){
+          setSyncStatus('conflito sem conexão · alterações preservadas neste navegador', 'warn');
+          return;
+        }
       }
-      setSyncStatus('sem conexão · alterações salvas só neste navegador', 'warn');
     }
+    setSyncStatus('conflito recorrente · tente salvar novamente', 'warn');
   });
   return sharedSaveInFlight;
 }
@@ -1075,10 +1154,7 @@ function initData(){
 }
 
 function saveToStorage(){
-  try {
-    localStorage.setItem('fico_ntc_real_app', JSON.stringify(appRows));
-    localStorage.setItem('fico_ntc_target_settings', JSON.stringify(targetSettings));
-  } catch(e){}
+  persistLocalCache();
   markDirty();
 }
 
@@ -1993,14 +2069,15 @@ function openAddModal(){
   $('editIndex').value = '-1';
   $('entryForm').reset();
   
-  let nextDate = '2026-08-17';
+  const today = new Date();
+  let nextDate = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
   if(appRows.length > 0){
-    let last = appRows[appRows.length - 1];
+    let last = [...appRows].sort((a, b) => (a.dateISO || '').localeCompare(b.dateISO || '')).at(-1);
     if(last.dateISO){
-      let d = new Date(last.dateISO + 'T00:00:00');
-      d.setDate(d.getDate() + 1);
+      const [year, month, day] = last.dateISO.split('-').map(Number);
+      const d = new Date(year, month - 1, day + 1);
       if(d.getDay() === 0) d.setDate(d.getDate() + 1);
-      nextDate = d.toISOString().split('T')[0];
+      nextDate = [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
     }
   }
 
@@ -2064,6 +2141,7 @@ function saveEntry(e){
   } else {
     appRows.push(entry);
   }
+  appRows.sort((a, b) => (a.dateISO || '').localeCompare(b.dateISO || ''));
 
   saveToStorage();
   closeModal();
