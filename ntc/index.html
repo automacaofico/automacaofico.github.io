@@ -2648,7 +2648,10 @@ function importSpreadsheet(e){
           bucket.metros += parseSheetNumberSum(r[10]);
           bucket.dormentes += parseSheetNumberSum(r[12]);
         } else if(horas > 0){
-          if(status === 'PARADA DE MANUTENÇÃO') bucket.pm += horas;
+          // A planilha consolidada usa "MANUTENÇÃO"; versões anteriores
+          // usavam "PARADA DE MANUTENÇÃO". Ambas representam indisponibilidade
+          // mecânica da NTC e precisam alimentar a DF, não a parada operacional.
+          if(status === 'PARADA DE MANUTENÇÃO' || status === 'MANUTENÇÃO') bucket.pm += horas;
           else bucket.po += horas;
           const key = ident || status || 'OUTROS';
           bucket.eventos[key] = (bucket.eventos[key] || 0) + horas;
