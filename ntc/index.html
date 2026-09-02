@@ -311,10 +311,10 @@ tbody tr:hover{background:var(--blue-subtle)}
       </div>
       <div class="col-3">
         <div class="kpi-card">
-          <div class="kpi-label">Produtividade Ativa Média</div>
+          <div class="kpi-label">Produtividade Média Programada</div>
           <div class="kpi-val" id="kpiActiveAvg">0 m/dia</div>
           <div class="kpi-footer">
-            <span class="kpi-status status-warn" id="kpiDailyMeanSub">Média total: 0 m/dia</span>
+            <span class="kpi-status status-warn" id="kpiDailyMeanSub">0 dias programados</span>
           </div>
         </div>
       </div>
@@ -464,7 +464,7 @@ tbody tr:hover{background:var(--blue-subtle)}
             <span class="ai-badge">Motor Cognitivo</span>
           </div>
           <p style="font-size:14px;color:var(--text);margin-bottom:14px">
-            O motor cognitivo analisa a correlação entre <b>Disponibilidade Física</b>, <b>Produtividade Ativa</b> e a <b>Meta Semanal Vigente (<span id="intelMetaDisplay">6.000</span> m)</b>, calculando com precisão o que é necessário para recuperar ou manter o ritmo. Considera os <b>últimos <span id="intelWindowDays">15</span> dias</b> de apontamentos.
+            O motor cognitivo analisa a correlação entre <b>Disponibilidade Física</b>, <b>Produtividade Programada</b> e a <b>Meta Semanal Vigente (<span id="intelMetaDisplay">6.000</span> m)</b>, calculando com precisão o que é necessário para recuperar ou manter o ritmo. Considera os <b>últimos <span id="intelWindowDays">15</span> dias</b> de apontamentos.
           </p>
           <div class="ai-insights-list" id="aiDetailedAnalysis"></div>
         </div>
@@ -1163,7 +1163,41 @@ const fmt = n => Math.round(n || 0).toLocaleString('pt-BR');
 
 function getFilteredRows(){
   if(period >= 999) return appRows;
-  return appRows.slice(Math.max(0, appRows.length - period));
+  const datedRows = appRows.filter(r => /^\d{4}-\d{2}-\d{2}$/.test(r.dateISO || ''));
+  if(!datedRows.length) return [];
+  const latest = datedRows.reduce((max, row) => row.dateISO > max ? row.dateISO : max, datedRows[0].dateISO);
+  const selected = new Set();
+  const [year, month, day] = latest.split('-').map(Number);
+  const cursor = new Date(year, month - 1, day);
+  while(selected.size < period){
+    if(cursor.getDay() !== 0){
+      selected.add([cursor.getFullYear(), String(cursor.getMonth() + 1).padStart(2, '0'), String(cursor.getDate()).padStart(2, '0')].join('-'));
+    }
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return datedRows.filter(row => selected.has(row.dateISO));
+}
+
+function scheduledDaysInFilter(rows){
+  if(period < 999) return period;
+  return scheduledDaysBetween(rows);
+}
+
+function scheduledDaysBetween(rows){
+  const datedRows = rows.filter(r => /^\d{4}-\d{2}-\d{2}$/.test(r.dateISO || ''));
+  if(!datedRows.length) return 0;
+  const first = datedRows.reduce((min, row) => row.dateISO < min ? row.dateISO : min, datedRows[0].dateISO);
+  const last = datedRows.reduce((max, row) => row.dateISO > max ? row.dateISO : max, datedRows[0].dateISO);
+  const [fy, fm, fd] = first.split('-').map(Number);
+  const [ly, lm, ld] = last.split('-').map(Number);
+  const cursor = new Date(fy, fm - 1, fd);
+  const end = new Date(ly, lm - 1, ld);
+  let count = 0;
+  while(cursor <= end){
+    if(cursor.getDay() !== 0) count++;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return count;
 }
 
 function calcTotalActive(row){
@@ -1311,7 +1345,8 @@ function updateHeaderBadges(){
 
 function updateKPIs(rows){
   const total = rows.reduce((s, r) => s + calcTotalActive(r), 0);
-  const weeklyAvg = rows.length ? (total / rows.length) * targetSettings.diasSemana : 0;
+  const scheduledDays = scheduledDaysInFilter(rows);
+  const weeklyAvg = scheduledDays ? (total / scheduledDays) * targetSettings.diasSemana : 0;
   const deficit = Math.max(0, targetSettings.weeklyTarget - weeklyAvg);
   const adherence = targetSettings.weeklyTarget > 0 ? (weeklyAvg / targetSettings.weeklyTarget) * 100 : 0;
   const df = calcDF(rows);
@@ -1326,18 +1361,18 @@ function updateKPIs(rows){
       }
     });
   });
-  const avgActive = activeMachineDaysCount ? totalActiveProd / activeMachineDaysCount : 0;
-  const avgDailyMean = rows.length ? total / rows.length : 0;
+  const avgScheduled = scheduledDays ? total / scheduledDays : 0;
+  const missingEntries = Math.max(0, scheduledDays - rows.length);
   const opStop = calcOperationalStopIndex(rows);
 
   $('kpiTotal').textContent = fmt(total) + ' m';
-  $('kpiTotalSub').textContent = `${rows.length} dias no filtro (${activeMachs.size}/${MACHINES.length} máq.)`;
+  $('kpiTotalSub').textContent = `${scheduledDays} dias seg–sáb no filtro · ${missingEntries} sem lançamento (${activeMachs.size}/${MACHINES.length} máq.)`;
   $('kpiDFReal').textContent = df.toFixed(1).replace('.',',') + '%';
   $('kpiDiasProdSub').textContent = `${activeMachineDaysCount} dias ativos de máquina`;
   $('kpiOpStop').textContent = opStop.pct.toFixed(1).replace('.',',') + '%';
   $('kpiOpStopSub').textContent = `${fmt(opStop.hours)} h de parada operacional/CCO`;
-  $('kpiActiveAvg').textContent = fmt(avgActive) + ' m/dia';
-  $('kpiDailyMeanSub').textContent = `Média total: ${fmt(avgDailyMean)} m/dia`;
+  $('kpiActiveAvg').textContent = fmt(avgScheduled) + ' m/dia';
+  $('kpiDailyMeanSub').textContent = `${scheduledDays} dias seg–sáb · ${missingEntries} sem lançamento`;
   $('kpiWeeklyAvg').textContent = fmt(weeklyAvg) + ' m/sem';
   $('kpiWeeklyTargetLabel').textContent = `Média vs Meta (${fmt(targetSettings.weeklyTarget)} m)`;
   
@@ -1502,7 +1537,8 @@ function onSimTargetChange(){
 
 function renderAIInsights(rows){
   const total = rows.reduce((s, r) => s + calcTotalActive(r), 0);
-  const weeklyAvg = rows.length ? (total / rows.length) * targetSettings.diasSemana : 0;
+  const scheduledDays = scheduledDaysInFilter(rows);
+  const weeklyAvg = scheduledDays ? (total / scheduledDays) * targetSettings.diasSemana : 0;
   const adherence = (weeklyAvg / targetSettings.weeklyTarget) * 100;
   const df = calcDF(rows);
 
@@ -2277,8 +2313,9 @@ function renderExecutiveSummary(){
 
   function getStats(rs){
     let tot = rs.reduce((s, r) => s + (r.NTC||0), 0);
-    let avgSem = rs.length ? (tot / rs.length) * targetSettings.diasSemana : 0;
-    let avgDia = rs.length ? tot / rs.length : 0;
+    let scheduledDays = scheduledDaysBetween(rs);
+    let avgSem = scheduledDays ? (tot / scheduledDays) * targetSettings.diasSemana : 0;
+    let avgDia = scheduledDays ? tot / scheduledDays : 0;
     let df = calcDF(rs, MACHINES);
     return { tot, avgSem, avgDia, df };
   }
