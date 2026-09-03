@@ -30,6 +30,7 @@ const elements = {
 };
 let sessionToken = sessionStorage.getItem('ficoCcoToken') || '', state = null, axis = [], map, kmPopup, operationPopup, equipmentPopup, basemap = 'street', equipmentMarkers = new Map(), packageMarkers = [];
 let loading = false, editingLdl = null, editingCirculation = null, lastCriticalSignature = '', lastWarningSignature = '', lastCriticalSoundAt = 0;
+let refreshTimer = null, refreshFailures = 0;
 const safetyAudio = createSafetyAudio(elements.sound, 'ficoCcoSafetySound');
 const ccoMotion = createCcoMotion({ toggle: $('reduce-motion-toggle') });
 
@@ -629,12 +630,18 @@ function render() {
 }
 
 async function load() {
-  if (loading) return; loading = true;
-  try { state = await api('/api/v1/cco/state'); await syncSafetyEvents(); elements.controller.textContent = `${state.controller.code} · ${state.controller.name}`; render(); }
-  catch (error) { if (error.status === 401) return showLogin(); notify(elements.message, error.message); }
+  if (loading) return false; loading = true;
+  try { state = await api('/api/v1/cco/state'); await syncSafetyEvents(); elements.controller.textContent = `${state.controller.code} · ${state.controller.name}`; render(); refreshFailures = 0; return true; }
+  catch (error) { if (error.status === 401) { showLogin(); return false; } refreshFailures += 1; notify(elements.message, error.message); return false; }
   finally { loading = false; }
 }
-function showLogin() { sessionToken = ''; sessionStorage.removeItem('ficoCcoToken'); elements.login.hidden = false; elements.app.hidden = true; elements.logout.hidden = true; elements.controller.textContent = 'AGUARDANDO ACESSO'; }
+function nextRefreshDelay() { return Math.min(60_000, 5_000 * 2 ** refreshFailures); }
+function scheduleRefresh() {
+  clearTimeout(refreshTimer);
+  if (!sessionToken || document.hidden) return;
+  refreshTimer = setTimeout(async () => { await load(); scheduleRefresh(); }, nextRefreshDelay());
+}
+function showLogin() { clearTimeout(refreshTimer); sessionToken = ''; sessionStorage.removeItem('ficoCcoToken'); elements.login.hidden = false; elements.app.hidden = true; elements.logout.hidden = true; elements.controller.textContent = 'AGUARDANDO ACESSO'; }
 function showApp() { elements.login.hidden = true; elements.app.hidden = false; elements.logout.hidden = false; setTimeout(() => { map?.resize(); ccoMotion.revealApp(); }, 0); }
 
 async function closeRecord(id, kind, action) {
@@ -647,7 +654,7 @@ async function closeRecord(id, kind, action) {
 
 elements.loginForm.addEventListener('submit', async (event) => {
   event.preventDefault(); notify(elements.loginMessage, '');
-  try { const data = await api('/api/v1/cco/login', { method: 'POST', body: JSON.stringify({ code: elements.code.value, pin: elements.pin.value }) }); sessionToken = data.token; sessionStorage.setItem('ficoCcoToken', sessionToken); elements.pin.value = ''; showApp(); await load(); }
+  try { const data = await api('/api/v1/cco/login', { method: 'POST', body: JSON.stringify({ code: elements.code.value, pin: elements.pin.value }) }); sessionToken = data.token; sessionStorage.setItem('ficoCcoToken', sessionToken); elements.pin.value = ''; showApp(); await load(); scheduleRefresh(); }
   catch (error) { notify(elements.loginMessage, error.message); }
 });
 elements.logout.onclick = async () => { try { await api('/api/v1/cco/logout', { method: 'POST' }); } catch {} showLogin(); };
@@ -736,4 +743,8 @@ elements.permissiveForm.addEventListener('submit', async (event) => {
 
 setInterval(() => $('clock').textContent = new Date().toLocaleTimeString('pt-BR'), 1000);
 fetch(AXIS_URL).then((response) => response.json()).then((data) => { axis = data.points; initMap(); if (sessionToken) { showApp(); load(); } }).catch((error) => notify(elements.loginMessage, `Traçado indisponível: ${error.message}`));
-setInterval(() => { if (sessionToken) load(); }, 5000);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) clearTimeout(refreshTimer);
+  else if (sessionToken) { load().finally(scheduleRefresh); }
+});
+if (sessionToken) scheduleRefresh();

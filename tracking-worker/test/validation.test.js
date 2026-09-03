@@ -24,7 +24,7 @@ test('normalizes captured time and optional telemetry', () => {
   assert.equal(normalized.batteryPct, 84);
 });
 test('converts OwnTracks telemetry to the dashboard format', () => {
-  const normalized = normalizeOwnTracksLocation({ tst: 1786363200, lat: -14.01, lon: -49.19, acc: 7, vel: 36, cog: 91, alt: 410, batt: 62 }, 'NTC001');
+  const normalized = normalizeOwnTracksLocation({ tst: Math.floor(Date.now() / 1000), lat: -14.01, lon: -49.19, acc: 7, vel: 36, cog: 91, alt: 410, batt: 62 }, 'NTC001');
   assert.equal(normalized.equipmentId, 'NTC001');
   assert.equal(normalized.speedMps, 10);
   assert.equal(normalized.bearingDeg, 91);

@@ -99,6 +99,17 @@ function groupEquipmentMembers(rows) {
 const DOUBLE_TRACK_RANGES = [[3880,6929],[32182,34217],[47902,48502],[59878,61914],[72242,72842],[84222,86207],[101202,101802],[110662,112737],[120192,120792]];
 const SPECIAL_TRACK_RANGES = { south_loop: [0,2734], line_egp: [5520,6084], welding_yard: [6099,6538] };
 const OPERATIONAL_LINES = ['line01', 'line02', ...Object.keys(SPECIAL_TRACK_RANGES)];
+const DASHBOARD_HISTORY_DAYS = 7;
+
+export function dashboardRange(from = null, to = null, now = Date.now()) {
+  const latest = new Date(to || now);
+  const safeTo = Number.isFinite(latest.valueOf()) ? latest : new Date(now);
+  const earliest = new Date(safeTo.valueOf() - DASHBOARD_HISTORY_DAYS * 86400000);
+  const requestedFrom = from ? new Date(from) : earliest;
+  const safeFrom = Number.isFinite(requestedFrom.valueOf()) && requestedFrom > earliest ? requestedFrom : earliest;
+  return { from: safeFrom.toISOString(), to: safeTo.toISOString() };
+}
+
 export function lineRangeAvailable(line, kmStart, kmEnd) {
   if (line === 'line01') return true;
   if (line === 'line02') return DOUBLE_TRACK_RANGES.some(([start, end]) => Number(kmStart) >= start && Number(kmEnd) <= end);
@@ -192,7 +203,7 @@ async function findEquipmentAssignmentConflict(env, equipmentIds, start, end, ig
 }
 
 async function baseState(env, from = null, to = null) {
-  const start = from || new Date(Date.now() - 31 * 86400000).toISOString(), end = to || new Date(Date.now() + 31 * 86400000).toISOString();
+  const { from: start, to: end } = dashboardRange(from, to);
   const [requesters, lines, equipment, operators, ldls, ldlLines, ldlEvents, circulations, circulationConsist, circulationMembers, circulationEvents, permissives, permissiveLinks, latest, safetyEvents] = await env.DB.batch([
     env.DB.prepare('SELECT code,name,role,company,supervisor,active FROM requesters ORDER BY active DESC,name'),
     env.DB.prepare('SELECT id,name,geometry_status,active FROM track_lines WHERE active=1 ORDER BY id'),
@@ -201,25 +212,30 @@ async function baseState(env, from = null, to = null) {
     env.DB.prepare(`SELECT l.*,r.name AS requester_name,r.company,c.name AS controller_name,uc.name AS updated_by_name FROM ldl l
       JOIN requesters r ON r.code=l.requester_code JOIN cco_controllers c ON c.code=l.created_by_controller LEFT JOIN cco_controllers uc ON uc.code=l.updated_by_controller
       WHERE l.status='active' OR (l.created_at>=? AND l.created_at<=?) ORDER BY l.created_at DESC`).bind(start, end),
-    env.DB.prepare('SELECT ldl_id,line_id FROM ldl_lines'),
+    env.DB.prepare(`SELECT ll.ldl_id,ll.line_id FROM ldl_lines ll JOIN ldl l ON l.id=ll.ldl_id
+      WHERE l.status='active' OR (l.created_at>=? AND l.created_at<=?)`).bind(start, end),
     env.DB.prepare(`SELECT e.id,e.ldl_id,e.event_type,e.controller_code,c.name AS controller_name,e.occurred_at,e.payload_json,l.permanent_code
       FROM ldl_events e JOIN cco_controllers c ON c.code=e.controller_code JOIN ldl l ON l.id=e.ldl_id
-      ORDER BY e.occurred_at DESC LIMIT 5000`),
+      WHERE l.status='active' OR (l.created_at>=? AND l.created_at<=?) ORDER BY e.occurred_at DESC LIMIT 500`).bind(start, end),
     env.DB.prepare(`SELECT c.*,e.name AS equipment_name,he.name AS helper_equipment_name,o.name AS operator_name,cc.name AS controller_name,uc.name AS updated_by_name FROM circulations c
       JOIN equipment e ON e.id=c.equipment_id LEFT JOIN equipment he ON he.id=c.helper_equipment_id LEFT JOIN operators o ON o.registration=c.operator_registration
       JOIN cco_controllers cc ON cc.code=c.authorized_by_controller LEFT JOIN cco_controllers uc ON uc.code=c.updated_by_controller
       WHERE c.status='authorized' OR (c.authorized_at>=? AND c.authorized_at<=?) ORDER BY c.authorized_at DESC`).bind(start, end),
-    env.DB.prepare('SELECT circulation_id,wagon_type,wagon_count,load_status,cargo_description FROM circulation_consist ORDER BY circulation_id,sequence_order'),
+    env.DB.prepare(`SELECT cc.circulation_id,cc.wagon_type,cc.wagon_count,cc.load_status,cc.cargo_description
+      FROM circulation_consist cc JOIN circulations c ON c.id=cc.circulation_id
+      WHERE c.status='authorized' OR (c.authorized_at>=? AND c.authorized_at<=?) ORDER BY cc.circulation_id,cc.sequence_order`).bind(start, end),
     env.DB.prepare(`SELECT cem.circulation_id,cem.equipment_id,e.name AS equipment_name,e.type AS equipment_type,cem.operational_role
-      FROM circulation_equipment_members cem JOIN equipment e ON e.id=cem.equipment_id ORDER BY cem.circulation_id,cem.sequence_order`),
+      FROM circulation_equipment_members cem JOIN equipment e ON e.id=cem.equipment_id JOIN circulations c ON c.id=cem.circulation_id
+      WHERE c.status='authorized' OR (c.authorized_at>=? AND c.authorized_at<=?) ORDER BY cem.circulation_id,cem.sequence_order`).bind(start, end),
     env.DB.prepare(`SELECT e.id,e.circulation_id,e.event_type,e.controller_code,c.name AS controller_name,e.occurred_at,e.payload_json,x.permanent_code
       FROM circulation_events e JOIN cco_controllers c ON c.code=e.controller_code JOIN circulations x ON x.id=e.circulation_id
-      ORDER BY e.occurred_at DESC LIMIT 5000`),
+      WHERE x.status='authorized' OR (x.authorized_at>=? AND x.authorized_at<=?) ORDER BY e.occurred_at DESC LIMIT 500`).bind(start, end),
     env.DB.prepare(`SELECT p.*,e.name AS equipment_name,o.name AS operator_name,cc.name AS controller_name FROM permissive_authorizations p
       JOIN equipment e ON e.id=p.equipment_id LEFT JOIN operators o ON o.registration=p.operator_registration
       JOIN cco_controllers cc ON cc.code=p.authorized_by_controller
       WHERE p.status='active' OR (p.authorized_at>=? AND p.authorized_at<=?) ORDER BY p.authorized_at DESC`).bind(start, end),
-    env.DB.prepare('SELECT permission_id,record_kind,record_id FROM permissive_links'),
+    env.DB.prepare(`SELECT pl.permission_id,pl.record_kind,pl.record_id FROM permissive_links pl JOIN permissive_authorizations p ON p.id=pl.permission_id
+      WHERE p.status='active' OR (p.authorized_at>=? AND p.authorized_at<=?)`).bind(start, end),
     env.DB.prepare('SELECT equipment_id,captured_at,latitude,longitude,accuracy_m,speed_mps,battery_pct FROM latest_positions'),
     env.DB.prepare(`SELECT s.*,l.permanent_code AS ldl_code FROM safety_events s JOIN ldl l ON l.id=s.ldl_id
       WHERE s.status='active' OR s.first_seen_at>=? ORDER BY CASE s.status WHEN 'active' THEN 0 ELSE 1 END,s.last_seen_at DESC LIMIT 100`).bind(start)

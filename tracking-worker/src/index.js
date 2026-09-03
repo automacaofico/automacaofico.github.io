@@ -24,6 +24,30 @@ function reply(request, body, status = 200, extra = {}) {
   return new Response(JSON.stringify(body), { status, headers: { ...JSON_HEADERS, ...cors(request), ...extra } });
 }
 
+function requestId() {
+  return crypto.randomUUID();
+}
+
+function withRequestMetadata(response, id, startedAt) {
+  const headers = new Headers(response.headers);
+  headers.set('x-request-id', id);
+  headers.set('server-timing', `app;dur=${Math.max(0, Date.now() - startedAt)}`);
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
+function logRequestFailure(request, id, error) {
+  const url = new URL(request.url);
+  console.error(JSON.stringify({
+    event: 'request_failed', requestId: id, method: request.method, path: url.pathname,
+    message: error instanceof Error ? error.message : String(error),
+  }));
+}
+
+async function readiness(request, env) {
+  await env.DB.prepare('SELECT 1 AS ok').first();
+  return reply(request, { ok: true, service: 'fico-tracking-api', database: 'ready', time: new Date().toISOString() }, 200, { 'cache-control': 'no-store' });
+}
+
 async function sha256(value) {
   const data = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest('SHA-256', data);
@@ -861,6 +885,7 @@ async function route(request, env) {
   const ntcResponse = await routeNtc(request, env);
   if (ntcResponse) return ntcResponse;
   if (request.method === 'GET' && url.pathname === '/health') return reply(request, { ok: true, service: 'fico-tracking-api', time: new Date().toISOString() });
+  if (request.method === 'GET' && url.pathname === '/ready') return readiness(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/activate') return activate(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/operators') return registerOperator(request, env);
   if (request.method === 'POST' && url.pathname === '/api/v1/admin/activation-codes/list') return listActivationCodes(request, env);
@@ -892,7 +917,24 @@ async function route(request, env) {
 }
 
 export default {
-  fetch: route,
+  async fetch(request, env) {
+    const id = requestId();
+    const startedAt = Date.now();
+    try {
+      const response = await route(request, env);
+      if (response.status >= 500) {
+        console.error(JSON.stringify({ event: 'request_5xx', requestId: id, method: request.method, path: new URL(request.url).pathname, status: response.status }));
+      }
+      return withRequestMetadata(response, id, startedAt);
+    } catch (error) {
+      logRequestFailure(request, id, error);
+      return reply(request, {
+        ok: false,
+        error: 'Serviço temporariamente indisponível. Tente novamente.',
+        requestId: id,
+      }, 503, { 'x-request-id': id, 'cache-control': 'no-store' });
+    }
+  },
   async scheduled(_event, env, ctx) {
     ctx.waitUntil(env.DB.batch([
       env.DB.prepare("DELETE FROM positions WHERE captured_at < datetime('now','-7 days')"),

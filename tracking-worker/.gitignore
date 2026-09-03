@@ -5,3 +5,5 @@ dist/
 .wrangler-history.log
 wrangler-radar*.log
 wrangler-radar*.err
+backups/
+.backup-validation/
