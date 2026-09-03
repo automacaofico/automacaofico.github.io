@@ -26,8 +26,15 @@ const els = {
   recenter: $('recenter'), sound: $('sound-toggle'), fleetList: $('fleet-list'), onlineCount: $('online-count'),
   fleetCount: $('fleet-count'), equipmentName: $('equipment-name'), equipmentAlias: $('equipment-alias'), equipmentType: $('equipment-type'), equipmentDescription: $('equipment-description'), equipmentMark: $('equipment-mark'),
   fitFleet: $('fit-fleet'), fitBlocks: $('fit-blocks'), operatorName: $('operator-name'), operatorDetail: $('operator-detail'), operatorAction: $('operator-action'),
-  railOperations: $('rail-operations'), railOperationStatus: $('rail-operation-status'), railOperationDetail: $('rail-operation-detail'), railOperationItems: $('rail-operation-items')
+  railOperations: $('rail-operations'), railOperationStatus: $('rail-operation-status'), railOperationDetail: $('rail-operation-detail'), railOperationItems: $('rail-operation-items'),
+  map: $('map'), mapLoading: $('map-loading')
 };
+
+function setMapLoading(message = '', complete = false) {
+  els.mapLoading.hidden = complete;
+  els.map.setAttribute('aria-busy', String(!complete));
+  if (message) els.mapLoading.querySelector('span').textContent = message;
+}
 
 function mapStyle() {
   return {
@@ -193,6 +200,7 @@ function initMap(axis) {
   state.map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-left');
   state.map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
   state.map.on('load', () => {
+    setMapLoading('Mapa pronto. Carregando detalhes do traçado…');
     state.map.addSource('packages', { type: 'geojson', data: packageCollection() });
     state.map.addLayer({ id: 'package-casing', type: 'line', source: 'packages', paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 6, 14, 11], 'line-opacity': .9 } });
     state.map.addLayer({ id: 'package-lines', type: 'line', source: 'packages', paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 3, 14, 7], 'line-opacity': .94 } });
@@ -218,10 +226,14 @@ function initMap(axis) {
     setBasemap(state.basemap);
     if (!state.initialFitDone && state.equipment.some((item) => item.receivedAt)) { state.initialFitDone = true; fitFleet(); }
     runWhenIdle(async () => {
-      const { addInfrastructureLayers } = await import('./rail-infrastructure-map.js?v=20260811-2');
-      if (!state.map?.loaded()) return;
-      addInfrastructureLayers(state.map, { sliceAxis: sliceCoordinates, pointAtStation });
-      addPackageMarkers();
+      try {
+        const { addInfrastructureLayers } = await import('./rail-infrastructure-map.js?v=20260811-2');
+        if (!state.map?.loaded()) return;
+        addInfrastructureLayers(state.map, { sliceAxis: sliceCoordinates, pointAtStation });
+        addPackageMarkers();
+      } finally {
+        setMapLoading('', true);
+      }
     });
   });
   state.map.on('click', (event) => {
@@ -594,6 +606,7 @@ fetch(AXIS_URL).then((response) => response.json()).then((data) => {
   scheduleRefreshes();
   setInterval(() => { const selected = currentEquipment(state.selectedId); if (selected) { renderFleetState(); renderSelected(selected); } }, 1000);
 }).catch((error) => {
+  setMapLoading('Não foi possível carregar o traçado ferroviário. Atualize a página para tentar novamente.');
   els.system.className = 'system-state offline'; els.system.querySelector('span').textContent = 'Traçado ferroviário indisponível'; console.error(error);
 });
 

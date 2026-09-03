@@ -73,7 +73,8 @@
 
     <section class="command-grid" aria-label="Painel de rastreamento">
       <article class="map-shell">
-        <div id="map" aria-label="Mapa do traçado da FICO e posição do equipamento"></div>
+        <div id="map" aria-label="Mapa do traçado da FICO e posição do equipamento" aria-busy="true"></div>
+        <div id="map-loading" class="map-loading" role="status" aria-live="polite"><i aria-hidden="true"></i><span>Preparando mapa operacional…</span></div>
         <div class="map-toolbar" aria-label="Controles do mapa">
           <div class="basemap-switch" aria-label="Mapa-base">
             <button type="button" class="active" data-basemap="street" aria-pressed="true">Ruas</button>
