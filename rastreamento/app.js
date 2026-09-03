@@ -13,7 +13,7 @@ const TYPE_LABELS = { locomotiva: 'Locomotiva', socadora: 'Socadora de via', reg
 const TYPE_MARKS = { locomotiva: 'L', socadora: 'S', reguladora: 'R', ntc: 'N' };
 const state = {
   axis: [], map: null, equipment: [], markers: new Map(), popup: null, popupPinnedId: null,
-  selectedId: 'LOCO001', latest: null, sound: false, priorOfflineCount: null, historyEquipment: null,
+  selectedId: 'LOCO001', latest: null, sound: false, priorOfflineCount: null, historyEquipment: null, historyAbortController: null,
   basemap: 'street', packageMarkers: [], kmPopup: null, initialFitDone: false,
   operations: { ldls: [], circulations: [], permissives: [], serverTime: null }, operationMarkers: [], operationPopup: null, operationsUnavailable: false,
   refresh: { equipmentTimer: null, operationsTimer: null, equipmentFailures: 0, operationsFailures: 0 }
@@ -533,15 +533,18 @@ function scheduleOperationsRefresh() {
 function scheduleRefreshes() { scheduleEquipmentRefresh(); scheduleOperationsRefresh(); }
 
 async function loadHistory(id) {
+  state.historyAbortController?.abort();
+  const controller = new AbortController();
+  state.historyAbortController = controller;
   state.historyEquipment = id;
   els.history.textContent = 'Carregando percurso recente…';
   if (state.map?.getSource('history')) state.map.getSource('history').setData({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [] } });
   try {
-    const response = await fetch(`${API_BASE}/api/v1/equipment/${encodeURIComponent(id)}/history?hours=24&limit=20000`);
+    const response = await fetch(`${API_BASE}/api/v1/equipment/${encodeURIComponent(id)}/history?hours=24&limit=5000&order=desc`, { signal: controller.signal });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    if (state.historyEquipment !== id) return;
-    const positions = data.positions || [];
+    if (state.historyEquipment !== id || state.historyAbortController !== controller) return;
+    const positions = (data.positions || []).reverse();
     const projected = positions.map((point) => ({
       ...point,
       projection: projectToAxis(point.longitude, point.latitude),
@@ -564,7 +567,8 @@ async function loadHistory(id) {
     } else {
       els.history.textContent = `${positions.length.toLocaleString('pt-BR')} posições recebidas; percurso corrigido pela precisão do GPS.`;
     }
-  } catch { if (state.historyEquipment === id) els.history.textContent = 'Não foi possível carregar o percurso recente.'; }
+  } catch (error) { if (error.name !== 'AbortError' && state.historyEquipment === id) els.history.textContent = 'Não foi possível carregar o percurso recente.'; }
+  finally { if (state.historyAbortController === controller) state.historyAbortController = null; }
 }
 
 els.sound.addEventListener('click', () => {

@@ -779,11 +779,12 @@ async function history(request, env, id) {
   const url = new URL(request.url);
   const hours = Math.min(168, Math.max(1, Number(url.searchParams.get('hours')) || 24));
   const limit = Math.min(20_000, Math.max(1, Number(url.searchParams.get('limit')) || 5_000));
+  const order = url.searchParams.get('order') === 'desc' ? 'DESC' : 'ASC';
   const since = new Date(Date.now() - hours * 3_600_000).toISOString();
   const rows = await env.DB.prepare(`SELECT equipment_id,captured_at,received_at,latitude,longitude,
     accuracy_m,speed_mps,bearing_deg,altitude_m,battery_pct,sequence_no
     FROM positions WHERE equipment_id=? AND captured_at>=?
-    ORDER BY captured_at ASC LIMIT ?`).bind(equipmentId, since, limit).all();
+    ORDER BY captured_at ${order} LIMIT ?`).bind(equipmentId, since, limit).all();
   return reply(request, { ok: true, equipmentId, since, positions: rows.results.map(serialize) }, 200, { 'cache-control': 'public, max-age=5' });
 }
 
