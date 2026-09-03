@@ -1,5 +1,4 @@
 import { analyzeProjectedTrack } from './operacao/motion.js';
-import { addInfrastructureLayers } from './rail-infrastructure-map.js?v=20260811-2';
 import { lineCoordinates, LINE_LABELS } from './rail-infrastructure.js?v=20260811-2';
 import { RAIL_PACKAGES as PACKAGES, packageAt, packageCollection as buildPackageCollection } from './rail-packages.js?v=20260811-1';
 
@@ -67,6 +66,11 @@ function sliceCoordinates(start, end) {
 
 function packageCollection() {
   return buildPackageCollection(sliceCoordinates, state.axis.at(-1)?.station_m || 0);
+}
+
+function runWhenIdle(callback) {
+  if ('requestIdleCallback' in window) return window.requestIdleCallback(callback, { timeout: 1200 });
+  return window.setTimeout(callback, 0);
 }
 
 function addPackageMarkers() {
@@ -193,7 +197,6 @@ function initMap(axis) {
     state.map.addLayer({ id: 'package-casing', type: 'line', source: 'packages', paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 6, 14, 11], 'line-opacity': .9 } });
     state.map.addLayer({ id: 'package-lines', type: 'line', source: 'packages', paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 3, 14, 7], 'line-opacity': .94 } });
     state.map.addLayer({ id: 'package-hit', type: 'line', source: 'packages', paint: { 'line-color': '#ffffff', 'line-width': 24, 'line-opacity': .01 } });
-    addInfrastructureLayers(state.map, { sliceAxis: sliceCoordinates, pointAtStation });
     state.map.addSource('history', { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [] } } });
     state.map.addLayer({ id: 'history', type: 'line', source: 'history', paint: { 'line-color': '#32a6d8', 'line-width': 4, 'line-opacity': .9 } });
     state.map.addSource('ldl-blocks', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
@@ -202,7 +205,6 @@ function initMap(axis) {
     state.map.addSource('permissive-operations', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
     state.map.addLayer({ id: 'permissive-casing', type: 'line', source: 'permissive-operations', paint: { 'line-color': '#082b4c', 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 10, 14, 15], 'line-opacity': .95 } });
     state.map.addLayer({ id: 'permissive-operations', type: 'line', source: 'permissive-operations', paint: { 'line-color': '#f4c430', 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 6, 14, 9], 'line-dasharray': [1.2, .8] } });
-    addPackageMarkers();
     state.map.on('mouseenter', 'package-hit', () => { state.map.getCanvas().style.cursor = 'crosshair'; });
     state.map.on('mousemove', 'package-hit', (event) => showKmReadout(event.lngLat));
     state.map.on('mouseleave', 'package-hit', () => { state.map.getCanvas().style.cursor = ''; state.kmPopup?.remove(); });
@@ -215,6 +217,12 @@ function initMap(axis) {
     renderRailOperations();
     setBasemap(state.basemap);
     if (!state.initialFitDone && state.equipment.some((item) => item.receivedAt)) { state.initialFitDone = true; fitFleet(); }
+    runWhenIdle(async () => {
+      const { addInfrastructureLayers } = await import('./rail-infrastructure-map.js?v=20260811-2');
+      if (!state.map?.loaded()) return;
+      addInfrastructureLayers(state.map, { sliceAxis: sliceCoordinates, pointAtStation });
+      addPackageMarkers();
+    });
   });
   state.map.on('click', (event) => {
     state.popupPinnedId = null; state.popup?.remove();
