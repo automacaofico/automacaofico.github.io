@@ -15,7 +15,8 @@ const state = {
   axis: [], map: null, equipment: [], markers: new Map(), popup: null, popupPinnedId: null,
   selectedId: 'LOCO001', latest: null, sound: false, priorOfflineCount: null, historyEquipment: null,
   basemap: 'street', packageMarkers: [], kmPopup: null, initialFitDone: false,
-  operations: { ldls: [], circulations: [], permissives: [], serverTime: null }, operationMarkers: [], operationPopup: null, operationsUnavailable: false
+  operations: { ldls: [], circulations: [], permissives: [], serverTime: null }, operationMarkers: [], operationPopup: null, operationsUnavailable: false,
+  refresh: { equipmentTimer: null, operationsTimer: null, equipmentFailures: 0, operationsFailures: 0 }
 };
 
 const $ = (id) => document.getElementById(id);
@@ -481,9 +482,13 @@ async function loadLatest() {
     const selected = currentEquipment(state.selectedId) || state.equipment[0];
     if (selected) { state.selectedId = selected.equipmentId; renderSelected(selected); if (selected.receivedAt && state.historyEquipment !== selected.equipmentId) loadHistory(selected.equipmentId); }
     if (!state.initialFitDone && state.map?.loaded() && state.equipment.some((item) => item.receivedAt)) { state.initialFitDone = true; fitFleet(); }
+    state.refresh.equipmentFailures = 0;
+    return true;
   } catch (error) {
     els.system.className = 'system-state offline'; els.system.querySelector('span').textContent = 'Serviço de rastreamento indisponível';
     console.warn('Falha ao consultar posições', error);
+    state.refresh.equipmentFailures += 1;
+    return false;
   }
 }
 
@@ -494,10 +499,38 @@ async function loadRailOperations() {
     const data = await response.json();
     state.operations = { ldls: data.ldls || [], circulations: data.circulations || [], permissives: data.permissives || [], serverTime: data.serverTime };
     state.operationsUnavailable = false; renderRailOperations(); state.equipment.forEach(updateMarker);
+    state.refresh.operationsFailures = 0;
+    return true;
   } catch (error) {
     state.operationsUnavailable = true; renderRailOperations(); console.warn('Falha ao consultar bloqueios do CCO', error);
+    state.refresh.operationsFailures += 1;
+    return false;
   }
 }
+
+function refreshDelay(baseMs, failures) {
+  return Math.min(60_000, baseMs * 2 ** failures);
+}
+
+function scheduleEquipmentRefresh() {
+  clearTimeout(state.refresh.equipmentTimer);
+  if (document.hidden) return;
+  state.refresh.equipmentTimer = setTimeout(async () => {
+    await loadLatest();
+    scheduleEquipmentRefresh();
+  }, refreshDelay(10_000, state.refresh.equipmentFailures));
+}
+
+function scheduleOperationsRefresh() {
+  clearTimeout(state.refresh.operationsTimer);
+  if (document.hidden) return;
+  state.refresh.operationsTimer = setTimeout(async () => {
+    await loadRailOperations();
+    scheduleOperationsRefresh();
+  }, refreshDelay(30_000, state.refresh.operationsFailures));
+}
+
+function scheduleRefreshes() { scheduleEquipmentRefresh(); scheduleOperationsRefresh(); }
 
 async function loadHistory(id) {
   state.historyEquipment = id;
@@ -546,9 +579,13 @@ document.querySelectorAll('[data-package]').forEach((button) => button.addEventL
 
 fetch(AXIS_URL).then((response) => response.json()).then((data) => {
   state.axis = data.points; initMap(state.axis); loadLatest(); loadRailOperations();
-  setInterval(loadLatest, 5000);
-  setInterval(loadRailOperations, 5000);
+  scheduleRefreshes();
   setInterval(() => { const selected = currentEquipment(state.selectedId); if (selected) { renderFleetState(); renderSelected(selected); } }, 1000);
 }).catch((error) => {
   els.system.className = 'system-state offline'; els.system.querySelector('span').textContent = 'Traçado ferroviário indisponível'; console.error(error);
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) scheduleRefreshes();
+  else { loadLatest(); loadRailOperations(); scheduleRefreshes(); }
 });

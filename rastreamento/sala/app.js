@@ -21,6 +21,7 @@ const els = {
 };
 let axis = [], grid = new Map(), map, equipment = [], operations = { ldls: [], circulations: [], permissives: [], safetyEvents: [] };
 let markers = new Map(), kmPopup, operationPopup, equipmentPopup, hoveredEquipmentId = null, lastSuccess = 0;
+let refreshTimer, refreshFailures = 0;
 let lastCriticalSignature = '', lastCriticalSoundAt = 0, lastWarningSignature = '';
 const safetyAudio = createSafetyAudio(els.sound, 'ficoTvSafetySound');
 
@@ -253,8 +254,15 @@ async function load() {
     const equipmentData = await equipmentResponse.json(), operationsData = await operationsResponse.json();
     equipment = (equipmentData.equipment || []).sort((a, b) => a.equipmentId.localeCompare(b.equipmentId));
     operations = { ldls: operationsData.ldls || [], circulations: operationsData.circulations || [], permissives: operationsData.permissives || [], safetyEvents: operationsData.safetyEvents || [] };
-    lastSuccess = Date.now(); els.connection.textContent = 'MONITORAMENTO AO VIVO'; els.updated.textContent = `Dados renovados às ${new Date(lastSuccess).toLocaleTimeString('pt-BR')} · ciclo de 5 s`; document.querySelector('.live').classList.remove('stale'); render();
-  } catch (error) { els.connection.textContent = 'CONEXÃO INTERROMPIDA'; els.updated.textContent = `Mantendo última leitura · ${error.message}`; document.querySelector('.live').classList.add('stale'); }
+    lastSuccess = Date.now(); refreshFailures = 0; els.connection.textContent = 'MONITORAMENTO AO VIVO'; els.updated.textContent = `Dados renovados às ${new Date(lastSuccess).toLocaleTimeString('pt-BR')} · ciclo adaptativo`; document.querySelector('.live').classList.remove('stale'); render(); return true;
+  } catch (error) { refreshFailures += 1; els.connection.textContent = 'CONEXÃO INTERROMPIDA'; els.updated.textContent = `Mantendo última leitura · ${error.message}`; document.querySelector('.live').classList.add('stale'); return false; }
+}
+
+function scheduleRefresh() {
+  clearTimeout(refreshTimer);
+  if (document.hidden) return;
+  const delay = Math.min(60_000, 10_000 * 2 ** refreshFailures);
+  refreshTimer = setTimeout(async () => { await load(); scheduleRefresh(); }, delay);
 }
 
 document.querySelectorAll('[data-basemap]').forEach((button) => button.onclick = () => { const satellite = button.dataset.basemap === 'satellite'; if (!map) return; map.setLayoutProperty('osm', 'visibility', satellite ? 'none' : 'visible'); map.setLayoutProperty('satellite', 'visibility', satellite ? 'visible' : 'none'); document.querySelectorAll('[data-basemap]').forEach((item) => item.classList.toggle('active', item === button)); });
@@ -262,4 +270,5 @@ els.fit.onclick = fitRailway;
 els.fullscreen.onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
 document.addEventListener('fullscreenchange', () => els.fullscreen.textContent = document.fullscreenElement ? 'SAIR DA TELA CHEIA' : 'TELA CHEIA');
 setInterval(() => { const now = new Date(); els.clock.textContent = now.toLocaleTimeString('pt-BR'); els.today.textContent = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' }).format(now); if (lastSuccess && Date.now() - lastSuccess > 15000) document.querySelector('.live').classList.add('stale'); }, 1000);
-fetch(AXIS_URL).then((response) => response.json()).then((data) => { prepareAxis(data.points); initMap(); load(); setInterval(load, 5000); }).catch((error) => { els.connection.textContent = 'TRAÇADO INDISPONÍVEL'; els.updated.textContent = error.message; document.querySelector('.live').classList.add('stale'); });
+fetch(AXIS_URL).then((response) => response.json()).then((data) => { prepareAxis(data.points); initMap(); load(); scheduleRefresh(); }).catch((error) => { els.connection.textContent = 'TRAÇADO INDISPONÍVEL'; els.updated.textContent = error.message; document.querySelector('.live').classList.add('stale'); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) scheduleRefresh(); else { load(); scheduleRefresh(); } });
