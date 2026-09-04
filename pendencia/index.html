@@ -304,12 +304,23 @@
     header.topo{border-radius:0;box-shadow:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .painel{display:none !important}
     .painel.ativo{display:block !important;animation:none}
-    .kpi,.card,.comp-card,.gap-box,.alerta,.timeline-wrap,table.cenarios,table.tipos,footer{
+    .kpi,.card,.comp-card,.gap-box,.alerta,.timeline-wrap,footer{
       box-shadow:none !important;border:1px solid var(--cinza-borda);break-inside:avoid;
       -webkit-print-color-adjust:exact;print-color-adjust:exact}
+    /* Tabelas grandes (Detalhamento por Tipo, Tendência): não força a tabela inteira em 1
+       página — quando ela não cabe, isso rendia página em branco. Deixa fluir e quebra
+       só entre linhas, não no meio de uma linha. */
+    table.cenarios,table.tipos,table.tend-tabela{
+      box-shadow:none !important;border:1px solid var(--cinza-borda);
+      -webkit-print-color-adjust:exact;print-color-adjust:exact}
+    table.cenarios tr,table.tipos tr,table.tend-tabela tr{break-inside:avoid}
+    table.cenarios thead,table.tipos thead,table.tend-tabela thead{display:table-header-group}
     *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}
     .grafico{height:250px}
     .barra-avanco .fill::after{display:none}
+    /* Containers com scroll horizontal na tela (tabelas largas) não têm "rolagem" no papel —
+       sem isso a tabela some (fica em branco) em vez de estourar a largura da página. */
+    .tend-mes,[style*="overflow-x:auto"],[style*="overflow-x: auto"]{overflow:visible !important}
   }
   @media (max-width:1200px){
     .kpis{grid-template-columns:repeat(2,1fr)}
