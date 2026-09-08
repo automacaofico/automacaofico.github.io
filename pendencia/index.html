@@ -1043,11 +1043,11 @@ function renderEmpresa(key){
     const pctNaoCertE=certTot?(E.naoCertGeral/certTot*100).toFixed(1):0;
     const certPendE=E.certGeral-E.finCertGeral, naoCertPendE=E.naoCertGeral-E.finSemImpGeral;
     h+='<h2 class="secao '+scls+'">Impacto na certificação</h2><div class="grid-2">'
+      +'<div class="card"><h3>Pendente por tipo · certificáveis</h3><div id="g_certtipo_'+slug(key)+'" class="grafico"></div></div>'
       +'<div class="kpis stagger" style="grid-template-columns:1fr;align-content:start;gap:16px">'
       +'<div class="kpi vermelho"><div class="rot">Impactam certificação</div><div class="val">'+E.certGeral+'</div><div class="sub">'+pctCertE+'% do total classificado</div>'+kpiStrat(E.finCertGeral,certPendE,E.certGeral)+'</div>'
       +'<div class="kpi azul"><div class="rot">Não impactam certificação</div><div class="val">'+E.naoCertGeral+'</div><div class="sub">'+pctNaoCertE+'% do total classificado</div>'+kpiStrat(E.finSemImpGeral,naoCertPendE,E.naoCertGeral)+'</div>'
       +'</div>'
-      +'<div class="card"><h3>Certificação × Não certificação</h3><div id="g_cert_'+slug(key)+'" class="grafico"></div></div>'
       +'</div>';
   }
 
@@ -1134,6 +1134,16 @@ function renderChartImpc(key){
       data:[{value:imp,name:'Impacta certificação',itemStyle:{color:CORES.vermelho}},{value:naoImp,name:'Não impacta',itemStyle:{color:CORES.azul}}]}]},true);
 }
 
+function renderChartCertTipo(key){
+  const E=D.EMP[key]; if(!E)return;
+  const tiposE=E.tiposGeral||[];
+  const ct=initChart('g_certtipo_'+slug(key)); if(!ct)return;
+  ct.setOption({tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},grid:baseGrid(),
+    xAxis:{type:'category',data:tiposE.map(x=>x.tipo),axisLabel:{fontSize:10,color:CORES.navy,interval:0}},
+    yAxis:{type:'value',name:'Pendente de execução',nameTextStyle:{fontSize:10,color:CORES.navy},axisLabel:{fontSize:10,color:'#8898B0'},splitLine:{lineStyle:{color:'#EEF'}}},
+    series:[{name:'Impacta certificação',type:'bar',color:CORES.vermelho,barWidth:'55%',itemStyle:{borderRadius:[5,5,0,0]},label:{show:true,position:'top',color:CORES.navy,fontSize:10,fontWeight:'bold'},data:tiposE.map(x=>x.pendExecCert||0)}]},true);
+}
+
 function renderCharts(){
   const PAC=D.PAC, ks=['p1','p1a','p1b','p1c','p2','p3','p5'].filter(k=>PAC[k]);
 
@@ -1193,12 +1203,7 @@ function renderCharts(){
     // Dentro do que ainda está pendente (ou já executado) de cada tipo, quanto disso impacta
     // certificação — para priorizar o que resta. Toggle Pendente/Executado no título do card.
     renderChartG4(key);
-    const certTotE=E.certGeral+E.naoCertGeral;
-    const ce2=initChart('g_cert_'+slug(key));
-    if(ce2)ce2.setOption({tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},legend:{bottom:0,textStyle:{fontSize:11}},
-      series:[{type:'pie',radius:['56%','78%'],center:['50%','44%'],avoidLabelOverlap:false,itemStyle:{borderRadius:6,borderColor:'#fff',borderWidth:3},
-        label:{show:true,position:'center',formatter:certTotE+'\nclassificadas',fontSize:16,fontWeight:'bold',color:CORES.navy,lineHeight:20},
-        data:[{value:E.certGeral,name:'Impacta certificação',itemStyle:{color:CORES.vermelho}},{value:E.naoCertGeral,name:'Não impacta',itemStyle:{color:CORES.azul}}]}]});
+    renderChartCertTipo(key);
   });
 }
 
