@@ -1030,7 +1030,7 @@ function renderEmpresa(key){
   h+='<div class="grid-2" style="margin-top:16px;align-items:start">'
     +'<div>'
       +'<div class="card"><h3>Executado × Pendente por tipo'+toggleBtnHTML('G1',key)+'</h3><div id="g_tipo_'+slug(key)+'" class="grafico"></div></div>'
-      +'<div class="card" style="margin-top:16px"><h3>Por tipo × impacto na certificação'+toggleBtnHTML('G4',key)+'</h3><div id="g_pendcert_'+slug(key)+'" class="grafico"></div></div>'
+      +'<div class="card" style="margin-top:16px"><h3>Por tipo × Geral'+toggleBtnHTML('G4',key)+'</h3><div id="g_pendcert_'+slug(key)+'" class="grafico"></div></div>'
     +'</div>'
     +'<div>'
       +'<div class="card"><h3>Composição da execução</h3><div id="g_comp_'+slug(key)+'" class="grafico"></div></div>'
@@ -1125,7 +1125,7 @@ function renderChartImpc(key){
   const modo=MODO_IMPC[key]||CICLO_IMPC[0];
   const impc=initChart('g_impc_'+slug(key)); if(!impc)return;
   let imp,naoImp,base;
-  if(modo==='pendente'){ base=E.totalGeral-E.execGeral; imp=E.pendExecCertGeral; naoImp=base-imp; }
+  if(modo==='pendente'){ base=E.pendGeral; imp=E.pendExecCertGeral; naoImp=base-imp; }
   else if(modo==='executado'){ base=E.execGeral; imp=E.execCertGeral; naoImp=base-imp; }
   else{ base=E.certGeral+E.naoCertGeral; imp=E.certGeral; naoImp=E.naoCertGeral; }
   impc.setOption({tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},legend:{bottom:0,textStyle:{fontSize:11}},
