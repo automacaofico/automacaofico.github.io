@@ -239,6 +239,11 @@
       <input type="file" id="file-input" accept=".xlsx">
     </div>
 
+    <div class="field" id="campoDataRef" style="display:none">
+      <label for="dataRefUpload">Data de referência do painel</label>
+      <input type="text" id="dataRefUpload" maxlength="10" placeholder="dd/mm/aaaa">
+    </div>
+
     <div class="field">
       <label for="usuario">Responsável pela atualização</label>
       <input type="text" id="usuario" autocomplete="name" maxlength="120" placeholder="Seu nome">
@@ -292,11 +297,51 @@
   const lembrarChk = document.getElementById('lembrar');
   const statusEl = document.getElementById('status');
   const submitBtn = document.getElementById('submit-btn');
+  const campoDataRef = document.getElementById('campoDataRef');
+  const dataRefInput = document.getElementById('dataRefUpload');
+  const MANUAL_URL = WORKER_URL + '/api/v1/dashboards/pendencias_r1/manual';
   let chosenFile = null;
 
   const savedSenha = sessionStorage.getItem('fico_upload_senha');
   if (savedSenha) { senhaInput.value = savedSenha; lembrarChk.checked = true; }
   usuarioInput.value = localStorage.getItem('fico_upload_usuario') || '';
+
+  // A Gestão de Pendências mostra "Data de referência" no topo do painel — vem de
+  // manual-data.json e não é tocada pelo upload da planilha em si. Sempre que essa
+  // planilha é atualizada por aqui, sincronizamos essa data junto (evita ficar
+  // desatualizada até alguém lembrar de editar em "Editar painel e programação").
+  function hojeBR() {
+    const d = new Date();
+    return String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+  }
+  function atualizarCampoDataRef() {
+    const ehPendencias = selectedDashboard() === 'pendenciasr1';
+    campoDataRef.style.display = ehPendencias ? 'block' : 'none';
+    if (ehPendencias && !dataRefInput.value.trim()) dataRefInput.value = hojeBR();
+  }
+  document.querySelectorAll('input[name=repoKey]').forEach(r => r.addEventListener('change', atualizarCampoDataRef));
+  atualizarCampoDataRef();
+
+  async function sincronizarDataReferencia(token) {
+    const novaData = dataRefInput.value.trim();
+    if (!novaData) return { ok: true, skipped: true };
+    try {
+      const getResp = await fetch(MANUAL_URL + '?t=' + Date.now(), { cache: 'no-store' });
+      const atual = getResp.ok ? await getResp.json().catch(() => ({})) : {};
+      const data = Object.assign({ meta: {}, pacotes: [], cenarios: [], alertas: [] }, atual);
+      data.meta = Object.assign({}, data.meta, { DATA_REFERENCIA: novaData });
+      const saveResp = await fetch(MANUAL_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ data })
+      });
+      const saveData = await saveResp.json().catch(() => ({}));
+      if (!saveResp.ok) throw new Error(saveData.error || 'Falha ao salvar.');
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
 
   dz.addEventListener('click', () => fileInput.click());
   dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
@@ -419,6 +464,15 @@
         if (!resp.ok) throw new Error(data.error || 'Falha ao publicar.');
         setSteps(7);
         renderSuccess(data, repoKey);
+        if (repoKey === 'pendenciasr1' && dataRefInput.value.trim()) {
+          const dataDigitada = dataRefInput.value.trim();
+          const sync = await sincronizarDataReferencia(token);
+          if (sync.ok && !sync.skipped) {
+            statusEl.textContent += ' · Data de referência: ' + dataDigitada;
+          } else if (!sync.ok) {
+            statusEl.textContent += ' · ⚠️ Data de referência não sincronizada (' + sync.error + '). Atualize em "Editar painel e programação".';
+          }
+        }
       } else {
         document.getElementById('process-steps').classList.remove('show');
         setStatus('busy', '🔄 Serviço atual detectado. Enviando…');
