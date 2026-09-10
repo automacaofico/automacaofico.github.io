@@ -1215,50 +1215,86 @@ function renderCharts(){
 // de mobilização/cenários/alertas, que também não vêm da planilha).
 // ============================================================
 const TENDENCIA_EMPRESAS=['GSA','EMPA','ATERPA','ÁPIA','CIVIL MASTER','VALE','SOMAFEL'];
-// [meta,real,%] — a % vem pronta da planilha (a meta exibida é arredondada, então recalcular a
-// partir do inteiro diverge do valor real da planilha). A coluna "Tend." que existia antes foi
-// removida pela própria planilha nesta atualização; "total" por empresa é a soma de Real no mês
-// (coluna "Total Encerradas" da planilha).
+// [meta,real,%] — Real e "total" (coluna "Total Encerradas") vêm direto da aba "Tendência -
+// Protocolo Leo". A META semanal da planilha é distribuída de forma desigual entre as semanas
+// (front-loaded), então em semanas com meta muito baixa a % (Real÷Meta, também vinda da planilha)
+// estoura (ex.: EMPA jul, CIVIL MASTER jul). Um único valor quebrado foi corrigido: CIVIL MASTER
+// ago/S4 tinha meta negativa na planilha -> tratado como meta 0.
 const TENDENCIA_DATA={
-  atualizadoAte:'03/09/2026 (fonte: aba "Tendência - Protocolo Leo")',
+  atualizadoAte:'10/09/2026 (fonte: aba "Tendência - Protocolo Leo")',
   meses:[
     {mes:'Junho/26',encerradas:110,semanas:[
-      {label:'S1 (01/06 a 08/06)',encerradas:0,dados:{GSA:[5,0,0],EMPA:[16,0,0],ATERPA:[8,0,0],'ÁPIA':[25,0,0],'CIVIL MASTER':[16,0,0],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
-      {label:'S2 (10/06 a 15/06)',encerradas:13,dados:{GSA:[6,1,18],EMPA:[17,7,42],ATERPA:[9,4,45],'ÁPIA':[27,0,0],'CIVIL MASTER':[17,1,6],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
-      {label:'S3 (17/06 a 22/06)',encerradas:19,dados:{GSA:[6,2,34],EMPA:[17,5,29],ATERPA:[9,12,131],'ÁPIA':[29,0,0],'CIVIL MASTER':[18,0,0],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
-      {label:'S4 (24/06 a 30/06)',encerradas:78,dados:{GSA:[6,0,0],EMPA:[18,12,65],ATERPA:[9,10,112],'ÁPIA':[31,55,179],'CIVIL MASTER':[20,1,5],VALE:[1,0,0],SOMAFEL:[1,0,0]}}
-    ],totais:{GSA:3,EMPA:24,ATERPA:26,'ÁPIA':55,'CIVIL MASTER':2,VALE:0,SOMAFEL:0}},
+      {label:'S1 (01/06 a 08/06)',encerradas:0,dados:{GSA:[5,0,0],EMPA:[13,0,0],ATERPA:[19,0,0],'ÁPIA':[24,0,0],'CIVIL MASTER':[5,0,0],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
+      {label:'S2 (10/06 a 15/06)',encerradas:13,dados:{GSA:[6,1,17],EMPA:[14,7,48],ATERPA:[20,5,25],'ÁPIA':[26,0,0],'CIVIL MASTER':[5,0,0],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
+      {label:'S3 (17/06 a 22/06)',encerradas:19,dados:{GSA:[6,2,33],EMPA:[15,5,33],ATERPA:[21,12,57],'ÁPIA':[28,0,0],'CIVIL MASTER':[6,0,0],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
+      {label:'S4 (24/06 a 30/06)',encerradas:78,dados:{GSA:[6,0,0],EMPA:[16,12,77],ATERPA:[22,10,46],'ÁPIA':[30,55,184],'CIVIL MASTER':[6,1,17],VALE:[1,0,0],SOMAFEL:[1,0,0]}}
+    ],totais:{GSA:3,EMPA:24,ATERPA:27,'ÁPIA':55,'CIVIL MASTER':1,VALE:0,SOMAFEL:0}},
     {mes:'Julho/26',encerradas:455,semanas:[
-      {label:'S1 (01/07 a 08/07)',encerradas:168,dados:{GSA:[7,0,0],EMPA:[21,101,488],ATERPA:[11,1,9],'ÁPIA':[33,29,88],'CIVIL MASTER':[21,37,174],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
-      {label:'S2 (10/07 a 15/07)',encerradas:50,dados:{GSA:[8,0,0],EMPA:[14,21,146],ATERPA:[12,7,59],'ÁPIA':[34,7,20],'CIVIL MASTER':[20,15,74],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
-      {label:'S3 (17/07 a 22/07)',encerradas:105,dados:{GSA:[8,3,37],EMPA:[14,85,620],ATERPA:[12,6,48],'ÁPIA':[37,0,0],'CIVIL MASTER':[21,11,53],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
-      {label:'S4 (24/07 a 31/07)',encerradas:132,dados:{GSA:[9,0,0],EMPA:[6,69,1081],ATERPA:[13,15,115],'ÁPIA':[41,17,42],'CIVIL MASTER':[22,31,141],VALE:[1,0,0],SOMAFEL:[1,0,0]}}
+      {label:'S1 (01/07 a 08/07)',encerradas:168,dados:{GSA:[7,0,0],EMPA:[18,101,568],ATERPA:[25,1,4],'ÁPIA':[32,29,90],'CIVIL MASTER':[6,37,580],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
+      {label:'S2 (10/07 a 15/07)',encerradas:50,dados:{GSA:[8,0,0],EMPA:[11,21,189],ATERPA:[27,7,26],'ÁPIA':[33,7,21],'CIVIL MASTER':[4,15,382],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
+      {label:'S3 (17/07 a 22/07)',encerradas:105,dados:{GSA:[9,3,35],EMPA:[10,85,836],ATERPA:[29,6,21],'ÁPIA':[36,0,0],'CIVIL MASTER':[3,11,380],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
+      {label:'S4 (24/07 a 31/07)',encerradas:132,dados:{GSA:[9,0,0],EMPA:[2,69,2793],ATERPA:[32,15,47],'ÁPIA':[39,17,43],'CIVIL MASTER':[2,31,1506],VALE:[1,0,0],SOMAFEL:[1,0,0]}}
     ],totais:{GSA:3,EMPA:276,ATERPA:29,'ÁPIA':53,'CIVIL MASTER':94,VALE:0,SOMAFEL:0}},
-    {mes:'Agosto/26',encerradas:545,semanas:[
-      {label:'S1 (01/08 a 08/08)',encerradas:184,dados:{GSA:[10,0,0],EMPA:[31,33,105],ATERPA:[16,39,237],'ÁPIA':[50,112,223],'CIVIL MASTER':[32,0,0],VALE:[2,0,0],SOMAFEL:[2,0,0]}},
-      {label:'S2 (10/08 a 15/08)',encerradas:79,dados:{GSA:[12,3,25],EMPA:[32,34,105],ATERPA:[14,1,7],'ÁPIA':[44,1,2],'CIVIL MASTER':[38,40,106],VALE:[2,0,0],SOMAFEL:[2,0,0]}},
-      {label:'S3 (17/08 a 22/08)',encerradas:170,dados:{GSA:[14,4,30],EMPA:[32,65,202],ATERPA:[16,19,118],'ÁPIA':[50,36,71],'CIVIL MASTER':[38,46,123],VALE:[2,0,0],SOMAFEL:[2,0,0]}},
-      // % de S4/ago vinha quebrada na planilha (fórmula com erro); recalculada aqui a partir de Real÷Meta.
-      {label:'S4 (24/08 a 30/08)',encerradas:112,dados:{GSA:[15,1,7],EMPA:[26,66,254],ATERPA:[16,4,25],'ÁPIA':[53,22,42],'CIVIL MASTER':[36,19,53],VALE:[2,0,0],SOMAFEL:[3,0,0]}}
-    ],totais:{GSA:8,EMPA:198,ATERPA:63,'ÁPIA':171,'CIVIL MASTER':105,VALE:0,SOMAFEL:0}},
-    {mes:'Setembro/26',encerradas:2,semanas:[
-      {label:'S1 (01/09 a 08/09)',encerradas:2,dados:{GSA:[21,0,0],EMPA:[65,2,3],ATERPA:[34,0,0],'ÁPIA':[104,0,0],'CIVIL MASTER':[67,0,0],VALE:[3,0,0],SOMAFEL:[3,0,0]}},
-      {label:'S2 (10/09 a 15/09)',encerradas:0,dados:{GSA:[31,0,0],EMPA:[93,0,0],ATERPA:[49,0,0],'ÁPIA':[151,0,0],'CIVIL MASTER':[97,0,0],VALE:[5,0,0],SOMAFEL:[5,0,0]}},
-      {label:'S3 (17/09 a 22/09)',encerradas:0,dados:{GSA:[47,0,0],EMPA:[144,0,0],ATERPA:[76,0,0],'ÁPIA':[232,0,0],'CIVIL MASTER':[149,0,0],VALE:[7,0,0],SOMAFEL:[8,0,0]}},
-      {label:'S4 (24/09 a 30/09)',encerradas:0,dados:{GSA:[88,0,0],EMPA:[267,0,0],ATERPA:[141,0,0],'ÁPIA':[430,0,0],'CIVIL MASTER':[276,0,0],VALE:[13,0,0],SOMAFEL:[14,0,0]}}
-    ],totais:{GSA:0,EMPA:2,ATERPA:0,'ÁPIA':0,'CIVIL MASTER':0,VALE:0,SOMAFEL:0}}
+    {mes:'Agosto/26',encerradas:547,semanas:[
+      {label:'S1 (01/08 a 08/08)',encerradas:184,dados:{GSA:[11,0,0],EMPA:[27,33,122],ATERPA:[37,39,104],'ÁPIA':[49,112,230],'CIVIL MASTER':[10,0,0],VALE:[2,0,0],SOMAFEL:[2,0,0]}},
+      {label:'S2 (10/08 a 15/08)',encerradas:79,dados:{GSA:[13,3,24],EMPA:[27,34,125],ATERPA:[39,1,3],'ÁPIA':[42,1,2],'CIVIL MASTER':[11,40,351],VALE:[2,0,0],SOMAFEL:[2,0,0]}},
+      {label:'S3 (17/08 a 22/08)',encerradas:170,dados:{GSA:[14,4,28],EMPA:[26,65,249],ATERPA:[45,19,43],'ÁPIA':[49,36,74],'CIVIL MASTER':[7,46,672],VALE:[2,0,0],SOMAFEL:[2,0,0]}},
+      // CIVIL MASTER S4: meta -0,57 na planilha (fórmula quebrada) -> tratado como meta 0.
+      {label:'S4 (24/08 a 30/08)',encerradas:114,dados:{GSA:[16,1,6],EMPA:[19,67,358],ATERPA:[50,4,8],'ÁPIA':[51,23,45],'CIVIL MASTER':[0,19,0],VALE:[3,0,0],SOMAFEL:[3,0,0]}}
+    ],totais:{GSA:8,EMPA:199,ATERPA:63,'ÁPIA':172,'CIVIL MASTER':105,VALE:0,SOMAFEL:0}},
+    {mes:'Setembro/26',encerradas:88,semanas:[
+      {label:'S1 (01/09 a 08/09)',encerradas:88,dados:{GSA:[22,4,18],EMPA:[56,52,93],ATERPA:[77,23,30],'ÁPIA':[101,9,9],'CIVIL MASTER':[20,0,0],VALE:[3,0,0],SOMAFEL:[3,0,0]}},
+      {label:'S2 (10/09 a 15/09)',encerradas:0,dados:{GSA:[31,0,0],EMPA:[63,0,0],ATERPA:[104,0,0],'ÁPIA':[143,0,0],'CIVIL MASTER':[29,0,0],VALE:[5,0,0],SOMAFEL:[5,0,0]}},
+      {label:'S3 (17/09 a 22/09)',encerradas:0,dados:{GSA:[48,0,0],EMPA:[96,0,0],ATERPA:[160,0,0],'ÁPIA':[220,0,0],'CIVIL MASTER':[45,0,0],VALE:[8,0,0],SOMAFEL:[8,0,0]}},
+      {label:'S4 (24/09 a 30/09)',encerradas:0,dados:{GSA:[89,0,0],EMPA:[179,0,0],ATERPA:[298,0,0],'ÁPIA':[409,0,0],'CIVIL MASTER':[83,0,0],VALE:[14,0,0],SOMAFEL:[14,0,0]}}
+    ],totais:{GSA:4,EMPA:52,ATERPA:23,'ÁPIA':9,'CIVIL MASTER':0,VALE:0,SOMAFEL:0}}
   ]
 };
 
 // "Análise do cenário atual e meta de encerramento" — bloco da aba "Tendência - Protocolo", com o
 // ritmo real das últimas 4 semanas projetado até o prazo final. Também não vem da planilha "Banco
 // de Dados" (é exclusivo dessa aba de tendência), fixo aqui como o resto.
+// Valores do bloco "ANÁLISE DO CENÁRIO ATUAL" da aba "Tendência - Protocolo Leo". Obs.: nessa
+// atualização a planilha ainda traz esse bloco com "Data de referência: 31/07/2026" (não foi
+// refeito para setembro), então os KPIs abaixo refletem esse recorte.
 const CENARIO_ATUAL={
   dataReferencia:'31/07/2026', metaFinal:'17/10/2026', regime:'segunda a sábado',
-  totalRegistradas:2862, fechadas:1215, emAberto:1646, pctEmAberto:'57,5%',
-  diasTrabalhoRestantes:24, metaMediaDiaria:69, metaMediaSemanal:412, prazoFinal:'21/10/2026',
-  ritmoRealDiario:'17,0', ritmoRealSemanal:102, diasUteisZerar:97, tendenciaPrazoFinal:'21/11/2026',
-  desvioTexto:'Desvio vs meta final (17/10/2026): 35 dias corridos de ATRASO'
+  totalRegistradas:2913, fechadas:1309, emAberto:1603, pctEmAberto:'55,0%',
+  diasTrabalhoRestantes:18, metaMediaDiaria:89, metaMediaSemanal:534, prazoFinal:'21/10/2026',
+  ritmoRealDiario:'17', ritmoRealSemanal:102, diasUteisZerar:95, tendenciaPrazoFinal:'19/11/2026',
+  desvioTexto:'Desvio vs meta final (17/10/2026): 33 dias corridos de ATRASO'
+};
+
+// Detalhamento de Agosto — blocos "AGO - TOTAL" e "AGO - CERTIFICÁVEIS" da aba "Tendência -
+// Protocolo Leo". Semanas 01-09 / 10-16 / 17-23 / 24-31 (recorte próprio desses blocos, não bate
+// com a tabela mensal "ago/26", que usa 01-08 / 10-15 / ...). sem:[meta,real,%] por semana;
+// encerradas.sem:[meta,real]. execAcum = executado acumulado até o mês anterior.
+const TENDENCIA_AGOSTO_DETALHE={
+  semanas:['S1 (01/08 a 09/08)','S2 (10/08 a 16/08)','S3 (17/08 a 23/08)','S4 (24/08 a 31/08)'],
+  blocos:[
+    {titulo:'Agosto · Total',empresas:[
+      {emp:'ÁPIA',execAcum:120,sem:[[95,112,118],[93,1,1],[106,36,34],[118,23,20]],totMeta:412,totEnc:172,avMes:42,encAcum:292,avGlobal:30,nec:684},
+      {emp:'EMPA',execAcum:403,sem:[[47,33,71],[53,36,68],[53,66,125],[49,69,142]],totMeta:201,totEnc:204,avMes:101,encAcum:607,avGlobal:74,nec:216},
+      {emp:'ATERPA',execAcum:209,sem:[[57,41,72],[65,41,63],[65,65,100],[62,26,42]],totMeta:249,totEnc:173,avMes:70,encAcum:382,avGlobal:53,nec:341},
+      {emp:'CIVIL MASTER',execAcum:0,sem:[[2,0,0],[3,0,0],[3,0,0],[3,0,0]],totMeta:10,totEnc:0,avMes:0,encAcum:0,avGlobal:0,nec:20},
+      {emp:'VALE',execAcum:3,sem:[[20,0,0],[25,1,4],[25,1,4],[25,0,0]],totMeta:95,totEnc:2,avMes:2,encAcum:5,avGlobal:3,nec:180},
+      {emp:'GSA',execAcum:18,sem:[[6,0,0],[8,2,26],[7,3,41],[7,0,0]],totMeta:28,totEnc:5,avMes:18,encAcum:23,avGlobal:32,nec:50},
+      {emp:'DR',execAcum:0,sem:[[0,0,0],[0,0,0],[0,0,0],[0,0,0]],totMeta:0,totEnc:0,avMes:0,encAcum:0,avGlobal:0,nec:0},
+      {emp:'SOMAFEL',execAcum:0,sem:[[7,0,0],[9,0,0],[9,0,0],[9,0,0]],totMeta:33,totEnc:0,avMes:0,encAcum:0,avGlobal:0,nec:64},
+      {emp:'CT-HIDRO',execAcum:0,sem:[[0,0,0],[0,0,0],[0,0,0],[0,0,0]],totMeta:0,totEnc:0,avMes:0,encAcum:0,avGlobal:0,nec:0}
+    ],encerradas:{execAcum:753,sem:[[235,186],[255,81],[267,171],[272,118]],totMeta:1029,totEnc:556,avMes:54,encAcum:1309,avGlobal:46,nec:1555}},
+    {titulo:'Agosto · Certificáveis',empresas:[
+      {emp:'ÁPIA',execAcum:21,sem:[[49,48,98],[51,1,2],[59,13,22],[68,11,16]],totMeta:227,totEnc:73,avMes:32,encAcum:94,avGlobal:21,nec:348},
+      {emp:'EMPA',execAcum:233,sem:[[31,25,81],[33,23,70],[34,40,116],[33,45,135]],totMeta:131,totEnc:133,avMes:101,encAcum:366,avGlobal:74,nec:131},
+      {emp:'ATERPA',execAcum:81,sem:[[24,12,49],[27,19,71],[28,19,67],[30,9,30]],totMeta:109,totEnc:59,avMes:54,encAcum:140,avGlobal:48,nec:149},
+      {emp:'CIVIL MASTER',execAcum:0,sem:[[2,0,0],[2,0,0],[2,0,0],[3,0,0]],totMeta:8,totEnc:0,avMes:0,encAcum:0,avGlobal:0,nec:14},
+      {emp:'VALE',execAcum:1,sem:[[12,0,0],[14,0,0],[16,0,0],[19,0,0]],totMeta:61,totEnc:0,avMes:0,encAcum:1,avGlobal:1,nec:102},
+      {emp:'GSA',execAcum:8,sem:[[3,0,0],[3,0,0],[4,0,0],[4,0,0]],totMeta:14,totEnc:0,avMes:0,encAcum:8,avGlobal:26,nec:23},
+      {emp:'DR',execAcum:0,sem:[[0,0,0],[0,0,0],[0,0,0],[0,0,0]],totMeta:0,totEnc:0,avMes:0,encAcum:0,avGlobal:0,nec:0},
+      {emp:'SOMAFEL',execAcum:0,sem:[[2,0,0],[3,0,0],[3,0,0],[4,0,0]],totMeta:12,totEnc:0,avMes:0,encAcum:0,avGlobal:0,nec:20},
+      {emp:'CT-HIDRO',execAcum:0,sem:[[0,0,0],[0,0,0],[0,0,0],[0,0,0]],totMeta:0,totEnc:0,avMes:0,encAcum:0,avGlobal:0,nec:0}
+    ],encerradas:{execAcum:344,sem:[[123,85],[133,43],[147,72],[161,65]],totMeta:564,totEnc:265,avMes:47,encAcum:609,avGlobal:44,nec:787}}
+  ]
 };
 
 function tendPctCls(pct){ if(pct>=100)return 'verde'; if(pct>=70)return 'amarelo'; return 'vermelho'; }
@@ -1315,6 +1351,36 @@ function renderTendencia(){
       +'<td>Total: '+m.encerradas+'</td>'
       +'</tr></tfoot></table></div></div>';
   });
+
+  {
+    const D2=TENDENCIA_AGOSTO_DETALHE, sems=D2.semanas;
+    const pctTd=v=>'<td><span class="tend-pct '+tendPctCls(v)+'">'+v+'%</span></td>';
+    h+='<div class="tend-mes"><h3>Agosto · detalhamento por empresa</h3>'
+      +'<p class="ef-ajuda" style="margin-top:-6px">Blocos "AGO - TOTAL" e "AGO - CERTIFICÁVEIS" da aba "Tendência - Protocolo Leo". Semanas 01–09 / 10–16 / 17–23 / 24–31 (recorte próprio, difere da tabela mensal de agosto acima).</p>';
+    D2.blocos.forEach(bl=>{
+      h+='<h4 style="color:var(--navy);font-size:12.5px;text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">'+bl.titulo+'</h4>'
+        +'<div style="overflow-x:auto"><table class="tend-tabela"><thead>'
+        +'<tr><th rowspan="2">Empresa</th><th rowspan="2">Exec. acum. mês ant.</th>'
+        +sems.map(s=>'<th colspan="3">'+s+'</th>').join('')
+        +'<th rowspan="2">Meta mês</th><th rowspan="2">Encerr. mês</th><th rowspan="2">Avanço mês</th><th rowspan="2">Encerr. acum.</th><th rowspan="2">Avanço global</th><th rowspan="2">Necessidade set/26</th></tr>'
+        +'<tr class="tend-semanas">'+sems.map(()=>'<th>Meta</th><th>Real</th><th>%</th>').join('')+'</tr>'
+        +'</thead><tbody>';
+      bl.empresas.forEach(e=>{
+        h+='<tr><td>'+nomeExibicao(e.emp)+'</td><td>'+e.execAcum+'</td>'
+          +e.sem.map(t=>'<td>'+t[0]+'</td><td>'+t[1]+'</td>'+pctTd(t[2])).join('')
+          +'<td>'+e.totMeta+'</td><td>'+e.totEnc+'</td>'+pctTd(e.avMes)
+          +'<td>'+e.encAcum+'</td>'+pctTd(e.avGlobal)+'<td>'+e.nec+'</td></tr>';
+      });
+      const en=bl.encerradas;
+      h+='</tbody><tfoot><tr><td>Encerradas</td><td>'+en.execAcum+'</td>'
+        +en.sem.map(t=>'<td colspan="3">'+t[0]+' / '+t[1]+'</td>').join('')
+        +'<td>'+en.totMeta+'</td><td>'+en.totEnc+'</td>'+pctTd(en.avMes)
+        +'<td>'+en.encAcum+'</td>'+pctTd(en.avGlobal)+'<td>'+en.nec+'</td>'
+        +'</tr></tfoot></table></div>';
+    });
+    h+='</div>';
+  }
+
   h+='<div class="tend-legenda">'
     +'<span><i style="background:var(--verde)"></i>≥ 100% da meta semanal</span>'
     +'<span><i style="background:var(--amarelo)"></i>70–99% da meta</span>'
