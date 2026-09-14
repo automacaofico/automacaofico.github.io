@@ -60,7 +60,6 @@ export const DASHBOARDS = {
         {},
         {
           sourceNames: ['Pendências', 'Banco de Dados'],
-          headerRowBySource: { 'BANCO DE DADOS': 2 },
           keyPattern: /^\d+$/,
           canonicalColumns: {
             'ID original': ['ID original', 'Id_Pendencia'],

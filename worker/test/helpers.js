@@ -32,9 +32,10 @@ export function mapWorkbookBuffer({ blankAtlasIds = false } = {}) {
 }
 
 export function eapMapWorkbookBuffer() {
+  // O export bruto da EAP não tem linha em branco/título antes do cabeçalho — o cabeçalho
+  // fica direto na linha 1 (diferente do arquivo já processado que o painel de pendências usa).
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
-    ['EAP FICO'],
     [
       'Id_Pendencia',
       'Pacote',

@@ -23,6 +23,29 @@ function makeRecord(sheet, key, raw, rowNumber) {
   return { sheet, key, row: rowNumber, values, display };
 }
 
+// Algumas planilhas trazem o cabeçalho logo na linha 1 (export bruto da EAP) e outras têm uma
+// linha em branco antes (arquivo já processado) — em vez de assumir uma linha fixa por nome de
+// aba (o que já causou incidente: uma linha de dados foi lida como cabeçalho), varremos as
+// primeiras linhas e escolhemos a que mais bate com os nomes de coluna esperados.
+function detectHeaderRow(rows, strategy, maxScan = 15) {
+  if (strategy.type !== 'table') return strategy.headerRow;
+  const requiredFolded = strategy.requiredColumns.flatMap((column) =>
+    (Array.isArray(column) ? column : [column]).map(foldText));
+  let bestRow = strategy.headerRow;
+  let bestScore = 0;
+  const limit = Math.min(rows.length, maxScan);
+  for (let index = 0; index < limit; index += 1) {
+    const row = rows[index] || [];
+    const folded = new Set(row.map((cell) => foldText(cell)));
+    const score = requiredFolded.filter((column) => folded.has(column)).length;
+    if (score > bestScore) {
+      bestScore = score;
+      bestRow = index + 1;
+    }
+  }
+  return bestScore > 0 ? bestRow : strategy.headerRow;
+}
+
 function tableRecords(sheetName, rows, strategy) {
   const headerIndex = strategy.headerRow - 1;
   const headers = uniqueHeaders(rows[headerIndex] || [], strategy.columnOverrides);
@@ -143,13 +166,10 @@ export async function validateAndNormalize({ file, buffer, dashboard, maxBytes }
       .map((name) => foldedSheets.get(foldText(name)))
       .find(Boolean);
     if (!actualName) continue;
-    const effectiveStrategy = {
-      ...strategy,
-      headerRow: strategy.headerRowBySource?.[foldText(actualName)] || strategy.headerRow
-    };
     const rows = workbook.Sheets[actualName]
       ? (await import('xlsx')).utils.sheet_to_json(workbook.Sheets[actualName], { header: 1, raw: true, defval: null, blankrows: true })
       : [];
+    const effectiveStrategy = { ...strategy, headerRow: detectHeaderRow(rows, strategy) };
     const records = effectiveStrategy.type === 'table'
       ? tableRecords(expectedName, rows, effectiveStrategy)
       : matrixRecords(expectedName, rows, effectiveStrategy);
