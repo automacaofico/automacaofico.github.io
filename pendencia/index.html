@@ -843,7 +843,6 @@ function renderConsolidado(){
   const totGeral=empresas.reduce((s,e)=>s+e.totalGeral,0);
   const exeGeral=empresas.reduce((s,e)=>s+e.execGeral,0);
   const finGeral=empresas.reduce((s,e)=>s+e.finalizadoGeral,0);
-  const penGeral=totGeral-finGeral; // "Restantes" = total − Finalizado (coluna T · Status_Pendencia)
   const mob=ks.reduce((s,k)=>s+PAC[k].mob,0), nec=ks.reduce((s,k)=>s+PAC[k].nec,0);
   const pctE=totGeral?(exeGeral/totGeral*100).toFixed(1):0, gapC=nec?Math.round((nec-mob)/nec*100):0;
   const pctFin=totGeral?(finGeral/totGeral*100).toFixed(1):0;
@@ -856,11 +855,10 @@ function renderConsolidado(){
   const naoCertFinGeral=empresas.reduce((s,e)=>s+e.finSemImpGeral,0), naoCertPendGeral=naoCertGeral-naoCertFinGeral;
 
   let h='<h2 class="secao">Visão geral · '+ROTULO_VISAO[visaoAtual]+' — '+empresas.length+' responsáveis · '+ks.length+' pacotes</h2>'
-    +'<div class="kpis stagger" style="grid-template-columns:repeat(5,1fr)">'
+    +'<div class="kpis stagger" style="grid-template-columns:repeat(4,1fr)">'
     +'<div class="kpi navy"><div class="rot">Pendências totais</div><div class="val">'+totGeral.toLocaleString('pt-BR')+'</div><div class="sub">Todas as empresas, incl. VALE</div></div>'
     +'<div class="kpi verde"><div class="rot">Executadas</div><div class="val">'+exeGeral.toLocaleString('pt-BR')+'</div><div class="sub">'+pctE+'% do total</div></div>'
     +'<div class="kpi azul"><div class="rot">Finalizadas</div><div class="val">'+finGeral.toLocaleString('pt-BR')+'</div><div class="sub">'+pctFin+'% do total</div></div>'
-    +'<div class="kpi laranja"><div class="rot">Pendências restantes</div><div class="val">'+penGeral.toLocaleString('pt-BR')+'</div><div class="sub">A tratar até o marco final</div></div>'
     +'<div class="kpi vermelho"><div class="rot">Efetivo mobilizado</div><div class="val">'+mob+' <small>/ '+nec+' nec.</small></div><div class="sub">Gap de '+(nec-mob)+' colaboradores ('+gapC+'%)</div></div>'
     +'</div>';
 
