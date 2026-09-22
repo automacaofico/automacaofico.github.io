@@ -1208,62 +1208,13 @@ function renderCharts(){
 
 // ============================================================
 // TENDÊNCIA — acompanhamento semanal de Meta × Real de baixa de pendências
-// (aba "Tendência - Protocolo" da planilha EAP). Não vem do upload nem do
+// (aba "Tendência - Protocolo Leo" da planilha EAP). Não vem do upload nem do
 // Banco de Dados — é uma tabela de acompanhamento à parte, atualizada por
 // quem mantém a planilha; por ora os números ficam fixos aqui (mesmo padrão
-// de mobilização/cenários/alertas, que também não vêm da planilha).
+// de mobilização/cenários/alertas, que também não vêm da planilha). A aba
+// mostra só os blocos "SET - TOTAL" e "SET - CERTIFICÁVEIS" (intervalo
+// CN98:DG124 na planilha) — os demais blocos/meses foram removidos a pedido.
 // ============================================================
-const TENDENCIA_EMPRESAS=['GSA','EMPA','ATERPA','ÁPIA','CIVIL MASTER','VALE','SOMAFEL'];
-// [meta,real,%] — Real e "total" (coluna "Total Encerradas") vêm direto da aba "Tendência -
-// Protocolo Leo". A META semanal da planilha é distribuída de forma desigual entre as semanas
-// (front-loaded), então em semanas com meta muito baixa a % (Real÷Meta, também vinda da planilha)
-// estoura (ex.: EMPA jul, CIVIL MASTER jul). Um único valor quebrado foi corrigido: CIVIL MASTER
-// ago/S4 tinha meta negativa na planilha -> tratado como meta 0.
-const TENDENCIA_DATA={
-  atualizadoAte:'11/09/2026 (fonte: aba "Tendência - Protocolo Leo")',
-  meses:[
-    {mes:'Junho/26',encerradas:110,semanas:[
-      {label:'S1 (01/06 a 08/06)',encerradas:0,dados:{GSA:[5,0,0],EMPA:[13,0,0],ATERPA:[19,0,0],'ÁPIA':[24,0,0],'CIVIL MASTER':[5,0,0],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
-      {label:'S2 (10/06 a 15/06)',encerradas:13,dados:{GSA:[6,1,17],EMPA:[14,7,48],ATERPA:[20,5,25],'ÁPIA':[26,0,0],'CIVIL MASTER':[5,0,0],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
-      {label:'S3 (17/06 a 22/06)',encerradas:19,dados:{GSA:[6,2,33],EMPA:[15,5,33],ATERPA:[21,12,57],'ÁPIA':[28,0,0],'CIVIL MASTER':[6,0,0],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
-      {label:'S4 (24/06 a 30/06)',encerradas:78,dados:{GSA:[6,0,0],EMPA:[16,12,77],ATERPA:[22,10,46],'ÁPIA':[30,55,184],'CIVIL MASTER':[6,1,17],VALE:[1,0,0],SOMAFEL:[1,0,0]}}
-    ],totais:{GSA:3,EMPA:24,ATERPA:27,'ÁPIA':55,'CIVIL MASTER':1,VALE:0,SOMAFEL:0}},
-    {mes:'Julho/26',encerradas:455,semanas:[
-      {label:'S1 (01/07 a 08/07)',encerradas:168,dados:{GSA:[7,0,0],EMPA:[18,101,568],ATERPA:[25,1,4],'ÁPIA':[32,29,90],'CIVIL MASTER':[6,37,580],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
-      {label:'S2 (10/07 a 15/07)',encerradas:50,dados:{GSA:[8,0,0],EMPA:[11,21,189],ATERPA:[27,7,26],'ÁPIA':[33,7,21],'CIVIL MASTER':[4,15,382],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
-      {label:'S3 (17/07 a 22/07)',encerradas:105,dados:{GSA:[9,3,35],EMPA:[10,85,836],ATERPA:[29,6,21],'ÁPIA':[36,0,0],'CIVIL MASTER':[3,11,380],VALE:[1,0,0],SOMAFEL:[1,0,0]}},
-      {label:'S4 (24/07 a 31/07)',encerradas:132,dados:{GSA:[9,0,0],EMPA:[2,69,2793],ATERPA:[32,15,47],'ÁPIA':[39,17,43],'CIVIL MASTER':[2,31,1506],VALE:[1,0,0],SOMAFEL:[1,0,0]}}
-    ],totais:{GSA:3,EMPA:276,ATERPA:29,'ÁPIA':53,'CIVIL MASTER':94,VALE:0,SOMAFEL:0}},
-    {mes:'Agosto/26',encerradas:547,semanas:[
-      {label:'S1 (01/08 a 08/08)',encerradas:184,dados:{GSA:[11,0,0],EMPA:[27,33,122],ATERPA:[37,39,104],'ÁPIA':[49,112,230],'CIVIL MASTER':[10,0,0],VALE:[2,0,0],SOMAFEL:[2,0,0]}},
-      {label:'S2 (10/08 a 15/08)',encerradas:79,dados:{GSA:[13,3,24],EMPA:[27,34,125],ATERPA:[39,1,3],'ÁPIA':[42,1,2],'CIVIL MASTER':[11,40,351],VALE:[2,0,0],SOMAFEL:[2,0,0]}},
-      {label:'S3 (17/08 a 22/08)',encerradas:170,dados:{GSA:[14,4,28],EMPA:[26,65,249],ATERPA:[45,19,43],'ÁPIA':[49,36,74],'CIVIL MASTER':[7,46,672],VALE:[2,0,0],SOMAFEL:[2,0,0]}},
-      // CIVIL MASTER S4: meta -0,57 na planilha (fórmula quebrada) -> tratado como meta 0.
-      {label:'S4 (24/08 a 30/08)',encerradas:114,dados:{GSA:[16,1,6],EMPA:[19,67,358],ATERPA:[50,4,8],'ÁPIA':[51,23,45],'CIVIL MASTER':[0,19,0],VALE:[3,0,0],SOMAFEL:[3,0,0]}}
-    ],totais:{GSA:8,EMPA:199,ATERPA:63,'ÁPIA':172,'CIVIL MASTER':105,VALE:0,SOMAFEL:0}},
-    {mes:'Setembro/26',encerradas:137,semanas:[
-      {label:'S1 (01/09 a 08/09)',encerradas:123,dados:{GSA:[22,5,23],EMPA:[56,56,101],ATERPA:[76,28,37],'ÁPIA':[93,34,36],'CIVIL MASTER':[20,0,0],VALE:[3,0,0],SOMAFEL:[3,0,0]}},
-      {label:'S2 (10/09 a 15/09)',encerradas:14,dados:{GSA:[30,0,0],EMPA:[61,0,0],ATERPA:[101,0,0],'ÁPIA':[124,14,11],'CIVIL MASTER':[29,0,0],VALE:[5,0,0],SOMAFEL:[5,0,0]}},
-      {label:'S3 (17/09 a 22/09)',encerradas:0,dados:{GSA:[47,0,0],EMPA:[94,0,0],ATERPA:[155,0,0],'ÁPIA':[183,0,0],'CIVIL MASTER':[45,0,0],VALE:[8,0,0],SOMAFEL:[8,0,0]}},
-      {label:'S4 (24/09 a 30/09)',encerradas:0,dados:{GSA:[87,0,0],EMPA:[174,0,0],ATERPA:[288,0,0],'ÁPIA':[339,0,0],'CIVIL MASTER':[83,0,0],VALE:[14,0,0],SOMAFEL:[14,0,0]}}
-    ],totais:{GSA:5,EMPA:56,ATERPA:28,'ÁPIA':48,'CIVIL MASTER':0,VALE:0,SOMAFEL:0}}
-  ]
-};
-
-// "Análise do cenário atual e meta de encerramento" — bloco da aba "Tendência - Protocolo", com o
-// ritmo real das últimas 4 semanas projetado até o prazo final. Também não vem da planilha "Banco
-// de Dados" (é exclusivo dessa aba de tendência), fixo aqui como o resto.
-// Valores do bloco "ANÁLISE DO CENÁRIO ATUAL" da aba "Tendência - Protocolo Leo" (EAP de 22/09).
-// Obs.: esse bloco ainda traz "Data de referência: 31/07/2026" na própria planilha (não foi
-// refeito para setembro), então os KPIs abaixo refletem esse recorte de origem.
-const CENARIO_ATUAL={
-  dataReferencia:'31/07/2026', metaFinal:'17/10/2026', regime:'segunda a sábado',
-  totalRegistradas:3068, fechadas:1523, emAberto:1544, pctEmAberto:'50,3%',
-  diasTrabalhoRestantes:8, metaMediaDiaria:193, metaMediaSemanal:1158, prazoFinal:'21/10/2026',
-  ritmoRealDiario:'17,0', ritmoRealSemanal:102, diasUteisZerar:91, tendenciaPrazoFinal:'14/11/2026',
-  desvioTexto:'Desvio vs meta final (17/10/2026): 28 dias corridos de ATRASO'
-};
-
 // Detalhamento de Setembro — blocos "SET - TOTAL" e "SET - CERTIFICÁVEIS" da aba "Tendência -
 // Protocolo Leo". Semanas 01-07 / 08-14 / 15-21 / 22-30 (recorte próprio desses blocos, não bate
 // com a tabela mensal "set/26", que usa outro recorte). sem:[meta,real,%] por semana;
@@ -1297,65 +1248,16 @@ const TENDENCIA_SETEMBRO_DETALHE={
 };
 
 function tendPctCls(pct){ if(pct>=100)return 'verde'; if(pct>=70)return 'amarelo'; return 'vermelho'; }
-function tendCelula(t){
-  const meta=t[0], real=t[1], pct=t[2];
-  if(real==null)return '<td>'+meta+'</td><td>—</td><td>—</td>';
-  return '<td>'+meta+'</td><td>'+real+'</td><td><span class="tend-pct '+tendPctCls(pct)+'">'+pct+'%</span></td>';
-}
 function renderTendencia(){
   const alvo=document.getElementById('tendencia'); if(!alvo)return;
   let h='<h2 class="secao">Tendência · Baixa de pendências (Meta × Real)</h2>'
-    +'<p class="ef-ajuda">Acompanhamento semanal de encerramento de pendências por executante, vindo da aba "Tendência - Protocolo" da planilha EAP. Dados atualizados até '+TENDENCIA_DATA.atualizadoAte+'.</p>';
-
-  {
-    const c=CENARIO_ATUAL;
-    h+='<div class="tend-mes"><h3>Análise do cenário atual e meta de encerramento</h3>'
-      +'<p class="ef-ajuda" style="margin-top:-6px">Data de referência: '+c.dataReferencia+' · Meta final: '+c.metaFinal+' · Regime: '+c.regime+'</p>'
-      +'<div class="kpis stagger" style="grid-template-columns:repeat(4,1fr)">'
-      +'<div class="kpi navy"><div class="rot">Total registradas</div><div class="val">'+c.totalRegistradas.toLocaleString('pt-BR')+'</div></div>'
-      +'<div class="kpi azul"><div class="rot">Fechadas</div><div class="val">'+c.fechadas.toLocaleString('pt-BR')+'</div></div>'
-      +'<div class="kpi laranja"><div class="rot">Em aberto atualmente</div><div class="val">'+c.emAberto.toLocaleString('pt-BR')+'</div></div>'
-      +'<div class="kpi vermelho"><div class="rot">% em aberto</div><div class="val">'+c.pctEmAberto+'</div></div>'
-      +'</div>'
-      +'<div class="kpis stagger" style="grid-template-columns:repeat(4,1fr);margin-top:14px">'
-      +'<div class="kpi navy"><div class="rot">Dias de trabalho restantes</div><div class="val">'+c.diasTrabalhoRestantes+'</div></div>'
-      +'<div class="kpi azul"><div class="rot">Meta média diária</div><div class="val">'+c.metaMediaDiaria+'</div></div>'
-      +'<div class="kpi azul"><div class="rot">Meta média semanal</div><div class="val">'+c.metaMediaSemanal+'</div></div>'
-      +'<div class="kpi navy"><div class="rot">Prazo final</div><div class="val" style="font-size:20px">'+c.prazoFinal+'</div></div>'
-      +'</div>'
-      +'<h4 style="color:var(--navy);font-size:12.5px;text-transform:uppercase;letter-spacing:.5px;margin:18px 0 10px">Tendência do prazo final <span style="color:var(--cinza-txt);font-weight:600;text-transform:none">(no ritmo real das últimas 4 semanas)</span></h4>'
-      +'<div class="kpis stagger" style="grid-template-columns:repeat(4,1fr)">'
-      +'<div class="kpi azul"><div class="rot">Ritmo real diário (últimas 4 sem.)</div><div class="val">'+c.ritmoRealDiario+'</div></div>'
-      +'<div class="kpi azul"><div class="rot">Ritmo real semanal</div><div class="val">'+c.ritmoRealSemanal+'</div></div>'
-      +'<div class="kpi laranja"><div class="rot">Dias úteis p/ zerar em aberto</div><div class="val">'+c.diasUteisZerar+'</div></div>'
-      +'<div class="kpi vermelho"><div class="rot">Tendência do prazo final</div><div class="val" style="font-size:20px">'+c.tendenciaPrazoFinal+'</div></div>'
-      +'</div>'
-      +'<div class="alerta crit" style="margin-top:14px"><div class="tit"><span class="ico">▲</span>'+c.desvioTexto+'</div></div>'
-      +'</div>';
-  }
-
-  TENDENCIA_DATA.meses.forEach(m=>{
-    h+='<div class="tend-mes"><h3>'+m.mes+'</h3><div style="overflow-x:auto"><table class="tend-tabela"><thead>'
-      +'<tr><th rowspan="2">Empresa</th>'+m.semanas.map(s=>'<th colspan="3">'+s.label+'</th>').join('')+'<th rowspan="2">Total encerradas</th></tr>'
-      +'<tr class="tend-semanas">'+m.semanas.map(()=>'<th>Meta</th><th>Real</th><th>%</th>').join('')+'</tr>'
-      +'</thead><tbody>';
-    TENDENCIA_EMPRESAS.forEach(emp=>{
-      h+='<tr><td>'+nomeExibicao(emp)+'</td>'
-        +m.semanas.map(s=>tendCelula(s.dados[emp]||[0,0,0])).join('')
-        +'<td>'+(m.totais[emp]||0)+'</td>'
-        +'</tr>';
-    });
-    h+='</tbody><tfoot><tr><td>Encerradas na semana</td>'
-      +m.semanas.map(s=>'<td colspan="3">'+s.encerradas+'</td>').join('')
-      +'<td>Total: '+m.encerradas+'</td>'
-      +'</tr></tfoot></table></div></div>';
-  });
+    +'<p class="ef-ajuda">Acompanhamento semanal de encerramento de pendências por executante, vindo da aba "Tendência - Protocolo Leo" da planilha EAP (blocos SET - TOTAL e SET - CERTIFICÁVEIS).</p>';
 
   {
     const D2=TENDENCIA_SETEMBRO_DETALHE, sems=D2.semanas;
     const pctTd=v=>'<td><span class="tend-pct '+tendPctCls(v)+'">'+v+'%</span></td>';
     h+='<div class="tend-mes"><h3>Setembro · detalhamento por empresa</h3>'
-      +'<p class="ef-ajuda" style="margin-top:-6px">Blocos "SET - TOTAL" e "SET - CERTIFICÁVEIS" da aba "Tendência - Protocolo Leo". Semanas 01–07 / 08–14 / 15–21 / 22–30 (recorte próprio, difere da tabela mensal de setembro acima).</p>';
+      +'<p class="ef-ajuda" style="margin-top:-6px">Blocos "SET - TOTAL" e "SET - CERTIFICÁVEIS" da aba "Tendência - Protocolo Leo". Semanas 01–07 / 08–14 / 15–21 / 22–30.</p>';
     D2.blocos.forEach(bl=>{
       h+='<h4 style="color:var(--navy);font-size:12.5px;text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">'+bl.titulo+'</h4>'
         +'<div style="overflow-x:auto"><table class="tend-tabela"><thead>'
