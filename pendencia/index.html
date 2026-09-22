@@ -1429,11 +1429,11 @@ const regionalDoPacote=pac=>REGIONAL_1_PACOTES.has(pac)?'r1':'r2';
 const passaRegional=pac=>regionalAtual==='todas'||regionalDoPacote(pac)===regionalAtual;
 
 function aggregarBancoDeDados(rows,campoResp){
-  const PAC_NUM={1:'P1',2:'P2',3:'P3',5:'P5','1A':'P1A','1B':'P1B','1C':'P1C'};
+  const PAC_NUM={1:'P1',2:'P2',3:'P3','1A':'P1A','1B':'P1B','1C':'P1C'};
   const campo=campoResp||'Empresa';
   const grupos={};
   rows.forEach(r=>{
-    const pac=PAC_NUM[normPacote(r['Pacote'])]; if(!pac)return; // ignora linhas sem pacote válido (1/2/3/5/1A/1B/1C)
+    const pac=PAC_NUM[normPacote(r['Pacote'])]; if(!pac)return; // ignora linhas sem pacote válido (1/2/3/1A/1B/1C)
     if(!passaRegional(pac))return; // trava a visão na regional selecionada ('todas' não filtra)
     const empresa=canonEmpresa(r[campo]); if(!empresa)return;
     const tipo=tituloCase(r['Punch List'])||'(sem classificação)';
