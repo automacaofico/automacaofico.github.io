@@ -1212,9 +1212,28 @@ function renderCharts(){
 // Banco de Dados — é uma tabela de acompanhamento à parte, atualizada por
 // quem mantém a planilha; por ora os números ficam fixos aqui (mesmo padrão
 // de mobilização/cenários/alertas, que também não vêm da planilha). A aba
-// mostra só os blocos "SET - TOTAL" e "SET - CERTIFICÁVEIS" (intervalo
-// CN98:DG124 na planilha) — os demais blocos/meses foram removidos a pedido.
+// mostra o bloco "Análise do Cenário Atual" mais os blocos "SET - TOTAL" e
+// "SET - CERTIFICÁVEIS" (intervalo CN98:DG124 na planilha) — as tabelas
+// mensais de Junho/Julho/Agosto foram removidas a pedido.
 // ============================================================
+// "Análise do cenário atual e meta de encerramento" — bloco da aba "Tendência - Protocolo", com o
+// ritmo real das últimas 4 semanas projetado até o prazo final. Também não vem da planilha "Banco
+// de Dados" (é exclusivo dessa aba de tendência), fixo aqui como o resto.
+// Valores recalculados com as MESMAS fórmulas do bloco "ANÁLISE DO CENÁRIO ATUAL" da aba
+// "Tendência - Protocolo Leo" (EAP de 22/09), mas restritos ao universo de Pacotes 1/2/3
+// (mesmo escopo do resto do painel): COUNTA/COUNTIFS na Banco de Dados filtrados por Pacote,
+// "Encerradas nas últimas 4 sem." = Status_Pendencia="Encerrado" com Data_Encerramento entre
+// 04/07/2026 e 31/07/2026 (a mesma janela fixa da planilha), ritmo=ROUNDUP(encerradas/dias
+// úteis da janela,0), dias úteis p/ zerar=ROUNDUP(emAberto/ritmo,0), tendência=WORKDAY.INTL
+// a partir da Data de referência (31/07/2026, mesma da planilha) com regime seg–sáb.
+const CENARIO_ATUAL={
+  dataReferencia:'31/07/2026', metaFinal:'17/10/2026', regime:'segunda a sábado',
+  totalRegistradas:2947, fechadas:1523, emAberto:1423, pctEmAberto:'48,3%',
+  diasTrabalhoRestantes:8, metaMediaDiaria:178, metaMediaSemanal:1068, prazoFinal:'21/10/2026',
+  ritmoRealDiario:'17,0', ritmoRealSemanal:102, diasUteisZerar:84, tendenciaPrazoFinal:'06/11/2026',
+  desvioTexto:'Desvio vs meta final (17/10/2026): 20 dias corridos de ATRASO'
+};
+
 // Detalhamento de Setembro — blocos "SET - TOTAL" e "SET - CERTIFICÁVEIS" da aba "Tendência -
 // Protocolo Leo". Semanas 01-07 / 08-14 / 15-21 / 22-30 (recorte próprio desses blocos, não bate
 // com a tabela mensal "set/26", que usa outro recorte). sem:[meta,real,%] por semana;
@@ -1251,7 +1270,34 @@ function tendPctCls(pct){ if(pct>=100)return 'verde'; if(pct>=70)return 'amarelo
 function renderTendencia(){
   const alvo=document.getElementById('tendencia'); if(!alvo)return;
   let h='<h2 class="secao">Tendência · Baixa de pendências (Meta × Real)</h2>'
-    +'<p class="ef-ajuda">Acompanhamento semanal de encerramento de pendências por executante, vindo da aba "Tendência - Protocolo Leo" da planilha EAP (blocos SET - TOTAL e SET - CERTIFICÁVEIS).</p>';
+    +'<p class="ef-ajuda">Acompanhamento semanal de encerramento de pendências por executante, vindo da aba "Tendência - Protocolo Leo" da planilha EAP.</p>';
+
+  {
+    const c=CENARIO_ATUAL;
+    h+='<div class="tend-mes"><h3>Análise do cenário atual e meta de encerramento</h3>'
+      +'<p class="ef-ajuda" style="margin-top:-6px">Data de referência: '+c.dataReferencia+' · Meta final: '+c.metaFinal+' · Regime: '+c.regime+'</p>'
+      +'<div class="kpis stagger" style="grid-template-columns:repeat(4,1fr)">'
+      +'<div class="kpi navy"><div class="rot">Total registradas</div><div class="val">'+c.totalRegistradas.toLocaleString('pt-BR')+'</div></div>'
+      +'<div class="kpi azul"><div class="rot">Fechadas</div><div class="val">'+c.fechadas.toLocaleString('pt-BR')+'</div></div>'
+      +'<div class="kpi laranja"><div class="rot">Em aberto atualmente</div><div class="val">'+c.emAberto.toLocaleString('pt-BR')+'</div></div>'
+      +'<div class="kpi vermelho"><div class="rot">% em aberto</div><div class="val">'+c.pctEmAberto+'</div></div>'
+      +'</div>'
+      +'<div class="kpis stagger" style="grid-template-columns:repeat(4,1fr);margin-top:14px">'
+      +'<div class="kpi navy"><div class="rot">Dias de trabalho restantes</div><div class="val">'+c.diasTrabalhoRestantes+'</div></div>'
+      +'<div class="kpi azul"><div class="rot">Meta média diária</div><div class="val">'+c.metaMediaDiaria+'</div></div>'
+      +'<div class="kpi azul"><div class="rot">Meta média semanal</div><div class="val">'+c.metaMediaSemanal+'</div></div>'
+      +'<div class="kpi navy"><div class="rot">Prazo final</div><div class="val" style="font-size:20px">'+c.prazoFinal+'</div></div>'
+      +'</div>'
+      +'<h4 style="color:var(--navy);font-size:12.5px;text-transform:uppercase;letter-spacing:.5px;margin:18px 0 10px">Tendência do prazo final <span style="color:var(--cinza-txt);font-weight:600;text-transform:none">(no ritmo real das últimas 4 semanas)</span></h4>'
+      +'<div class="kpis stagger" style="grid-template-columns:repeat(4,1fr)">'
+      +'<div class="kpi azul"><div class="rot">Ritmo real diário (últimas 4 sem.)</div><div class="val">'+c.ritmoRealDiario+'</div></div>'
+      +'<div class="kpi azul"><div class="rot">Ritmo real semanal</div><div class="val">'+c.ritmoRealSemanal+'</div></div>'
+      +'<div class="kpi laranja"><div class="rot">Dias úteis p/ zerar em aberto</div><div class="val">'+c.diasUteisZerar+'</div></div>'
+      +'<div class="kpi vermelho"><div class="rot">Tendência do prazo final</div><div class="val" style="font-size:20px">'+c.tendenciaPrazoFinal+'</div></div>'
+      +'</div>'
+      +'<div class="alerta crit" style="margin-top:14px"><div class="tit"><span class="ico">▲</span>'+c.desvioTexto+'</div></div>'
+      +'</div>';
+  }
 
   {
     const D2=TENDENCIA_SETEMBRO_DETALHE, sems=D2.semanas;
