@@ -1220,18 +1220,19 @@ function renderCharts(){
 // ritmo real das últimas 4 semanas projetado até o prazo final. Também não vem da planilha "Banco
 // de Dados" (é exclusivo dessa aba de tendência), fixo aqui como o resto.
 // Valores recalculados com as MESMAS fórmulas do bloco "ANÁLISE DO CENÁRIO ATUAL" da aba
-// "Tendência - Protocolo Leo" (EAP de 22/09), mas restritos ao universo de Pacotes 1/2/3
-// (mesmo escopo do resto do painel): COUNTA/COUNTIFS na Banco de Dados filtrados por Pacote,
-// "Encerradas nas últimas 4 sem." = Status_Pendencia="Encerrado" com Data_Encerramento entre
-// 04/07/2026 e 31/07/2026 (a mesma janela fixa da planilha), ritmo=ROUNDUP(encerradas/dias
-// úteis da janela,0), dias úteis p/ zerar=ROUNDUP(emAberto/ritmo,0), tendência=WORKDAY.INTL
-// a partir da Data de referência (31/07/2026, mesma da planilha) com regime seg–sáb.
+// "Tendência - Protocolo Leo", restritos ao universo de Pacotes 1/2/3 (mesmo escopo do resto
+// do painel): COUNTA/COUNTIFS na Banco de Dados filtrados por Pacote. "Dias de trabalho
+// restantes" = NETWORKDAYS.INTL(hoje, 30/09/2026, seg–sáb) — recalculado a cada atualização
+// da EAP. "Ritmo real" e a janela de "últimas 4 semanas" continuam fixos em 04/07–31/07/2026
+// (mesma janela histórica da planilha, que nunca foi refeita para depois disso) — só o
+// "em aberto" atual muda o resultado de dias úteis p/ zerar e a tendência (WORKDAY.INTL a
+// partir da Data de referência 31/07/2026, regime seg–sáb). Atualizado com a EAP de 24/09.
 const CENARIO_ATUAL={
   dataReferencia:'31/07/2026', metaFinal:'17/10/2026', regime:'segunda a sábado',
-  totalRegistradas:2947, fechadas:1523, emAberto:1423, pctEmAberto:'48,3%',
-  diasTrabalhoRestantes:8, metaMediaDiaria:178, metaMediaSemanal:1068, prazoFinal:'21/10/2026',
-  ritmoRealDiario:'17,0', ritmoRealSemanal:102, diasUteisZerar:84, tendenciaPrazoFinal:'06/11/2026',
-  desvioTexto:'Desvio vs meta final (17/10/2026): 20 dias corridos de ATRASO'
+  totalRegistradas:3013, fechadas:1526, emAberto:1487, pctEmAberto:'49,4%',
+  diasTrabalhoRestantes:6, metaMediaDiaria:248, metaMediaSemanal:1488, prazoFinal:'21/10/2026',
+  ritmoRealDiario:'17,0', ritmoRealSemanal:102, diasUteisZerar:88, tendenciaPrazoFinal:'11/11/2026',
+  desvioTexto:'Desvio vs meta final (17/10/2026): 25 dias corridos de ATRASO'
 };
 
 // Detalhamento de Setembro — blocos "SET - TOTAL" e "SET - CERTIFICÁVEIS" da aba "Tendência -
