@@ -1384,7 +1384,13 @@ function aggregarBancoDeDados(rows,campoResp){
   rows.forEach(r=>{
     const pac=PAC_NUM[normPacote(r['Pacote'])]; if(!pac)return; // ignora linhas sem pacote válido (1/2/3/1A/1B/1C)
     if(!passaRegional(pac))return; // trava a visão na regional selecionada ('todas' não filtra)
-    const empresa=canonEmpresa(r[campo]); if(!empresa)return;
+    // Na visão Execução, registros sem executante continuam pertencendo ao
+    // universo da base: usam a Empresa como responsável substituto. A visão
+    // CLP permanece baseada exclusivamente na coluna Empresa.
+    const responsavel=(campo==='Executante' && !esc(r['Executante']).trim())
+      ? r['Empresa']
+      : r[campo];
+    const empresa=canonEmpresa(responsavel); if(!empresa)return;
     const tipo=tituloCase(r['Punch List'])||'(sem classificação)';
     const key=pac+'¦'+empresa+'¦'+tipo;
     if(!grupos[key])grupos[key]={PACOTE:pac,EMPRESA:empresa,TIPO:tipo,TOTAL:0,EXECUTADO:0,
@@ -1394,10 +1400,11 @@ function aggregarBancoDeDados(rows,campoResp){
       'PENDENTE EXECUÇÃO (CERTIFICAÇÃO)':0,'FINALIZADO (NÃO CERTIFICAÇÃO)':0,'EXECUTADO (CERTIFICAÇÃO)':0};
     const g=grupos[key];
     g.TOTAL++;
-    // Executado (coluna AB · Status_Encerramento) e Finalizado (coluna T · Status_Pendencia) são
-    // filtros independentes — cada um conta a partir da sua própria coluna, não um do outro.
+    // Executada/finalizada usa a situação oficial da pendência (coluna T).
+    // Status_Encerramento representa outra etapa operacional e não deve reduzir
+    // o total executado exibido no painel.
     const finalizado=esc(r['Status_Pendencia']).trim().toUpperCase()==='ENCERRADO'; // coluna T
-    const executado=esc(r['Status_Encerramento']).trim().toUpperCase()==='CONCLUÍDO'; // coluna AB
+    const executado=finalizado;
     const cert=esc(r['Certificação ?']).trim().toUpperCase(); // coluna B
     if(executado){
       g.EXECUTADO++;
