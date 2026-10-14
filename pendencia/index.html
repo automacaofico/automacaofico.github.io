@@ -1239,11 +1239,11 @@ const CENARIO_ATUAL={
 };
 
 // Detalhamento de Setembro — blocos "SET - TOTAL" e "SET - CERTIFICÁVEIS" da aba "Tendência -
-// Protocolo Leo". Semanas 01-07 / 08-14 / 15-21 / 22-30 (recorte próprio desses blocos, não bate
+// Protocolo Leo". Semanas 01-09 / 10-16 / 17-23 / 24-30 (janelas reais do cálculo; antes rotuladas 01-07/08-14/15-21/22-30; recorte próprio desses blocos, não bate
 // com a tabela mensal "set/26", que usa outro recorte). sem:[meta,real,%] por semana;
 // encerradas.sem:[meta,real]. execAcum = executado acumulado até o mês anterior.
 const TENDENCIA_SETEMBRO_DETALHE={
-  semanas:['S1 (01/09 a 07/09)','S2 (08/09 a 14/09)','S3 (15/09 a 21/09)','S4 (22/09 a 30/09)'],
+  semanas:['S1 (01/09 a 09/09)','S2 (10/09 a 16/09)','S3 (17/09 a 23/09)','S4 (24/09 a 30/09)'],
   blocos:[
     {titulo:'Setembro · Total (por Executante)',empresas:[
       {emp:'ÁPIA',execAcum:367,sem:[[102,33,33],[120,99,83],[125,74,59],[140,85,61]],totMeta:487,totEnc:291,avMes:60,encAcum:658,avGlobal:64,nec:376},
@@ -1270,6 +1270,39 @@ const TENDENCIA_SETEMBRO_DETALHE={
   ]
 };
 
+// Detalhamento de Outubro — mesmas fórmulas dos blocos de setembro da aba "Tendência - Protocolo Leo",
+// recalculadas com as janelas de outubro (a aba monta as semanas a partir do 1º dia do mês):
+// S1 01-09 / S2 10-16 / S3 17-23 / S4 24-31. Meta semanal = saldo ÷ semanas até o prazo final,
+// aqui fixado em 31/10/2026 (o quadro principal segue com a meta final de 17/10).
+// Real = encerramentos com Data_Encerramento dentro da janela, até a data de referência da EAP.
+// Executante em branco foi atribuído à Empresa (mesma regra do quadro principal).
+const TENDENCIA_OUTUBRO_DETALHE={
+  semanas:['S1 (01/10 a 09/10)','S2 (10/10 a 16/10)','S3 (17/10 a 23/10)','S4 (24/10 a 31/10)'],
+  blocos:[
+    {titulo:'Outubro · Total (por Executante)',empresas:[
+      {emp:'ÁPIA',execAcum:577,sem:[[107,64,60],[131,17,13],[188,0,0],[376,0,0]],totMeta:802,totEnc:81,avMes:10,encAcum:658,avGlobal:64,nec:376},
+      {emp:'EMPA',execAcum:696,sem:[[26,33,129],[26,5,19],[36,0,0],[72,0,0]],totMeta:159,totEnc:38,avMes:24,encAcum:734,avGlobal:91,nec:72},
+      {emp:'ATERPA',execAcum:164,sem:[[74,39,53],[93,4,4],[137,0,0],[274,0,0]],totMeta:578,totEnc:43,avMes:7,encAcum:207,avGlobal:43,nec:274},
+      {emp:'CIVIL MASTER',execAcum:200,sem:[[25,0,0],[35,0,0],[53,0,0],[106,0,0]],totMeta:219,totEnc:0,avMes:0,encAcum:200,avGlobal:65,nec:106},
+      {emp:'VALE',execAcum:1,sem:[[4,0,0],[6,0,0],[9,0,0],[17,0,0]],totMeta:35,totEnc:0,avMes:0,encAcum:1,avGlobal:6,nec:17},
+      {emp:'GSA',execAcum:33,sem:[[23,0,0],[33,0,0],[49,0,0],[98,0,0]],totMeta:203,totEnc:0,avMes:0,encAcum:33,avGlobal:25,nec:98},
+      {emp:'DR',execAcum:14,sem:[[9,2,22],[12,0,0],[19,0,0],[37,0,0]],totMeta:77,totEnc:2,avMes:3,encAcum:16,avGlobal:30,nec:37},
+      {emp:'SOMAFEL',execAcum:0,sem:[[78,0,0],[111,0,0],[167,0,0],[334,0,0]],totMeta:690,totEnc:0,avMes:0,encAcum:0,avGlobal:0,nec:334},
+      {emp:'VERTICAL GREEN',execAcum:0,sem:[[6,0,0],[8,0,0],[12,0,0],[24,0,0]],totMeta:50,totEnc:0,avMes:0,encAcum:0,avGlobal:0,nec:24}
+    ],encerradas:{execAcum:1685,sem:[[350,138],[455,26],[669,0],[1338,0]],totMeta:2812,totEnc:164,avMes:6,encAcum:1849,avGlobal:58,nec:1338}},
+    {titulo:'Outubro · Certificáveis (por Executante)',empresas:[
+      {emp:'ÁPIA',execAcum:253,sem:[[45,26,57],[56,1,2],[84,0,0],[167,0,0]],totMeta:352,totEnc:27,avMes:8,encAcum:280,avGlobal:63,nec:167},
+      {emp:'EMPA',execAcum:434,sem:[[12,15,121],[13,4,32],[17,0,0],[34,0,0]],totMeta:76,totEnc:19,avMes:25,encAcum:453,avGlobal:93,nec:34},
+      {emp:'ATERPA',execAcum:73,sem:[[26,8,31],[34,4,12],[49,0,0],[98,0,0]],totMeta:207,totEnc:12,avMes:6,encAcum:85,avGlobal:46,nec:98},
+      {emp:'CIVIL MASTER',execAcum:85,sem:[[19,0,0],[27,0,0],[41,0,0],[81,0,0]],totMeta:167,totEnc:0,avMes:0,encAcum:85,avGlobal:51,nec:81},
+      {emp:'VALE',execAcum:1,sem:[[2,0,0],[3,0,0],[4,0,0],[8,0,0]],totMeta:17,totEnc:0,avMes:0,encAcum:1,avGlobal:11,nec:8},
+      {emp:'GSA',execAcum:12,sem:[[10,1,10],[14,0,0],[21,0,0],[41,0,0]],totMeta:85,totEnc:1,avMes:1,encAcum:13,avGlobal:24,nec:41},
+      {emp:'DR',execAcum:2,sem:[[3,0,0],[4,0,0],[6,0,0],[11,0,0]],totMeta:23,totEnc:0,avMes:0,encAcum:2,avGlobal:15,nec:11},
+      {emp:'SOMAFEL',execAcum:0,sem:[[30,0,0],[42,0,0],[64,0,0],[127,0,0]],totMeta:262,totEnc:0,avMes:0,encAcum:0,avGlobal:0,nec:127},
+      {emp:'VERTICAL GREEN',execAcum:0,sem:[[3,0,0],[4,0,0],[7,0,0],[13,0,0]],totMeta:27,totEnc:0,avMes:0,encAcum:0,avGlobal:0,nec:13}
+    ],encerradas:{execAcum:860,sem:[[149,50],[196,9],[290,0],[580,0]],totMeta:1215,totEnc:59,avMes:5,encAcum:919,avGlobal:61,nec:580}}
+  ]
+};
 function tendPctCls(pct){ if(pct>=100)return 'verde'; if(pct>=70)return 'amarelo'; return 'vermelho'; }
 function renderTendencia(){
   const alvo=document.getElementById('tendencia'); if(!alvo)return;
@@ -1303,35 +1336,36 @@ function renderTendencia(){
       +'</div>';
   }
 
-  {
-    const D2=TENDENCIA_SETEMBRO_DETALHE, sems=D2.semanas;
+  const detalheMesHTML=(D2,nomeMes,rotuloBlocos,textoSemanas,necRot)=>{
+    const sems=D2.semanas;
     const pctTd=v=>'<td><span class="tend-pct '+tendPctCls(v)+'">'+v+'%</span></td>';
-    h+='<div class="tend-mes"><h3>Setembro · detalhamento por empresa</h3>'
-      +'<p class="ef-ajuda" style="margin-top:-6px">Blocos "SET - TOTAL" e "SET - CERTIFICÁVEIS" da aba "Tendência - Protocolo Leo". Semanas 01–07 / 08–14 / 15–21 / 22–30.</p>';
+    let x='<div class="tend-mes"><h3>'+nomeMes+' · detalhamento por empresa</h3>'
+      +'<p class="ef-ajuda" style="margin-top:-6px">Blocos '+rotuloBlocos+' da aba "Tendência - Protocolo Leo". '+textoSemanas+'</p>';
     D2.blocos.forEach(bl=>{
-      h+='<h4 style="color:var(--navy);font-size:12.5px;text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">'+bl.titulo+'</h4>'
+      x+='<h4 style="color:var(--navy);font-size:12.5px;text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">'+bl.titulo+'</h4>'
         +'<div style="overflow-x:auto"><table class="tend-tabela"><thead>'
         +'<tr><th rowspan="2">Empresa</th><th rowspan="2">Exec. acum. mês ant.</th>'
         +sems.map(s=>'<th colspan="3">'+s+'</th>').join('')
-        +'<th rowspan="2">Meta mês</th><th rowspan="2">Encerr. mês</th><th rowspan="2">Avanço mês</th><th rowspan="2">Encerr. acum.</th><th rowspan="2">Avanço global</th><th rowspan="2">Necessidade out/26</th></tr>'
+        +'<th rowspan="2">Meta mês</th><th rowspan="2">Encerr. mês</th><th rowspan="2">Avanço mês</th><th rowspan="2">Encerr. acum.</th><th rowspan="2">Avanço global</th><th rowspan="2">'+necRot+'</th></tr>'
         +'<tr class="tend-semanas">'+sems.map(()=>'<th>Meta</th><th>Real</th><th>%</th>').join('')+'</tr>'
         +'</thead><tbody>';
       bl.empresas.forEach(e=>{
-        h+='<tr><td>'+nomeExibicao(e.emp)+'</td><td>'+e.execAcum+'</td>'
+        x+='<tr><td>'+nomeExibicao(e.emp)+'</td><td>'+e.execAcum+'</td>'
           +e.sem.map(t=>'<td>'+t[0]+'</td><td>'+t[1]+'</td>'+pctTd(t[2])).join('')
           +'<td>'+e.totMeta+'</td><td>'+e.totEnc+'</td>'+pctTd(e.avMes)
           +'<td>'+e.encAcum+'</td>'+pctTd(e.avGlobal)+'<td>'+e.nec+'</td></tr>';
       });
       const en=bl.encerradas;
-      h+='</tbody><tfoot><tr><td>Encerradas</td><td>'+en.execAcum+'</td>'
+      x+='</tbody><tfoot><tr><td>Encerradas</td><td>'+en.execAcum+'</td>'
         +en.sem.map(t=>'<td colspan="3">'+t[0]+' / '+t[1]+'</td>').join('')
         +'<td>'+en.totMeta+'</td><td>'+en.totEnc+'</td>'+pctTd(en.avMes)
         +'<td>'+en.encAcum+'</td>'+pctTd(en.avGlobal)+'<td>'+en.nec+'</td>'
         +'</tr></tfoot></table></div>';
     });
-    h+='</div>';
-  }
-
+    return x+'</div>';
+  };
+  h+=detalheMesHTML(TENDENCIA_OUTUBRO_DETALHE,'Outubro','"OUT - TOTAL" e "OUT - CERTIFICÁVEIS"','Semanas 01–09 / 10–16 / 17–23 / 24–31 (as janelas que a aba usa no cálculo). A meta semanal é o saldo ÷ semanas até o prazo de 31/10. Real contado até a data de referência.','Necessidade nov/26');
+  h+=detalheMesHTML(TENDENCIA_SETEMBRO_DETALHE,'Setembro','"SET - TOTAL" e "SET - CERTIFICÁVEIS"','Semanas 01–09 / 10–16 / 17–23 / 24–30 (as janelas que a aba usa no cálculo).','Necessidade out/26');
   h+='<div class="tend-legenda">'
     +'<span><i style="background:var(--verde)"></i>≥ 100% da meta semanal</span>'
     +'<span><i style="background:var(--amarelo)"></i>70–99% da meta</span>'
