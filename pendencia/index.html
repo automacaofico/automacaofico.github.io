@@ -296,6 +296,27 @@
   footer strong{color:#fff}
   footer .right{text-align:right;line-height:1.7}
 
+  /* ============ CHECK IN / CHECK OUT (padrão da apresentação A&M) ============ */
+  #checkinout .cio{font-family:'Segoe UI',Arial,sans-serif}
+  #checkinout .cio-kicker{font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--cinza-txt);margin-bottom:6px}
+  #checkinout .cio-titulo{font-size:23px;font-weight:800;color:#4D4D4D;padding-bottom:8px;border-bottom:2px solid #1F3864;margin-bottom:16px}
+  #checkinout .cio-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:18px}
+  #checkinout .cio-kpi{border-radius:3px;overflow:hidden;text-align:center;box-shadow:0 1px 3px rgba(31,56,100,.12)}
+  #checkinout .cio-kpi .h{background:#4B6A82;color:#fff;font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:9px 6px}
+  #checkinout .cio-kpi .v{background:#DDE6F0;color:#4B6A82;font-size:24px;font-weight:800;padding:12px 6px;font-variant-numeric:tabular-nums}
+  #checkinout .cio-kpi.verde .v{color:#70AD47} #checkinout .cio-kpi.roxo .v{color:#5B2A86}
+  #checkinout .cio-grid{display:grid;grid-template-columns:1.55fr 1fr;gap:20px;align-items:start}
+  #checkinout .cio-box{background:#fff;border:1px solid var(--cinza-borda);border-radius:10px;padding:12px 14px}
+  #checkinout .cio-sub{font-size:13px;font-weight:800;color:#4D4D4D}
+  #checkinout .cio-sub2{font-size:11.5px;color:var(--cinza-txt);margin-bottom:4px}
+  #checkinout .cio-pontos{position:relative;margin-top:18px;border:2px solid #1F3864;border-radius:18px;padding:14px 56px 14px 22px;font-size:13px;line-height:1.55}
+  #checkinout .cio-pontos .t{font-weight:800;color:#1F3864;margin-bottom:6px}
+  #checkinout .cio-pontos ul{list-style:none;margin:0;padding:0}
+  #checkinout .cio-pontos li{margin:2px 0} #checkinout .cio-pontos li b{color:#1F3864}
+  #checkinout .cio-am{position:absolute;right:12px;top:0;bottom:0;display:flex;align-items:center;writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:10.5px;font-weight:700;letter-spacing:.3px;color:#1F3864}
+  #checkinout .cio-nota{margin-top:10px;font-size:11px;color:var(--cinza-txt);line-height:1.5}
+  @media (max-width:1100px){ #checkinout .cio-grid{grid-template-columns:1fr} #checkinout .cio-kpis{grid-template-columns:repeat(2,1fr)} }
+  @media print{ #checkinout .cio-grid{grid-template-columns:1.55fr 1fr !important} #checkinout .cio-kpis{grid-template-columns:repeat(5,1fr) !important} #checkinout .cio-box,#checkinout .cio-pontos{break-inside:avoid} #checkinout .cio-titulo{font-size:19px} #checkinout .cio-kpi .v{font-size:20px} }
   /* ============ PRINT ============ */
   @media print{
     @page{size:landscape;margin:8mm}
@@ -535,12 +556,14 @@ td.tend-col{color:var(--cinza-txt);font-weight:600}
 <nav class="abas" id="navAbas">
   <button class="ativa" onclick="mostrar('consolidado',this)">Consolidado</button>
   <button onclick="mostrar('tendencia',this)">Tendência</button>
+  <button onclick="mostrar('checkinout',this)">Check in / Check out</button>
   <button class="print-btn" id="printBtn" onclick="window.print()">🖨 Imprimir esta aba</button>
 </nav>
 
 <main id="main">
   <section id="consolidado" class="painel ativo"></section>
   <section id="tendencia" class="painel"></section>
+  <section id="checkinout" class="painel"></section>
 </main>
 
 <footer>
@@ -1373,7 +1396,118 @@ function renderTendencia(){
   alvo.innerHTML=h;
 }
 
-function renderAll(){renderChrome();renderConsolidado();renderTendencia();D.EMP_ORDER.forEach(renderEmpresa);renderCharts();}
+// ============================================================
+// Check in / Check out — curva S das pendências (previsto × realizado), no padrão da
+// apresentação A&M. Escopo: Pacotes 1/2/3 (mesmo do Painel). Calculado direto da base EAP carregada:
+//  · Previsto  = acumulado de pendências por Data_Prazo (as sem Data_Prazo válida entram na data do último prazo)
+//  · Realizado = acumulado por Data_Encerramento (encerradas sem data entram na data de referência)
+//  · Projeção  = reta da data de referência até a data de fechamento da aba Tendência
+// ============================================================
+const CIO_PONTOS_ATENCAO=[
+  {pct:'PCT 01',txt:'Conclusão das pendências relacionadas às condicionantes ambientais'},
+  {pct:'PCT 02',txt:'Conclusão das pendências remuneradas da Aterpa'},
+  {pct:'PCT 03',txt:'Conclusão das pendências relacionadas às ADMEs'}
+];
+const CIO_PCT_COR={'PCT 1':'#FF0000','PCT 2':'#00B0F0','PCT 3':'#1F3864'};
+function cioSerial(v){
+  if(v==null||v==='')return null;
+  if(typeof v==='number')return v>40000?Math.floor(v):null;
+  const m=String(v).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  return m?Math.round(Date.UTC(+m[3],+m[2]-1,+m[1])/86400000)+25569:null;
+}
+const cioDt=s=>new Date(Math.round((s-25569)*86400000));
+const cioDM=s=>{const d=cioDt(s);return String(d.getUTCDate()).padStart(2,'0')+'/'+String(d.getUTCMonth()+1).padStart(2,'0');};
+const cioDMY=s=>cioDM(s)+'/'+cioDt(s).getUTCFullYear();
+function cioCalc(){
+  const PAC={'1':'PCT 1','1A':'PCT 1','1B':'PCT 1','1C':'PCT 1','2':'PCT 2','3':'PCT 3'};
+  const rows=(ultimasLinhasBanco||[]).filter(r=>PAC[normPacote(r['Pacote'])]);
+  const baixada=r=>esc(r['Status_Pendencia']).trim().toUpperCase()==='ENCERRADO';
+  const total=rows.length, baix=rows.filter(baixada);
+  const prazos=rows.map(r=>cioSerial(r['Data_Prazo'])).filter(Boolean).sort((a,b)=>a-b);
+  const encs=baix.map(r=>cioSerial(r['Data_Encerramento'])).filter(Boolean).sort((a,b)=>a-b);
+  const semPrazo=total-prazos.length, semDataEnc=baix.length-encs.length;
+  const hoje=cioSerial(((document.getElementById('dataRef')||{}).textContent||'').trim())||encs[encs.length-1];
+  const fimTxt=(typeof CENARIO_ATUAL!=='undefined'&&CENARIO_ATUAL.tendenciaPrazoFinal)||'';
+  const fim=cioSerial(fimTxt)||hoje;
+  const ini=Math.min(prazos[0]||hoje,encs[0]||hoje);
+  const d0=cioDt(ini); const ini1=Math.round(Date.UTC(d0.getUTCFullYear(),d0.getUTCMonth(),1)/86400000)+25569;
+  const maxPrazo=prazos[prazos.length-1]||hoje;
+  const limite=Math.max(maxPrazo,fim)+7;
+  const datas=new Set([hoje,fim]);
+  for(let d=ini1;d<=limite;d+=7)datas.add(d);
+  const eixo=[...datas].sort((a,b)=>a-b);
+  const previsto=eixo.map(d=>prazos.filter(p=>p<=d).length+(d>=maxPrazo?semPrazo:0));
+  const realizado=eixo.map(d=>d>hoje?null:encs.filter(e=>e<=d).length+(d>=hoje?semDataEnc:0));
+  const projecao=eixo.map(d=>d===hoje?baix.length:(d===fim?total:null));
+  const grupo=(teste,pct)=>{const s=rows.filter(r=>PAC[normPacote(r['Pacote'])]===pct&&esc(r['Certificação ?']).trim().toUpperCase()===teste);const b=s.filter(baixada).length;return {n:s.length,b,pct:s.length?b/s.length*100:0};};
+  const pacotes=['PCT 1','PCT 2','PCT 3'];
+  return {total,baixados:baix.length,saldo:total-baix.length,avanco:total?baix.length/total*100:0,fimTxt,hoje,fim,eixo,previsto,realizado,projecao,semPrazo,semDataEnc,maxPrazo,
+    cert:pacotes.map(p=>grupo('CERTIFICAÇÃO',p)),ncert:pacotes.map(p=>grupo('NÃO CERTIFICAÇÃO',p)),pacotes};
+}
+function renderCheckInOut(){
+  const alvo=document.getElementById('checkinout'); if(!alvo)return;
+  if(!ultimasLinhasBanco||!ultimasLinhasBanco.length){
+    alvo.innerHTML='<p class="ef-ajuda">Esta aba usa a base EAP (Banco de Dados) e ela não está carregada agora.</p>';return;
+  }
+  const c=cioCalc();
+  const n=v=>Math.round(v).toLocaleString('pt-BR');
+  const pctTxt=v=>v.toFixed(1).replace('.',',')+'%';
+  const kpi=(rot,val,cls)=>'<div class="cio-kpi '+(cls||'')+'"><div class="h">'+rot+'</div><div class="v">'+val+'</div></div>';
+  let h='<div class="cio"><div class="cio-kicker">Check in / Check out · posição em '+cioDMY(c.hoje)+'</div>'
+    +'<h2 class="cio-titulo">Avanço geral das pendências – curva de avanço com previsto x realizado</h2>'
+    +'<div class="cio-kpis">'
+    +kpi('Total pendências',n(c.total))+kpi('Baixados',n(c.baixados))+kpi('Avanço',Math.round(c.avanco)+'%','verde')
+    +kpi('Saldo',n(c.saldo))+kpi('Tendência de fechamento',c.fimTxt||'—','roxo')
+    +'</div>'
+    +'<div class="cio-grid">'
+    +'<div class="cio-box"><div id="cio_curva" style="height:380px"></div></div>'
+    +'<div class="cio-box"><div class="cio-sub">Avanço por pacote</div><div class="cio-sub2">Certificáveis x não certificáveis</div>'
+    +'<div class="cio-sub2" style="margin-top:6px;font-weight:700;color:#4D4D4D">Pendências certificáveis</div><div id="cio_cert" style="height:150px"></div>'
+    +'<div class="cio-sub2" style="margin-top:2px;font-weight:700;color:#4D4D4D">Pendências não certificáveis</div><div id="cio_ncert" style="height:150px"></div></div>'
+    +'</div>'
+    +'<div class="cio-pontos"><div class="t">PONTOS DE ATENÇÃO:</div><ul>'
+    +CIO_PONTOS_ATENCAO.map(p=>'<li><b>'+escHtml(p.pct)+':</b> '+escHtml(p.txt)+'</li>').join('')
+    +'</ul><span class="cio-am">ALVAREZ &amp; MARSAL</span></div>'
+    +'<p class="cio-nota">Escopo: Pacotes 1, 2 e 3. <b>Previsto</b> = pendências acumuladas por Data_Prazo'
+    +(c.semPrazo?' ('+c.semPrazo+' sem Data_Prazo válida entram em '+cioDM(c.maxPrazo)+', último prazo)':'')
+    +'. <b>Realizado</b> = encerramentos acumulados por Data_Encerramento'
+    +(c.semDataEnc?' ('+c.semDataEnc+' encerrada(s) sem data entram na data de referência)':'')
+    +'. A linha tracejada projeta o fechamento até '+(c.fimTxt||'—')+' (data da aba Tendência).</p></div>';
+  alvo.innerHTML=h;
+
+  const ch=initChart('cio_curva');
+  if(ch){
+    const x=c.eixo.map(cioDM);
+    const rotulos=(arr,passo,extra,min)=>arr.map((v,i)=>v==null?null:{value:v,label:{show:((i%passo===0)&&v>=min)||extra.includes(i)}});
+    const iHoje=c.eixo.indexOf(c.hoje), iFim=c.eixo.indexOf(c.fim);
+    ch.setOption({
+      color:['#1F7A7F','#8DC63F','#8DC63F'],
+      legend:{top:0,data:['Planejado (baseline)','Realizado','Projeção até o fechamento'],textStyle:{fontSize:12,color:'#4D4D4D'}},
+      grid:{left:46,right:24,top:44,bottom:56},
+      tooltip:{trigger:'axis',valueFormatter:v=>v==null?'—':Math.round(v).toLocaleString('pt-BR')},
+      xAxis:{type:'category',data:x,axisLabel:{rotate:60,fontSize:10,color:'#5A6A7E',interval:3}},
+      yAxis:{type:'value',axisLabel:{fontSize:10,color:'#5A6A7E'},splitLine:{lineStyle:{color:'#E1E6EE'}}},
+      series:[
+        {name:'Planejado (baseline)',type:'line',smooth:false,symbolSize:5,lineStyle:{width:3},label:{position:'top',fontSize:10,color:'#1F7A7F',formatter:p=>Math.round(p.value).toLocaleString('pt-BR')},data:rotulos(c.previsto,6,[],20)},
+        {name:'Realizado',type:'line',smooth:false,symbolSize:5,lineStyle:{width:3},label:{position:'bottom',fontSize:10,color:'#5E8B1E',formatter:p=>Math.round(p.value).toLocaleString('pt-BR')},data:rotulos(c.realizado,6,[iHoje],150)},
+        {name:'Projeção até o fechamento',type:'line',connectNulls:true,symbol:'circle',symbolSize:6,lineStyle:{width:3,type:'dashed'},label:{position:'top',fontSize:10,color:'#5E8B1E',formatter:p=>Math.round(p.value).toLocaleString('pt-BR')},data:c.projecao.map((v,i)=>v==null?null:{value:v,label:{show:i===iFim}})}
+      ]
+    });
+  }
+  const barras=(id,dados)=>{
+    const g=initChart(id); if(!g)return;
+    g.setOption({
+      grid:{left:8,right:8,top:22,bottom:26},
+      tooltip:{formatter:p=>p.name+': '+dados[p.dataIndex].b.toLocaleString('pt-BR')+' baixadas de '+dados[p.dataIndex].n.toLocaleString('pt-BR')+' ('+p.value.toFixed(1).replace('.',',')+'%)'},
+      xAxis:{type:'category',data:c.pacotes,axisLabel:{fontSize:12,color:'#4D4D4D'},axisTick:{show:false}},
+      yAxis:{type:'value',max:100,show:false},
+      series:[{type:'bar',barWidth:'42%',label:{show:true,position:'top',fontSize:12,color:'#4D4D4D',formatter:p=>p.value.toFixed(1).replace('.',',')+'%'},
+        data:dados.map((d,i)=>({value:d.pct,itemStyle:{color:CIO_PCT_COR[c.pacotes[i]]}}))}]
+    });
+  };
+  barras('cio_cert',c.cert); barras('cio_ncert',c.ncert);
+}
+function renderAll(){renderChrome();renderConsolidado();renderTendencia();renderCheckInOut();D.EMP_ORDER.forEach(renderEmpresa);renderCharts();}
 
 function mostrar(id,btn){
   document.querySelectorAll('.painel').forEach(p=>p.classList.remove('ativo'));
