@@ -316,6 +316,7 @@
   #checkinout .cio-pontos ul{list-style:none;margin:0;padding:0}
   #checkinout .cio-pontos li{margin:2px 0} #checkinout .cio-pontos li b{color:#1F3864}
   #checkinout .cio-am{position:absolute;right:12px;top:0;bottom:0;display:flex;align-items:center;writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:10.5px;font-weight:700;letter-spacing:.3px;color:#1F3864}
+  #checkinout .cio-secao{font-size:16px;font-weight:800;color:var(--navy);margin:22px 0 12px}
   #checkinout .cio-nota{margin-top:10px;font-size:11px;color:var(--cinza-txt);line-height:1.5}
   @media (max-width:1100px){ #checkinout .cio-grid{grid-template-columns:1fr} #checkinout .cio-kpis{grid-template-columns:repeat(2,1fr)} }
   @media print{ #checkinout .cio-grid{grid-template-columns:1.55fr 1fr !important} #checkinout .cio-kpis{grid-template-columns:repeat(5,1fr) !important} #checkinout .cio-box,#checkinout .cio-pontos{break-inside:avoid} #checkinout .cio-titulo{font-size:19px} #checkinout .cio-kpi .v{font-size:20px} }
@@ -490,7 +491,7 @@ const XLSX_URL="https://raw.githubusercontent.com/automacaofico/pendenciasr1/mai
 const MANUAL_URL="https://raw.githubusercontent.com/automacaofico/pendenciasr1/main/manual-data.json";
 const PAINEL_URL="../pendencia/index.html";
 const charts={};
-let ultimasLinhasBanco=null, dataRefTxt='', tendTxt='', abaAtual='cons';
+let ultimasLinhasBanco=null, dataRefTxt='', tendTxt='', abaAtual='cons', cioLogos={}, cioLogoMime={};
 
 const esc=s=>String(s==null?'':s);
 const escHtml=s=>esc(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -560,7 +561,15 @@ function cioCalc(aba){
   const cert=r=>esc(r['Certificação ?']).trim().toUpperCase();
   const grupos=aba.grupo?[aba.grupo]:['PCT 1','PCT 2','PCT 3','SUPER'];
   const porGrupo=grupos.map(g=>{const s=base.filter(r=>cioGrupo(r)===g);return {g,cert:stat(s.filter(r=>cert(r)==='CERTIFICAÇÃO')),ncert:stat(s.filter(r=>cert(r)==='NÃO CERTIFICAÇÃO'))};});
-  return {total,baixados:baix.length,saldo:total-baix.length,avanco:total?baix.length/total*100:0,fimTxt,hoje,fim,eixo,previsto,realizado,projecao,semPrazo,semDataEnc,maxPrazo,porGrupo};
+  const porEmpresa={};
+  rows.forEach(r=>{
+    const k=esc(r['Empresa']).trim().toUpperCase()||'SEM EMPRESA';
+    const e=porEmpresa[k]||(porEmpresa[k]={key:k,total:0,exec:0,certRest:0,ncertRest:0});
+    e.total++;
+    if(cioBaixada(r))e.exec++; else if(cert(r)==='CERTIFICAÇÃO')e.certRest++; else if(cert(r)==='NÃO CERTIFICAÇÃO')e.ncertRest++;
+  });
+  const empresas=Object.values(porEmpresa).map(e=>Object.assign(e,{rest:e.total-e.exec,pct:e.total?Math.round(e.exec/e.total*100):0})).sort((a,b)=>b.total-a.total||a.key.localeCompare(b.key));
+  return {empresas,total,baixados:baix.length,saldo:total-baix.length,avanco:total?baix.length/total*100:0,fimTxt,hoje,fim,eixo,previsto,realizado,projecao,semPrazo,semDataEnc,maxPrazo,porGrupo};
 }
 function cioNota(aba,c){
   const ehCons=!aba.grupo;
@@ -574,7 +583,31 @@ function cioNota(aba,c){
       +'A tendência de fechamento usa o ritmo de encerramentos das últimas 4 semanas (dias úteis, seg–sáb)'+(c.fimTxt?'':'; sem encerramentos nesse período, não há projeção')+'.';
   return nota;
 }
-function cioHtmlAba(aba,c){
+const CIO_NOMES={GSA:'GRUPO GSA SERVICE'};
+const cioNomeEmp=k=>CIO_NOMES[k]||k;
+const cioSemAcento=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+function cioLogoKey(k){ if(cioLogos[k])return k; const n=cioSemAcento(k); return Object.keys(cioLogos).find(x=>cioSemAcento(x)===n)||null; }
+function cioCardsEmpresaHtml(aba,c){
+  if(!aba.grupo||!c.empresas.length)return '';
+  const grad={verde:'linear-gradient(90deg,var(--verde),#3fb862)',amarelo:'linear-gradient(90deg,var(--amarelo),#ffd85c)',vermelho:'linear-gradient(90deg,var(--vermelho),#e56b6b)'};
+  const lbl=aba.grupo==='SUPER'?'Superestrutura':'Pacote 0'+aba.nome.replace(/\D/g,'');
+  let h='<h2 class="cio-secao">Pendências por empresa · '+escHtml(aba.nome)+'</h2><div class="comp-pacotes">';
+  c.empresas.forEach(e=>{
+    const lk=cioLogoKey(e.key);
+    const logo=lk?'<div class="empresa-logo-card"><img src="data:image/'+(cioLogoMime[lk]||'png')+';base64,'+cioLogos[lk]+'" alt="'+escHtml(e.key)+'"></div>':'';
+    const gcls=e.pct>=70?'verde':(e.pct>=40?'amarelo':'vermelho');
+    h+='<div class="comp-card"><div class="cab" style="background:linear-gradient(135deg,var(--navy),#24467a)"><div style="display:flex;align-items:center;gap:14px">'+logo
+      +'<div><div class="nome">'+escHtml(cioNomeEmp(e.key))+'</div><div class="empresa">'+lbl+'</div></div></div></div><div class="corpo">'
+      +'<div class="linha"><span class="lab">Total</span><span class="num">'+e.total.toLocaleString('pt-BR')+'</span></div>'
+      +'<div class="linha"><span class="lab">Executadas</span><span class="num">'+e.exec.toLocaleString('pt-BR')+' ('+e.pct+'%)</span></div>'
+      +'<div class="linha"><span class="lab">Restantes</span><span class="num" style="color:var(--vermelho)">'+e.rest.toLocaleString('pt-BR')+'</span></div>'
+      +'<div class="barra-avanco"><div class="fill" style="width:'+e.pct+'%;background:'+grad[gcls]+'"></div></div>'
+      +'<div class="linha"><span class="lab">Impacta certificação</span><span class="num" style="color:var(--vermelho)">'+e.certRest.toLocaleString('pt-BR')+'</span></div>'
+      +'<div class="linha"><span class="lab">Não impacta certificação</span><span class="num">'+e.ncertRest.toLocaleString('pt-BR')+'</span></div>'
+      +'</div></div>';
+  });
+  return h+'</div>';
+}function cioHtmlAba(aba,c){
   const n=v=>Math.round(v).toLocaleString('pt-BR');
   const kpi=(rot,val,cls)=>'<div class="cio-kpi '+(cls||'')+'"><div class="h">'+rot+'</div><div class="v">'+val+'</div></div>';
   const ehCons=!aba.grupo;
@@ -590,6 +623,7 @@ function cioHtmlAba(aba,c){
     +'<div class="cio-box"><div id="cio_curva_'+aba.id+'" style="height:380px"></div></div>'
     +'<div class="cio-box"><div class="cio-sub">'+subBarras+'</div><div class="cio-sub2">% de pendências baixadas · certificáveis x não certificáveis</div><div id="cio_barras_'+aba.id+'" style="height:380px"></div></div>'
     +'</div>'
+    +cioCardsEmpresaHtml(aba,c)
     +'<p class="cio-nota">'+nota+'</p></div>';
 }
 function cioDesenhar(aba,c){
@@ -718,15 +752,68 @@ function cioMontarSlide(pptx,aba,c){
     s.addText('Certificáveis: '+n(g.cert.b)+' de '+n(g.cert.n)+' baixadas  ·  Não certificáveis: '+n(g.ncert.b)+' de '+n(g.ncert.n),{x:8.6,y:6.15,w:4.45,h:0.3,fontFace:'Calibri',fontSize:9,color:CINZA,align:'center'});
   }
   // nota + rodapé
-  s.addText(cioNota(aba,c).replace(/<[^>]+>/g,''),{x:0.4,y:6.5,w:12.5,h:0.6,fontFace:'Calibri',fontSize:8,color:CINZA,valign:'top',fit:'shrink'});
-  s.addText('Vale S.A. · FICO Infra  |  Fonte: aba "Banco de Dados" da EAP (Pacotes 1, 2 e 3)  |  Ref.: '+cioDMY(c.hoje),{x:0.4,y:7.12,w:12.5,h:0.25,fontFace:'Calibri',fontSize:8,color:'8A97A8'});
+  s.addText(cioNota(aba,c).replace(/<[^>]+>/g,'').replace('A linha tracejada','A linha roxa'),{x:0.4,y:6.5,w:12.5,h:0.6,fontFace:'Calibri',fontSize:8,color:CINZA,valign:'top',fit:'shrink'});
+  s.addText('Vale S.A.  |  Fonte: aba "Banco de Dados" da EAP (Pacotes 1, 2 e 3)  |  Ref.: '+cioDMY(c.hoje),{x:0.4,y:7.12,w:12.5,h:0.25,fontFace:'Calibri',fontSize:8,color:'8A97A8'});
 }
-function cioConstruirPPT(todas){
+function cioMontarSlideEmpresas(pptx,aba,c){
+  const NAVY='1B3A5C', TEAL='1F7A7F', CINZA='5A6A7E', VERM='C0305E';
+  const n=v=>Math.round(v).toLocaleString('pt-BR');
+  const s=pptx.addSlide();
+  s.background={color:'FFFFFF'};
+  s.addShape(pptx.ShapeType.rect,{x:0,y:0,w:13.33,h:0.12,fill:{color:TEAL},line:{color:TEAL,width:0}});
+  s.addText('Check in / Check out · '+aba.nome+' · posição em '+cioDMY(c.hoje),{x:0.4,y:0.22,w:12.5,h:0.3,fontFace:'Calibri',fontSize:11,bold:true,color:TEAL});
+  s.addText((aba.grupo==='SUPER'?'Superestrutura (Somafel)':'Pacote '+aba.nome.replace(/\D/g,''))+' – pendências por empresa',{x:0.4,y:0.5,w:12.5,h:0.55,fontFace:'Calibri',fontSize:22,bold:true,color:NAVY,fit:'shrink'});
+  const lbl=aba.grupo==='SUPER'?'Superestrutura':'Pacote 0'+aba.nome.replace(/\D/g,'');
+  const kw=2.38, kg=0.15, ch=2.62, cg=0.2;
+  c.empresas.slice(0,10).forEach((e,i)=>{
+    const x=0.4+(i%5)*(kw+kg), y=1.25+Math.floor(i/5)*(ch+cg);
+    s.addShape(pptx.ShapeType.rect,{x,y,w:kw,h:ch,fill:{color:'FFFFFF'},line:{color:'D5DDE8',width:0.75}});
+    s.addShape(pptx.ShapeType.rect,{x,y,w:kw,h:0.62,fill:{color:NAVY},line:{color:NAVY,width:0}});
+    const lk=cioLogoKey(e.key);
+    let tx=x+0.1;
+    if(lk){
+      s.addShape(pptx.ShapeType.roundRect,{x:x+0.08,y:y+0.1,w:0.95,h:0.42,fill:{color:'FFFFFF'},line:{color:'FFFFFF',width:0},rectRadius:0.05});
+      s.addImage({data:'image/'+(cioLogoMime[lk]||'png')+';base64,'+cioLogos[lk],x:x+0.12,y:y+0.13,w:0.87,h:0.36,sizing:{type:'contain',w:0.87,h:0.36}});
+      tx=x+1.1;
+    }
+    s.addText([{text:cioNomeEmp(e.key),options:{bold:true,fontSize:11,color:'FFFFFF',breakLine:true}},{text:lbl,options:{fontSize:8,color:'DCE6F2'}}],{x:tx,y:y+0.04,w:x+kw-tx-0.05,h:0.54,fontFace:'Calibri',valign:'middle',fit:'shrink'});
+    const linha=(k,rot,val,cor)=>{
+      const yy=y+0.7+k*0.33;
+      s.addText(rot,{x:x+0.12,y:yy,w:1.4,h:0.3,fontFace:'Calibri',fontSize:10,color:CINZA,valign:'middle'});
+      s.addText(val,{x:x+1.1,y:yy,w:kw-1.22,h:0.3,fontFace:'Calibri',fontSize:10.5,bold:true,color:cor||NAVY,align:'right',valign:'middle'});
+    };
+    linha(0,'Total',n(e.total));
+    linha(1,'Executadas',n(e.exec)+' ('+e.pct+'%)');
+    linha(2,'Restantes',n(e.rest),VERM);
+    const yb=y+0.7+3*0.33+0.06;
+    s.addShape(pptx.ShapeType.roundRect,{x:x+0.12,y:yb,w:kw-0.24,h:0.12,fill:{color:'E1E6EE'},line:{color:'E1E6EE',width:0},rectRadius:0.06});
+    if(e.pct>0)s.addShape(pptx.ShapeType.roundRect,{x:x+0.12,y:yb,w:Math.max(0.1,(kw-0.24)*e.pct/100),h:0.12,fill:{color:e.pct>=70?'2E9B4E':(e.pct>=40?'ECB11F':VERM)},line:{width:0,color:'FFFFFF'},rectRadius:0.06});
+    const y2=yb+0.18;
+    s.addText('Impacta certificação',{x:x+0.12,y:y2,w:1.5,h:0.3,fontFace:'Calibri',fontSize:10,color:CINZA,valign:'middle'});
+    s.addText(n(e.certRest),{x:x+1.5,y:y2,w:kw-1.62,h:0.3,fontFace:'Calibri',fontSize:10.5,bold:true,color:VERM,align:'right',valign:'middle'});
+    s.addText('Não impacta certificação',{x:x+0.12,y:y2+0.3,w:1.7,h:0.3,fontFace:'Calibri',fontSize:10,color:CINZA,valign:'middle'});
+    s.addText(n(e.ncertRest),{x:x+1.7,y:y2+0.3,w:kw-1.82,h:0.3,fontFace:'Calibri',fontSize:10.5,bold:true,color:NAVY,align:'right',valign:'middle'});
+  });
+  if(c.empresas.length>=2&&c.empresas.length<=5){
+    const nomes=c.empresas.map(e=>cioNomeEmp(e.key));
+    s.addText('Pendências restantes por empresa · impacta x não impacta certificação',{x:0.4,y:4.15,w:12.5,h:0.3,fontFace:'Calibri',fontSize:13,bold:true,color:NAVY});
+    s.addChart(pptx.charts.BAR,[
+      {name:'Impacta certificação',labels:nomes,values:c.empresas.map(e=>e.certRest)},
+      {name:'Não impacta certificação',labels:nomes,values:c.empresas.map(e=>e.ncertRest)}
+    ],{
+      x:0.4,y:4.45,w:12.5,h:2.35,barDir:'col',barGrouping:'stacked',barGapWidthPct:80,
+      chartColors:[VERM,NAVY],showLegend:true,legendPos:'r',legendFontSize:10,
+      showValue:true,dataLabelColor:'FFFFFF',dataLabelFontSize:9,dataLabelFormatCode:'#,##0;;',
+      valAxisHidden:true,valGridLine:{style:'none'},catAxisLabelFontSize:10,catAxisLabelColor:'4D4D4D'
+    });
+  }  s.addText('Executadas = pendências com Status_Pendencia "Encerrado". Impacta / não impacta certificação = pendências ainda restantes, conforme a coluna "Certificação ?" da EAP.',{x:0.4,y:6.85,w:12.5,h:0.25,fontFace:'Calibri',fontSize:8,color:CINZA});
+  s.addText('Vale S.A.  |  Fonte: aba "Banco de Dados" da EAP (Pacotes 1, 2 e 3)  |  Ref.: '+cioDMY(c.hoje),{x:0.4,y:7.12,w:12.5,h:0.25,fontFace:'Calibri',fontSize:8,color:'8A97A8'});
+}function cioConstruirPPT(todas){
   const pptx=new PptxGenJS();
   pptx.layout='LAYOUT_WIDE';
   pptx.title='Check in / Check out – FICO';
   pptx.company='Vale S.A. · FICO Infra';
-  (todas?CIO_ABAS:CIO_ABAS.filter(a=>a.id===abaAtual)).forEach(a=>cioMontarSlide(pptx,a,cioCalc(a)));
+  (todas?CIO_ABAS:CIO_ABAS.filter(a=>a.id===abaAtual)).forEach(a=>{const c=cioCalc(a); cioMontarSlide(pptx,a,c); if(a.grupo&&c.empresas.length)cioMontarSlideEmpresas(pptx,a,c);});
   return pptx;
 }
 function cioExportarPPT(todas){
@@ -758,6 +845,10 @@ async function carregar(){
     ultimasLinhasBanco=XLSX.utils.sheet_to_json(wb.Sheets['Banco de Dados'],{range:1,defval:null});
     dataRefTxt=String((manual&&manual.meta&&manual.meta.DATA_REFERENCIA)||'').trim();
     const mt=painel.match(/tendenciaPrazoFinal:'([^']+)'/); tendTxt=mt?mt[1]:'';
+    try{
+      const ml=painel.match(/const LOGOS = (\{.*?\});\s*\n/), mm=painel.match(/const LOGO_MIME = (\{.*?\});\s*\n/);
+      cioLogos=ml?JSON.parse(ml[1]):{}; cioLogoMime=mm?JSON.parse(mm[1]):{};
+    }catch(e){ cioLogos={}; cioLogoMime={}; }
     document.getElementById('dataRef').textContent=dataRefTxt||'—';
     document.getElementById('footerData').textContent=dataRefTxt||'—';
     dot.className='fetch-dot ok'; st.textContent='sincronizado · GitHub';
