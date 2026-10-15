@@ -6,6 +6,7 @@
 <title>Check in / Check out — Curva S das Pendências · FICO Infra</title>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 <style>
   :root{
     --navy:#142A4C; --navy2:#1E3A63; --laranja:#F89B32; --laranja2:#FFB259; --azul:#3578BC; --azul2:#4A90D9;
@@ -78,6 +79,7 @@
     background:linear-gradient(135deg,var(--laranja),var(--laranja2));color:#fff;border:none;
     padding:10px 20px;border-radius:10px;font-weight:700;cursor:pointer;font-size:12.5px;
     align-self:center;box-shadow:0 6px 18px rgba(248,155,50,.4);transition:transform .2s,box-shadow .2s}
+  nav.abas .print-btn.ppt-btn{margin-left:8px}
   nav.abas .print-btn:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(248,155,50,.55)}
   nav.abas .print-btn:active{transform:translateY(0)}
 
@@ -468,6 +470,8 @@ td.tend-col{color:var(--cinza-txt);font-weight:600}
   <button onclick="mostrar('p3',this)">PCT 3</button>
   <button onclick="mostrar('super',this)">Superestrutura (Somafel)</button>
   <button class="print-btn" type="button" onclick="window.print()">🖨 Imprimir esta aba</button>
+  <button class="print-btn ppt-btn" type="button" onclick="cioExportarPPT(false)" title="Gera um PowerPoint editável (gráficos nativos) só com a aba aberta">📊 PPT (aba atual)</button>
+  <button class="print-btn ppt-btn" type="button" onclick="cioExportarPPT(true)" title="Gera um PowerPoint editável (gráficos nativos) com todas as abas">📊 PPT (todas)</button>
 </nav>
 <main id="checkinout" style="margin-top:20px">
   <section id="cio_cons" class="painel ativo"><p class="ef-ajuda">Carregando a base de pendências…</p></section>
@@ -486,7 +490,7 @@ const XLSX_URL="https://raw.githubusercontent.com/automacaofico/pendenciasr1/mai
 const MANUAL_URL="https://raw.githubusercontent.com/automacaofico/pendenciasr1/main/manual-data.json";
 const PAINEL_URL="../pendencia/index.html";
 const charts={};
-let ultimasLinhasBanco=null, dataRefTxt='', tendTxt='';
+let ultimasLinhasBanco=null, dataRefTxt='', tendTxt='', abaAtual='cons';
 
 const esc=s=>String(s==null?'':s);
 const escHtml=s=>esc(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -558,11 +562,8 @@ function cioCalc(aba){
   const porGrupo=grupos.map(g=>{const s=base.filter(r=>cioGrupo(r)===g);return {g,cert:stat(s.filter(r=>cert(r)==='CERTIFICAÇÃO')),ncert:stat(s.filter(r=>cert(r)==='NÃO CERTIFICAÇÃO'))};});
   return {total,baixados:baix.length,saldo:total-baix.length,avanco:total?baix.length/total*100:0,fimTxt,hoje,fim,eixo,previsto,realizado,projecao,semPrazo,semDataEnc,maxPrazo,porGrupo};
 }
-function cioHtmlAba(aba,c){
-  const n=v=>Math.round(v).toLocaleString('pt-BR');
-  const kpi=(rot,val,cls)=>'<div class="cio-kpi '+(cls||'')+'"><div class="h">'+rot+'</div><div class="v">'+val+'</div></div>';
+function cioNota(aba,c){
   const ehCons=!aba.grupo;
-  const subBarras=ehCons?'Avanço por pacote':'Certificáveis x não certificáveis';
   let nota='Escopo: Pacotes 1, 2 e 3. <b>Previsto</b> = pendências acumuladas por Data_Prazo'
     +(c.semPrazo?' ('+c.semPrazo+' sem Data_Prazo válida entram em '+cioDM(c.maxPrazo)+', último prazo)':'')
     +'. <b>Realizado</b> = encerramentos acumulados por Data_Encerramento'
@@ -571,6 +572,14 @@ function cioHtmlAba(aba,c){
     ?'<b>SUPER</b> = pendências da empresa SOMAFEL (superestrutura), que ficam fora de PCT 1 e PCT 3 nos gráficos por pacote. A linha tracejada projeta o fechamento até '+(c.fimTxt||'—')+' (data da aba Tendência do Painel de Pendências).'
     :(aba.grupo==='SUPER'?'Aba da empresa SOMAFEL (superestrutura): essas pendências não entram em PCT 1 e PCT 3. ':'')
       +'A tendência de fechamento usa o ritmo de encerramentos das últimas 4 semanas (dias úteis, seg–sáb)'+(c.fimTxt?'':'; sem encerramentos nesse período, não há projeção')+'.';
+  return nota;
+}
+function cioHtmlAba(aba,c){
+  const n=v=>Math.round(v).toLocaleString('pt-BR');
+  const kpi=(rot,val,cls)=>'<div class="cio-kpi '+(cls||'')+'"><div class="h">'+rot+'</div><div class="v">'+val+'</div></div>';
+  const ehCons=!aba.grupo;
+  const subBarras=ehCons?'Avanço por pacote':'Certificáveis x não certificáveis';
+  const nota=cioNota(aba,c);
   return '<div class="cio"><div class="cio-kicker">Check in / Check out · '+escHtml(aba.nome)+' · posição em '+cioDMY(c.hoje)+'</div>'
     +'<h2 class="cio-titulo">'+escHtml(aba.titulo)+'</h2>'
     +'<div class="cio-kpis">'
@@ -647,9 +656,89 @@ function cioRenderAba(id){
   sec.innerHTML=cioHtmlAba(aba,c);
   cioDesenhar(aba,c);
 }
+// ============================================================
+// Exportação para PowerPoint (PptxGenJS): gráficos NATIVOS do PowerPoint — no PPT, botão direito no gráfico →
+// "Editar dados" abre a planilha embutida com os números. Cartões e notas saem como texto editável.
+// ============================================================
+function cioMontarSlide(pptx,aba,c){
+  const NAVY='1B3A5C', TEAL='1F7A7F', VERDE='8DC63F', ROXO='6B4C9A', CINZA='5A6A7E';
+  const n=v=>Math.round(v).toLocaleString('pt-BR');
+  const s=pptx.addSlide();
+  s.background={color:'FFFFFF'};
+  s.addShape(pptx.ShapeType.rect,{x:0,y:0,w:13.33,h:0.12,fill:{color:TEAL},line:{color:TEAL,width:0}});
+  s.addText('Check in / Check out · '+aba.nome+' · posição em '+cioDMY(c.hoje),{x:0.4,y:0.22,w:12.5,h:0.3,fontFace:'Calibri',fontSize:11,bold:true,color:TEAL});
+  s.addText(aba.titulo,{x:0.4,y:0.5,w:12.5,h:0.55,fontFace:'Calibri',fontSize:22,bold:true,color:NAVY,fit:'shrink'});
+  // cartões
+  const kpis=[['Total pendências',n(c.total),NAVY],['Baixados',n(c.baixados),NAVY],['Avanço',Math.round(c.avanco)+'%','5E8B1E'],['Saldo',n(c.saldo),NAVY],['Tendência de fechamento',c.fimTxt||'—',ROXO]];
+  const kw=2.38, kg=0.15;
+  kpis.forEach((k,i)=>{
+    const x=0.4+i*(kw+kg);
+    s.addShape(pptx.ShapeType.roundRect,{x,y:1.15,w:kw,h:0.85,fill:{color:'F3F6FA'},line:{color:'D5DDE8',width:0.75},rectRadius:0.08});
+    s.addText(k[0],{x,y:1.19,w:kw,h:0.3,align:'center',fontFace:'Calibri',fontSize:10.5,bold:true,color:CINZA});
+    s.addText(k[1],{x,y:1.45,w:kw,h:0.5,align:'center',fontFace:'Calibri',fontSize:22,bold:true,color:k[2]});
+  });
+  // curva S (linhas nativas)
+  const x=c.eixo.map(cioDM);
+  s.addChart(pptx.charts.LINE,[
+    {name:'Planejado (baseline)',labels:x,values:c.previsto},
+    {name:'Realizado',labels:x,values:c.realizado},
+    {name:'Projeção até o fechamento',labels:x,values:c.projecao}
+  ],{
+    x:0.3,y:2.15,w:8.2,h:4.3,
+    chartColors:[TEAL,VERDE,ROXO],lineSize:3,lineDataSymbolSize:3,
+    showLegend:true,legendPos:'t',legendFontSize:11,legendColor:'4D4D4D',
+    catAxisLabelFontSize:9,catAxisLabelColor:CINZA,catAxisLabelRotate:-60,catAxisLabelFrequency:3,
+    valAxisLabelFontSize:9,valAxisLabelColor:CINZA,valAxisLabelFormatCode:'#,##0',
+    valGridLine:{color:'E1E6EE',size:0.5},catGridLine:{style:'none'},
+    displayBlanksAs:'span'
+  });
+  // barras (nativas)
+  const ehCons=!aba.grupo;
+  const r1=v=>Math.round(v*10)/10;
+  s.addText(ehCons?'Avanço por pacote':'Certificáveis x não certificáveis',{x:8.7,y:2.15,w:4.3,h:0.3,fontFace:'Calibri',fontSize:13,bold:true,color:NAVY});
+  s.addText('% de pendências baixadas · certificáveis x não certificáveis',{x:8.7,y:2.43,w:4.3,h:0.25,fontFace:'Calibri',fontSize:9,color:CINZA});
+  const nomeGrp=g=>g==='SUPER'?'Superestrutura (Somafel)':g;
+  const fmtBarra={
+    x:8.6,y:2.7,w:4.45,h:3.4,barDir:'col',barGrouping:'clustered',barGapWidthPct:40,
+    showValue:true,dataLabelFormatCode:'0.0"%"',dataLabelPosition:'outEnd',dataLabelFontSize:9,dataLabelColor:'4D4D4D',
+    valAxisHidden:true,valAxisMinVal:0,valAxisMaxVal:100,valGridLine:{style:'none'},
+    catAxisLabelFontSize:10,catAxisLabelColor:'4D4D4D'
+  };
+  if(ehCons){
+    const lab=c.porGrupo.map(g=>nomeGrp(g.g));
+    s.addChart(pptx.charts.BAR,[
+      {name:'Certificáveis',labels:lab,values:c.porGrupo.map(g=>r1(g.cert.pct))},
+      {name:'Não certificáveis',labels:lab,values:c.porGrupo.map(g=>r1(g.ncert.pct))}
+    ],Object.assign(fmtBarra,{chartColors:[TEAL,VERDE],showLegend:true,legendPos:'t',legendFontSize:11}));
+  }else{
+    const g=c.porGrupo[0];
+    s.addChart(pptx.charts.BAR,[
+      {name:'% baixadas',labels:['Certificáveis','Não certificáveis'],values:[r1(g.cert.pct),r1(g.ncert.pct)]}
+    ],Object.assign(fmtBarra,{chartColors:[TEAL,VERDE],showLegend:false}));
+    s.addText('Certificáveis: '+n(g.cert.b)+' de '+n(g.cert.n)+' baixadas  ·  Não certificáveis: '+n(g.ncert.b)+' de '+n(g.ncert.n),{x:8.6,y:6.15,w:4.45,h:0.3,fontFace:'Calibri',fontSize:9,color:CINZA,align:'center'});
+  }
+  // nota + rodapé
+  s.addText(cioNota(aba,c).replace(/<[^>]+>/g,''),{x:0.4,y:6.5,w:12.5,h:0.6,fontFace:'Calibri',fontSize:8,color:CINZA,valign:'top',fit:'shrink'});
+  s.addText('Vale S.A. · FICO Infra · Gerência de Construção  |  Fonte: aba "Banco de Dados" da EAP (Pacotes 1, 2 e 3)  |  Ref.: '+cioDMY(c.hoje),{x:0.4,y:7.12,w:12.5,h:0.25,fontFace:'Calibri',fontSize:8,color:'8A97A8'});
+}
+function cioConstruirPPT(todas){
+  const pptx=new PptxGenJS();
+  pptx.layout='LAYOUT_WIDE';
+  pptx.title='Check in / Check out – FICO';
+  pptx.company='Vale S.A. · FICO Infra';
+  (todas?CIO_ABAS:CIO_ABAS.filter(a=>a.id===abaAtual)).forEach(a=>cioMontarSlide(pptx,a,cioCalc(a)));
+  return pptx;
+}
+function cioExportarPPT(todas){
+  if(!ultimasLinhasBanco||!ultimasLinhasBanco.length){alert('A base EAP não está carregada; não há dados para exportar.');return;}
+  if(typeof PptxGenJS==='undefined'){alert('A biblioteca de exportação para PowerPoint não carregou (verifique a conexão com a internet).');return;}
+  const ref=(dataRefTxt||'').replace(/\//g,'-').trim();
+  cioConstruirPPT(todas).writeFile({fileName:'Check_in_Check_out_FICO'+(ref?'_'+ref:'')+(todas?'':'_'+abaAtual)+'.pptx'});
+}
+
 function mostrar(id,btn){
   document.querySelectorAll('#checkinout .painel').forEach(p=>p.classList.remove('ativo'));
-  document.getElementById('cio_'+id).classList.add('ativo');
+  document.getElementById('cio_'+id).classList.add('ativo'); abaAtual=id;
   document.querySelectorAll('nav.abas button:not(.print-btn)').forEach(b=>b.classList.remove('ativa'));
   if(btn)btn.classList.add('ativa');
   cioRenderAba(id);
