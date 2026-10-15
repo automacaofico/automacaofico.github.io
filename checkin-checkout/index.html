@@ -719,7 +719,7 @@ function cioMontarSlide(pptx,aba,c){
   }
   // nota + rodapé
   s.addText(cioNota(aba,c).replace(/<[^>]+>/g,''),{x:0.4,y:6.5,w:12.5,h:0.6,fontFace:'Calibri',fontSize:8,color:CINZA,valign:'top',fit:'shrink'});
-  s.addText('Vale S.A. · FICO Infra · Gerência de Construção  |  Fonte: aba "Banco de Dados" da EAP (Pacotes 1, 2 e 3)  |  Ref.: '+cioDMY(c.hoje),{x:0.4,y:7.12,w:12.5,h:0.25,fontFace:'Calibri',fontSize:8,color:'8A97A8'});
+  s.addText('Vale S.A. · FICO Infra  |  Fonte: aba "Banco de Dados" da EAP (Pacotes 1, 2 e 3)  |  Ref.: '+cioDMY(c.hoje),{x:0.4,y:7.12,w:12.5,h:0.25,fontFace:'Calibri',fontSize:8,color:'8A97A8'});
 }
 function cioConstruirPPT(todas){
   const pptx=new PptxGenJS();
