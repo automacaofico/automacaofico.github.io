@@ -694,7 +694,7 @@ function cioRenderAba(id){
 // Exportação para PowerPoint (PptxGenJS): gráficos NATIVOS do PowerPoint — no PPT, botão direito no gráfico →
 // "Editar dados" abre a planilha embutida com os números. Cartões e notas saem como texto editável.
 // ============================================================
-function cioMontarSlide(pptx,aba,c){
+function cioMontarSlide(pptx,aba,c,soCurva){
   const NAVY='1B3A5C', TEAL='1F7A7F', VERDE='8DC63F', ROXO='6B4C9A', CINZA='5A6A7E';
   const n=v=>Math.round(v).toLocaleString('pt-BR');
   const s=pptx.addSlide();
@@ -718,15 +718,17 @@ function cioMontarSlide(pptx,aba,c){
     {name:'Realizado',labels:x,values:c.realizado},
     {name:'Projeção até o fechamento',labels:x,values:c.projecao}
   ],{
-    x:0.3,y:2.15,w:8.2,h:4.3,
+    x:0.3,y:2.15,w:soCurva?12.7:8.2,h:4.3,
     chartColors:[TEAL,VERDE,ROXO],lineSize:3,lineDataSymbolSize:3,
     showLegend:true,legendPos:'t',legendFontSize:11,legendColor:'4D4D4D',
     catAxisLabelFontSize:9,catAxisLabelColor:CINZA,catAxisLabelRotate:-60,catAxisLabelFrequency:3,
     valAxisLabelFontSize:9,valAxisLabelColor:CINZA,valAxisLabelFormatCode:'#,##0',
     valGridLine:{color:'E1E6EE',size:0.5},catGridLine:{style:'none'},
-    displayBlanksAs:'span'
+    displayBlanksAs:'span',
+    valAxisMajorUnit:Math.max(...c.previsto,c.total)<=10?1:undefined
   });
   // barras (nativas)
+  if(!soCurva){
   const ehCons=!aba.grupo;
   const r1=v=>Math.round(v*10)/10;
   s.addText(ehCons?'Avanço por pacote':'Certificáveis x não certificáveis',{x:8.7,y:2.15,w:4.3,h:0.3,fontFace:'Calibri',fontSize:13,bold:true,color:NAVY});
@@ -750,6 +752,7 @@ function cioMontarSlide(pptx,aba,c){
       {name:'% baixadas',labels:['Certificáveis','Não certificáveis'],values:[r1(g.cert.pct),r1(g.ncert.pct)]}
     ],Object.assign(fmtBarra,{chartColors:[TEAL,VERDE],showLegend:false}));
     s.addText('Certificáveis: '+n(g.cert.b)+' de '+n(g.cert.n)+' baixadas  ·  Não certificáveis: '+n(g.ncert.b)+' de '+n(g.ncert.n),{x:8.6,y:6.15,w:4.45,h:0.3,fontFace:'Calibri',fontSize:9,color:CINZA,align:'center'});
+  }
   }
   // nota + rodapé
   s.addText(cioNota(aba,c).replace(/<[^>]+>/g,'').replace('A linha tracejada','A linha roxa'),{x:0.4,y:6.5,w:12.5,h:0.6,fontFace:'Calibri',fontSize:8,color:CINZA,valign:'top',fit:'shrink'});
