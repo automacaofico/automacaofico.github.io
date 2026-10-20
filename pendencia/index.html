@@ -405,7 +405,15 @@ table.tend-tabela thead tr.tend-semanas th{background:var(--azul)}
 table.tend-tabela td:first-child,table.tend-tabela th:first-child{text-align:left;font-weight:700;color:var(--navy)}
 table.tend-tabela tbody tr:hover{background:#f4f7fa}
 table.tend-tabela tfoot td{font-weight:800;background:#f4f7fa;color:var(--navy)}
-.tend-pct{display:inline-flex;align-items:center;gap:5px;font-weight:700}
+/* ============ RESUMO (formato das anotações da gerência) ============ */
+.resumo-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;margin-top:18px}
+.resumo-grid .tend-mes{margin-bottom:0}
+table.tend-tabela.resumo{min-width:0}
+table.tend-tabela.resumo td:not(:first-child),table.tend-tabela.resumo th:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
+table.tend-tabela.resumo td:first-child img{height:18px;max-width:54px;object-fit:contain;vertical-align:middle;margin-right:9px}
+table.tend-tabela.resumo .soma{color:var(--navy);font-weight:800}
+table.tend-tabela.resumo tfoot td.saldo{color:var(--vermelho)}
+@media (max-width:900px){.resumo-grid{grid-template-columns:1fr}}.tend-pct{display:inline-flex;align-items:center;gap:5px;font-weight:700}
 .tend-pct::before{content:"";width:8px;height:8px;border-radius:50%;flex:none}
 .tend-pct.verde::before{background:var(--verde);box-shadow:0 0 5px var(--verde)}
 .tend-pct.amarelo::before{background:var(--amarelo);box-shadow:0 0 5px var(--amarelo)}
@@ -534,12 +542,14 @@ td.tend-col{color:var(--cinza-txt);font-weight:600}
 
 <nav class="abas" id="navAbas">
   <button class="ativa" onclick="mostrar('consolidado',this)">Consolidado</button>
+  <button onclick="mostrar('resumo',this)">Resumo</button>
   <button onclick="mostrar('tendencia',this)">Tendência</button>
   <button class="print-btn" id="printBtn" onclick="window.print()">🖨 Imprimir esta aba</button>
 </nav>
 
 <main id="main">
   <section id="consolidado" class="painel ativo"></section>
+  <section id="resumo" class="painel"></section>
   <section id="tendencia" class="painel"></section>
 </main>
 
@@ -1303,6 +1313,73 @@ const TENDENCIA_OUTUBRO_DETALHE={
   ]
 };
 function tendPctCls(pct){ if(pct>=100)return 'verde'; if(pct>=70)return 'amarelo'; return 'vermelho'; }
+// ============================================================
+// RESUMO — mesmo formato das anotações da gerência, calculado direto da base (Banco de Dados):
+//  1) Visão CLP (coluna Empresa): nº de pendências EM ABERTO que impactam certificação
+//     (coluna "Certificação ?" = Certificação). ATERPA R aparece somada à ATERPA ("88 + 6 = 94").
+//  2) Por execução (coluna Executante; em branco usa a Empresa, como no resto do painel):
+//     nº de pendências certificáveis em aberto e nº de pendências em aberto de Revegetação /
+//     Hidrossemeadura (coluna "Tipo de Pendencia", qualquer classificação de certificação).
+//     Saldo = certificáveis − revegetação (como na conta do resumo da gerência).
+// Respeita a Regional e o filtro de Elemento da página.
+// ============================================================
+function renderResumo(){
+  const el=document.getElementById('resumo'); if(!el)return;
+  if(!ultimasLinhasBanco||!ultimasLinhasBanco.length){el.innerHTML='<p class="ef-ajuda">Carregando a base de pendências…</p>';return;}
+  const PAC_OK=new Set(['1','2','3','1A','1B','1C']);
+  const rows=ELEMENTOS_SELECIONADOS?ultimasLinhasBanco.filter(r=>ELEMENTOS_SELECIONADOS.has(String(r['Elemento']||'').trim())):ultimasLinhasBanco;
+  const clp={}, exe={}, rev={};
+  rows.forEach(r=>{
+    const pk=normPacote(r['Pacote']); if(!PAC_OK.has(pk)||!passaRegional('P'+pk))return;
+    if(esc(r['Status_Pendencia']).trim().toUpperCase()==='ENCERRADO')return; // só pendências em aberto
+    const empresa=canonEmpresa(r['Empresa']);
+    const exec=canonEmpresa(esc(r['Executante']).trim()?r['Executante']:r['Empresa']);
+    const cert=esc(r['Certificação ?']).trim().toUpperCase()==='CERTIFICAÇÃO';
+    if(cert&&empresa)clp[empresa]=(clp[empresa]||0)+1;
+    if(cert&&exec)exe[exec]=(exe[exec]||0)+1;
+    if(exec&&/reveg|hidro/i.test(esc(r['Tipo de Pendencia'])))rev[exec]=(rev[exec]||0)+1;
+  });
+  const soma=o=>Object.values(o).reduce((a,v)=>a+v,0);
+  const n=v=>(v||0).toLocaleString('pt-BR');
+  const nomeLogo=emp=>{const s=logoSrc(emp); return (s?'<img src="'+s+'" alt="">':'')+escHtml(nomeExibicao(emp));};
+  const ordem=(fixa,dados,ignorar)=>fixa.concat(Object.keys(dados).filter(k=>!fixa.includes(k)&&!(ignorar||[]).includes(k)&&dados[k]>0).sort());
+
+  // 1) visão CLP
+  const ord1=ordem(['EMPA','ATERPA','ÁPIA','SOMAFEL','CIVIL MASTER','GSA','VALE'],clp,['ATERPA R']);
+  const t1=soma(clp);
+  let b1='';
+  ord1.forEach(emp=>{
+    let cel;
+    if(emp==='ATERPA'&&(clp['ATERPA R']||0)>0){
+      cel='<span style="color:var(--cinza-txt);font-weight:500">'+n(clp['ATERPA'])+' + '+n(clp['ATERPA R'])+' = </span><span class="soma">'+n((clp['ATERPA']||0)+(clp['ATERPA R']||0))+'</span>';
+    }else cel='<span class="soma">'+n(clp[emp])+'</span>';
+    b1+='<tr><td>'+nomeLogo(emp)+'</td><td>'+cel+'</td></tr>';
+  });
+
+  // 2) por execução
+  const ord2=ordem(['EMPA','ATERPA','ÁPIA','SOMAFEL','CIVIL MASTER','GSA','DR','VERTICAL GREEN','VALE'],Object.assign({},exe,rev));
+  const t2=soma(exe), tRev=soma(rev), saldo=t2-tRev;
+  let b2='';
+  ord2.forEach(emp=>{ b2+='<tr><td>'+nomeLogo(emp)+'</td><td>'+(exe[emp]?n(exe[emp]):'—')+'</td><td>'+(rev[emp]?n(rev[emp]):'—')+'</td></tr>'; });
+
+  el.innerHTML=
+    '<div class="kpis">'
+    +'<div class="kpi navy"><div class="rot">Impactam certificação · visão CLP</div><div class="val">'+n(t1)+'</div><div class="sub">pendências em aberto, por Empresa</div></div>'
+    +'<div class="kpi azul"><div class="rot">Certificáveis · por execução</div><div class="val">'+n(t2)+'</div><div class="sub">pendências em aberto, por Executante</div></div>'
+    +'<div class="kpi laranja"><div class="rot">Revegetação</div><div class="val">'+n(tRev)+'</div><div class="sub">hidrossemeadura em aberto</div></div>'
+    +'<div class="kpi vermelho"><div class="rot">Saldo</div><div class="val">'+n(saldo)+'</div><div class="sub">certificáveis − revegetação</div></div>'
+    +'</div>'
+    +'<div class="resumo-grid">'
+    +'<div class="tend-mes"><h3>Pendências CLP · impactam certificação</h3>'
+    +'<table class="tend-tabela resumo"><thead><tr><th>Empresa</th><th>Nº pendências</th></tr></thead><tbody>'+b1+'</tbody>'
+    +'<tfoot><tr><td>Total</td><td>'+n(t1)+'</td></tr></tfoot></table></div>'
+    +'<div class="tend-mes"><h3>Por execução</h3>'
+    +'<table class="tend-tabela resumo"><thead><tr><th>Executante</th><th>Nº P. certificáveis</th><th>Revegetação</th></tr></thead><tbody>'+b2+'</tbody>'
+    +'<tfoot><tr><td>Total</td><td>'+n(t2)+'</td><td>'+n(tRev)+'</td></tr>'
+    +'<tr><td>Saldo (certificáveis − revegetação)</td><td colspan="2" class="saldo">'+n(saldo)+'</td></tr></tfoot></table></div>'
+    +'</div>'
+    +'<p class="ef-ajuda" style="margin-top:14px">Só pendências em aberto, Regional/Elemento conforme os filtros da página. “Impactam certificação” = coluna “Certificação ?” igual a Certificação. Por execução, executante em branco usa a Empresa. Revegetação = Tipo de Pendência Revegetação/Hidrossemeadura (qualquer classificação de certificação). ATERPA R está somada à ATERPA na visão CLP.</p>';
+}
 function renderTendencia(){
   const alvo=document.getElementById('tendencia'); if(!alvo)return;
   let h='<h2 class="secao">Tendência · Baixa de pendências (Meta × Real)</h2>'
@@ -1372,7 +1449,7 @@ function renderTendencia(){
   alvo.innerHTML=h;
 }
 
-function renderAll(){renderChrome();renderConsolidado();renderTendencia();D.EMP_ORDER.forEach(renderEmpresa);renderCharts();}
+function renderAll(){renderChrome();renderConsolidado();renderResumo();renderTendencia();D.EMP_ORDER.forEach(renderEmpresa);renderCharts();}
 
 function mostrar(id,btn){
   document.querySelectorAll('.painel').forEach(p=>p.classList.remove('ativo'));
