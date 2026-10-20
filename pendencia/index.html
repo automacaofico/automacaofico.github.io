@@ -1241,10 +1241,10 @@ function renderCharts(){
 // literal dessas células (fórmulas conferidas na planilha), atualizados com a EAP de 20/10 (fórmulas da aba de 30/09 recalculadas sobre a base de 20/10). Pendências da EAP com Executante em branco (107 da SOMAFEL — CLP-039 —, 43 da ÁPIA e 5 da ATERPA) foram atribuídas à própria Empresa para o total bater com o Painel. Inclui 107 pendências da SOMAFEL (CLP-039, IDs 3266-3372) que vieram com Executante em branco na EAP, assumidas como SOMAFEL para o total bater com o Painel.
 const CENARIO_ATUAL={
   dataReferencia:'30/09/2026', metaFinal:'17/10/2026', regime:'segunda a sábado',
-  totalRegistradas:3187, fechadas:1849, emAberto:1338, pctEmAberto:'42,0%',
-  diasTrabalhoRestantes:15, metaMediaDiaria:89, metaMediaSemanal:535, prazoFinal:'17/10/2026',
-  ritmoRealDiario:'19,0', ritmoRealSemanal:114, diasUteisZerar:71, tendenciaPrazoFinal:'22/12/2026',
-  desvioTexto:'Desvio vs meta final (17/10/2026): 66 dias corridos de ATRASO'
+  totalRegistradas:3187, fechadas:1873, emAberto:1314, pctEmAberto:'41,2%',
+  diasTrabalhoRestantes:15, metaMediaDiaria:88, metaMediaSemanal:526, prazoFinal:'17/10/2026',
+  ritmoRealDiario:'19,0', ritmoRealSemanal:114, diasUteisZerar:70, tendenciaPrazoFinal:'21/12/2026',
+  desvioTexto:'Desvio vs meta final (17/10/2026): 65 dias corridos de ATRASO'
 };
 
 // Detalhamento de Setembro — blocos "SET - TOTAL" e "SET - CERTIFICÁVEIS" da aba "Tendência -
@@ -1255,16 +1255,16 @@ const TENDENCIA_SETEMBRO_DETALHE={
   semanas:['S1 (01/09 a 09/09)','S2 (10/09 a 16/09)','S3 (17/09 a 23/09)','S4 (24/09 a 30/09)'],
   blocos:[
     {titulo:'Setembro · Total (por Executante)',empresas:[
-      {emp:'ÁPIA',execAcum:367,sem:[[102,33,33],[120,99,83],[125,74,59],[140,85,61]],totMeta:487,totEnc:291,avMes:60,encAcum:658,avGlobal:64,nec:376},
-      {emp:'EMPA',execAcum:610,sem:[[30,33,111],[31,46,149],[27,24,88],[28,21,74]],totMeta:116,totEnc:124,avMes:107,encAcum:734,avGlobal:91,nec:72},
-      {emp:'ATERPA',execAcum:157,sem:[[49,39,79],[54,1,2],[66,5,8],[85,5,6]],totMeta:254,totEnc:50,avMes:20,encAcum:207,avGlobal:43,nec:274},
-      {emp:'CIVIL MASTER',execAcum:200,sem:[[16,0,0],[20,0,0],[25,0,0],[32,0,0]],totMeta:93,totEnc:0,avMes:0,encAcum:200,avGlobal:65,nec:106},
+      {emp:'ÁPIA',execAcum:374,sem:[[100,33,33],[119,99,83],[123,74,60],[138,85,62]],totMeta:480,totEnc:291,avMes:61,encAcum:665,avGlobal:64,nec:369},
+      {emp:'EMPA',execAcum:611,sem:[[30,33,111],[31,46,150],[27,24,89],[28,21,75]],totMeta:115,totEnc:124,avMes:107,encAcum:735,avGlobal:91,nec:71},
+      {emp:'ATERPA',execAcum:168,sem:[[48,39,82],[52,1,2],[64,5,8],[82,5,6]],totMeta:245,totEnc:50,avMes:20,encAcum:218,avGlobal:45,nec:263},
+      {emp:'CIVIL MASTER',execAcum:201,sem:[[16,0,0],[20,0,0],[25,0,0],[32,0,0]],totMeta:92,totEnc:0,avMes:0,encAcum:201,avGlobal:66,nec:105},
       {emp:'VALE',execAcum:1,sem:[[3,0,0],[3,0,0],[4,0,0],[5,0,0]],totMeta:15,totEnc:0,avMes:0,encAcum:1,avGlobal:6,nec:17},
-      {emp:'GSA',execAcum:32,sem:[[15,0,0],[19,1,5],[23,0,0],[30,0,0]],totMeta:86,totEnc:1,avMes:1,encAcum:33,avGlobal:25,nec:98},
+      {emp:'GSA',execAcum:34,sem:[[15,0,0],[18,1,5],[22,0,0],[29,0,0]],totMeta:85,totEnc:1,avMes:1,encAcum:35,avGlobal:27,nec:96},
       {emp:'DR',execAcum:6,sem:[[7,2,28],[9,0,0],[11,7,67],[12,1,9]],totMeta:38,totEnc:10,avMes:27,encAcum:16,avGlobal:30,nec:37},
       {emp:'SOMAFEL',execAcum:0,sem:[[51,0,0],[63,0,0],[78,0,0],[102,0,0]],totMeta:294,totEnc:0,avMes:0,encAcum:0,avGlobal:0,nec:334},
-      {emp:'VERTICAL GREEN',execAcum:0,sem:[[4,0,0],[5,0,0],[6,0,0],[7,0,0]],totMeta:21,totEnc:0,avMes:0,encAcum:0,avGlobal:0,nec:24}
-    ],encerradas:{execAcum:1373,sem:[[276,107],[323,147],[364,110],[441,112]],totMeta:1404,totEnc:476,avMes:34,encAcum:1849,avGlobal:58,nec:1338}},
+      {emp:'VERTICAL GREEN',execAcum:2,sem:[[3,0,0],[4,0,0],[5,0,0],[7,0,0]],totMeta:19,totEnc:0,avMes:0,encAcum:2,avGlobal:8,nec:22}
+    ],encerradas:{execAcum:1397,sem:[[272,107],[318,147],[358,110],[434,112]],totMeta:1383,totEnc:476,avMes:34,encAcum:1873,avGlobal:59,nec:1314}},
     {titulo:'Setembro · Certificáveis (por Executante)',empresas:[
       {emp:'ÁPIA',execAcum:96,sem:[[59,16,27],[70,49,70],[75,47,63],[83,45,54]],totMeta:287,totEnc:157,avMes:55,encAcum:253,avGlobal:52,nec:229},
       {emp:'EMPA',execAcum:363,sem:[[17,38,225],[14,18,130],[13,6,47],[15,9,60]],totMeta:58,totEnc:71,avMes:121,encAcum:434,avGlobal:92,nec:40},
@@ -1289,27 +1289,27 @@ const TENDENCIA_OUTUBRO_DETALHE={
   semanas:['S1 (01/10 a 09/10)','S2 (10/10 a 16/10)','S3 (17/10 a 23/10)','S4 (24/10 a 31/10)'],
   blocos:[
     {titulo:'Outubro · Total (por Executante)',empresas:[
-      {emp:'ÁPIA',execAcum:577,sem:[[107,64,60],[131,17,13],[188,0,0],[376,0,0]],totMeta:802,totEnc:81,avMes:10,encAcum:658,avGlobal:64,nec:376},
-      {emp:'EMPA',execAcum:696,sem:[[26,33,129],[26,5,19],[36,0,0],[72,0,0]],totMeta:159,totEnc:38,avMes:24,encAcum:734,avGlobal:91,nec:72},
-      {emp:'ATERPA',execAcum:164,sem:[[74,39,53],[93,4,4],[137,0,0],[274,0,0]],totMeta:578,totEnc:43,avMes:7,encAcum:207,avGlobal:43,nec:274},
-      {emp:'CIVIL MASTER',execAcum:200,sem:[[25,0,0],[35,0,0],[53,0,0],[106,0,0]],totMeta:219,totEnc:0,avMes:0,encAcum:200,avGlobal:65,nec:106},
+      {emp:'ÁPIA',execAcum:577,sem:[[107,64,60],[131,17,13],[188,7,4],[369,0,0]],totMeta:795,totEnc:88,avMes:11,encAcum:665,avGlobal:64,nec:369},
+      {emp:'EMPA',execAcum:696,sem:[[26,33,129],[26,6,23],[36,0,0],[71,0,0]],totMeta:158,totEnc:39,avMes:25,encAcum:735,avGlobal:91,nec:71},
+      {emp:'ATERPA',execAcum:164,sem:[[74,39,53],[93,15,16],[132,0,0],[263,0,0]],totMeta:561,totEnc:54,avMes:10,encAcum:218,avGlobal:45,nec:263},
+      {emp:'CIVIL MASTER',execAcum:200,sem:[[25,0,0],[35,1,3],[53,0,0],[105,0,0]],totMeta:218,totEnc:1,avMes:0,encAcum:201,avGlobal:66,nec:105},
       {emp:'VALE',execAcum:1,sem:[[4,0,0],[6,0,0],[9,0,0],[17,0,0]],totMeta:35,totEnc:0,avMes:0,encAcum:1,avGlobal:6,nec:17},
-      {emp:'GSA',execAcum:33,sem:[[23,0,0],[33,0,0],[49,0,0],[98,0,0]],totMeta:203,totEnc:0,avMes:0,encAcum:33,avGlobal:25,nec:98},
+      {emp:'GSA',execAcum:33,sem:[[23,0,0],[33,1,3],[49,1,2],[96,0,0]],totMeta:200,totEnc:2,avMes:1,encAcum:35,avGlobal:27,nec:96},
       {emp:'DR',execAcum:14,sem:[[9,2,22],[12,0,0],[19,0,0],[37,0,0]],totMeta:77,totEnc:2,avMes:3,encAcum:16,avGlobal:30,nec:37},
       {emp:'SOMAFEL',execAcum:0,sem:[[78,0,0],[111,0,0],[167,0,0],[334,0,0]],totMeta:690,totEnc:0,avMes:0,encAcum:0,avGlobal:0,nec:334},
-      {emp:'VERTICAL GREEN',execAcum:0,sem:[[6,0,0],[8,0,0],[12,0,0],[24,0,0]],totMeta:50,totEnc:0,avMes:0,encAcum:0,avGlobal:0,nec:24}
-    ],encerradas:{execAcum:1685,sem:[[350,138],[455,26],[669,0],[1338,0]],totMeta:2812,totEnc:164,avMes:6,encAcum:1849,avGlobal:58,nec:1338}},
+      {emp:'VERTICAL GREEN',execAcum:0,sem:[[6,0,0],[8,2,25],[11,0,0],[22,0,0]],totMeta:47,totEnc:2,avMes:4,encAcum:2,avGlobal:8,nec:22}
+    ],encerradas:{execAcum:1685,sem:[[350,138],[455,42],[661,8],[1314,0]],totMeta:2780,totEnc:188,avMes:7,encAcum:1873,avGlobal:59,nec:1314}},
     {titulo:'Outubro · Certificáveis (por Executante)',empresas:[
-      {emp:'ÁPIA',execAcum:253,sem:[[53,26,49],[68,1,1],[101,0,0],[202,0,0]],totMeta:424,totEnc:27,avMes:6,encAcum:280,avGlobal:58,nec:202},
+      {emp:'ÁPIA',execAcum:253,sem:[[53,26,49],[68,1,1],[101,2,2],[200,0,0]],totMeta:422,totEnc:29,avMes:7,encAcum:282,avGlobal:59,nec:200},
       {emp:'EMPA',execAcum:434,sem:[[9,15,161],[8,4,48],[11,0,0],[21,0,0]],totMeta:49,totEnc:19,avMes:39,encAcum:453,avGlobal:96,nec:21},
-      {emp:'ATERPA',execAcum:73,sem:[[26,8,31],[34,4,12],[50,0,0],[99,0,0]],totMeta:209,totEnc:12,avMes:6,encAcum:85,avGlobal:46,nec:99},
+      {emp:'ATERPA',execAcum:73,sem:[[26,8,31],[34,8,23],[48,0,0],[95,0,0]],totMeta:203,totEnc:16,avMes:8,encAcum:89,avGlobal:48,nec:95},
       {emp:'CIVIL MASTER',execAcum:85,sem:[[19,0,0],[27,0,0],[41,0,0],[81,0,0]],totMeta:167,totEnc:0,avMes:0,encAcum:85,avGlobal:51,nec:81},
       {emp:'VALE',execAcum:1,sem:[[2,0,0],[3,0,0],[4,0,0],[8,0,0]],totMeta:17,totEnc:0,avMes:0,encAcum:1,avGlobal:11,nec:8},
-      {emp:'GSA',execAcum:12,sem:[[10,1,10],[14,0,0],[21,0,0],[41,0,0]],totMeta:85,totEnc:1,avMes:1,encAcum:13,avGlobal:24,nec:41},
+      {emp:'GSA',execAcum:12,sem:[[10,1,10],[14,1,7],[20,1,5],[39,0,0]],totMeta:82,totEnc:3,avMes:4,encAcum:15,avGlobal:28,nec:39},
       {emp:'DR',execAcum:2,sem:[[3,0,0],[4,0,0],[6,0,0],[11,0,0]],totMeta:23,totEnc:0,avMes:0,encAcum:2,avGlobal:15,nec:11},
       {emp:'SOMAFEL',execAcum:0,sem:[[30,0,0],[42,0,0],[64,0,0],[127,0,0]],totMeta:262,totEnc:0,avMes:0,encAcum:0,avGlobal:0,nec:127},
-      {emp:'VERTICAL GREEN',execAcum:0,sem:[[3,0,0],[4,0,0],[7,0,0],[13,0,0]],totMeta:27,totEnc:0,avMes:0,encAcum:0,avGlobal:0,nec:13}
-    ],encerradas:{execAcum:860,sem:[[154,50],[204,9],[302,0],[603,0]],totMeta:1263,totEnc:59,avMes:5,encAcum:919,avGlobal:60,nec:603}}
+      {emp:'VERTICAL GREEN',execAcum:0,sem:[[3,0,0],[4,1,23],[6,0,0],[12,0,0]],totMeta:25,totEnc:1,avMes:4,encAcum:1,avGlobal:8,nec:12}
+    ],encerradas:{execAcum:860,sem:[[154,50],[204,15],[299,3],[594,0]],totMeta:1251,totEnc:68,avMes:5,encAcum:928,avGlobal:61,nec:594}}
   ]
 };
 function tendPctCls(pct){ if(pct>=100)return 'verde'; if(pct>=70)return 'amarelo'; return 'vermelho'; }
