@@ -405,6 +405,35 @@ table.tend-tabela thead tr.tend-semanas th{background:var(--azul)}
 table.tend-tabela td:first-child,table.tend-tabela th:first-child{text-align:left;font-weight:700;color:var(--navy)}
 table.tend-tabela tbody tr:hover{background:#f4f7fa}
 table.tend-tabela tfoot td{font-weight:800;background:#f4f7fa;color:var(--navy)}
+/* ============ RESUMO SEMANAL DE RETIRADA DE PENDÊNCIAS ============ */
+.rs-topo{display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:flex-end;margin-bottom:18px}
+.rs-topo h3{color:var(--navy);font-size:19px;font-weight:800}
+.rs-topo p{color:var(--cinza-txt);font-size:12.5px;margin-top:3px}
+.rs-periodo{display:flex;gap:10px}
+.rs-periodo label{display:flex;flex-direction:column;gap:3px;font-size:10.5px;font-weight:700;color:var(--cinza-txt);text-transform:uppercase;letter-spacing:.5px}
+.rs-periodo input{border:1px solid var(--cinza-borda);border-radius:8px;padding:7px 10px;font:inherit;font-size:13px;color:var(--navy);background:#fff}
+.rs-kpis{margin-bottom:24px}
+.rs-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px}
+.rs-card{background:#fff;border-radius:16px;box-shadow:var(--sh-md);overflow:hidden;border-top:5px solid var(--rs-cor)}
+.rs-cab{display:flex;align-items:center;gap:12px;padding:14px 18px;min-height:76px;box-sizing:border-box;background:linear-gradient(135deg,var(--navy),#24467a);color:#fff}
+.rs-cab .empresa-logo-card img{height:26px;max-width:92px}
+.rs-nome{flex:1;font-weight:800;font-size:16px}
+.rs-pct{font-weight:800;font-size:13px;padding:3px 11px;border-radius:999px;background:rgba(255,255,255,.18)}
+.rs-corpo{padding:16px 18px 18px}
+.rs-nums{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.rs-nums span{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--cinza-txt);font-weight:700;margin-bottom:2px}
+.rs-nums b{font-size:28px;line-height:1.1;color:var(--navy);font-variant-numeric:tabular-nums}
+.rs-nums .ok b{color:var(--verde)} .rs-nums .pend b{color:var(--vermelho)}
+.rs-card .barra-avanco{background:var(--cinza-borda);height:10px;border-radius:6px;overflow:hidden;margin:14px 0 16px}
+.rs-card .barra-avanco .fill{height:100%;border-radius:6px}
+.rs-tipos{margin-top:2px;border-top:1px dashed var(--cinza-borda);padding-top:12px}
+.rs-tt{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--cinza-txt);font-weight:700;margin-bottom:8px}
+.rs-tg2{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.rs-tg2 div{background:#F3F6FA;border-radius:10px;padding:8px 4px;text-align:center}
+.rs-tg2 b{display:block;font-size:18px;color:var(--navy);font-variant-numeric:tabular-nums}
+.rs-tg2 span{font-size:10px;color:var(--cinza-txt);font-weight:600}
+.rs-obs{margin-top:18px}
+@media (max-width:900px){.rs-grade{grid-template-columns:1fr}}
 /* ============ RESUMO (formato das anotações da gerência) ============ */
 .resumo-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;margin-top:18px}
 .resumo-grid .tend-mes{margin-bottom:0}
@@ -1323,9 +1352,126 @@ function tendPctCls(pct){ if(pct>=100)return 'verde'; if(pct>=70)return 'amarelo
 //     Saldo = certificáveis − revegetação (como na conta do resumo da gerência).
 // Respeita a Regional e o filtro de Elemento da página.
 // ============================================================
+// ============================================================
+// RESUMO SEMANAL DE RETIRADA DE PENDÊNCIAS — mesmo formato da planilha da gerência.
+//  · Período: por padrão os 7 dias até a data de referência (ex.: 13 a 20/10); editável.
+//  · Concluídas = pendências Encerradas com Data_Encerramento dentro do período (por Empresa; ATERPA R somada à ATERPA).
+//  · Solicitado = IDs enviadas pela contratada no WhatsApp para inspeção/baixa dentro do período (arquivo
+//    programadas-semanal.json), somadas às Concluídas (sem repetir) — empresas sem lista no período ficam com
+//    Solicitado = Concluídas. Não concluídas = Solicitado − Concluídas. A “programação semanal” (plano da semana) não entra.
+//  · Tipo: Certificadas = Certificação; “Manutenção” = Não certificação; CAMPO = Punch List diferente de Documental.
+// ============================================================
+let PROGRAMADAS_SEMANAL=null;
+let resumoJanela=null;
+const RESUMO_COR={'ÁPIA':'#8DD3F2','ATERPA':'#FFF200','GSA':'#F8CBAD','VALE':'#00B050','EMPA':'#FFC000'};
+const RESUMO_ORDEM=['ÁPIA','ATERPA','GSA','VALE','EMPA','CIVIL MASTER','SOMAFEL','DR','VERTICAL GREEN'];
+async function carregarProgramadasSemanal(){
+  try{
+    const r=await fetch('https://raw.githubusercontent.com/automacaofico/pendenciasr1/main/programadas-semanal.json?t='+Date.now(),{cache:'no-store'});
+    PROGRAMADAS_SEMANAL=r.ok?await r.json():null;
+  }catch(e){PROGRAMADAS_SEMANAL=null;}
+  try{renderResumo();}catch(e){}
+}
+const resumoSerialIso=iso=>{const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||'');return m?Math.round(Date.UTC(+m[1],+m[2]-1,+m[3])/86400000)+25569:null;};
+const resumoIso=ser=>new Date(Math.round((ser-25569)*86400000)).toISOString().slice(0,10);
+const resumoBR=iso=>iso.slice(8,10)+'/'+iso.slice(5,7)+'/'+iso.slice(0,4);
+function resumoSerialCelula(v){
+  if(v==null||v==='')return null;
+  if(typeof v==='number')return v>40000?Math.floor(v):null;
+  const m=String(v).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  return m?Math.round(Date.UTC(+m[3],+m[2]-1,+m[1])/86400000)+25569:null;
+}
+function resumoJanelaPadrao(){
+  const m=/(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec((document.getElementById('dataRef')||{}).textContent||'');
+  const ate=m?(Math.round(Date.UTC(+m[3],+m[2]-1,+m[1])/86400000)+25569):Math.floor(Date.now()/86400000)+25569;
+  return {de:resumoIso(ate-7),ate:resumoIso(ate)};
+}
+function resumoMudarJanela(){
+  const de=document.getElementById('resumoDe').value, ate=document.getElementById('resumoAte').value;
+  if(de&&ate&&de<=ate){resumoJanela={de,ate};renderResumo();}
+}
+function resumoSemanalHtml(){
+  if(!ultimasLinhasBanco||!ultimasLinhasBanco.length)return '<p class="ef-ajuda">Carregando a base de pendências…</p>';
+  if(!resumoJanela)resumoJanela=resumoJanelaPadrao();
+  const sDe=resumoSerialIso(resumoJanela.de), sAte=resumoSerialIso(resumoJanela.ate);
+  const PAC_OK=new Set(['1','2','3','1A','1B','1C']);
+  const rows=ELEMENTOS_SELECIONADOS?ultimasLinhasBanco.filter(r=>ELEMENTOS_SELECIONADOS.has(String(r['Elemento']||'').trim())):ultimasLinhasBanco;
+  const emp={};
+  const get=k=>emp[k]||(emp[k]={conc:new Set(),cert:0,nao:0,campo:0,doc:0,sol:new Set(),solQtd:0});
+  const idTxt=v=>String(Math.round(+v)||String(v||'').trim());
+  const porId=new Map();
+  rows.forEach(r=>{
+    porId.set(idTxt(r['Id_Pendencia']),{enc:esc(r['Status_Pendencia']).trim().toUpperCase()==='ENCERRADO'?resumoSerialCelula(r['Data_Encerramento']):null});
+    const pk=normPacote(r['Pacote']); if(!PAC_OK.has(pk)||!passaRegional('P'+pk))return;
+    if(esc(r['Status_Pendencia']).trim().toUpperCase()!=='ENCERRADO')return;
+    const ser=resumoSerialCelula(r['Data_Encerramento']); if(ser==null||ser<sDe||ser>sAte)return;
+    let k=canonEmpresa(r['Empresa']); if(k==='ATERPA R')k='ATERPA'; if(!k)return;
+    const e=get(k); e.conc.add(idTxt(r['Id_Pendencia']));
+    const cert=esc(r['Certificação ?']).trim().toUpperCase();
+    if(cert==='CERTIFICAÇÃO')e.cert++; else if(cert==='NÃO CERTIFICAÇÃO')e.nao++;
+    if(esc(r['Punch List']).trim().toUpperCase()==='DOCUMENTAL')e.doc++; else e.campo++;
+  });
+  const temLista=!!(PROGRAMADAS_SEMANAL&&Array.isArray(PROGRAMADAS_SEMANAL.entradas));
+  if(temLista)PROGRAMADAS_SEMANAL.entradas.forEach(en=>{
+    const s=resumoSerialIso(en.data); if(s==null||s<sDe||s>sAte||en.plano)return;
+    let k=canonEmpresa(en.empresa); if(k==='ATERPA R')k='ATERPA';
+    const e=get(k);
+    if(Array.isArray(en.ids))en.ids.forEach(id=>{
+      const p=porId.get(String(id));
+      if(p&&p.enc!=null&&p.enc<sDe)return; // já estava encerrada antes do período
+      e.sol.add(String(id));
+    });
+    else e.solQtd+=(+en.qtd||0);
+  });
+  const nomes=Object.keys(emp).filter(k=>{const e=emp[k];return e.conc.size||e.sol.size||e.solQtd;});
+  nomes.sort((a,b)=>{const i=RESUMO_ORDEM.indexOf(a), j=RESUMO_ORDEM.indexOf(b);return (i<0?99:i)-(j<0?99:j)||a.localeCompare(b);});
+  let totConc=0, totSol=0, cards='';
+  nomes.forEach(k=>{
+    const e=emp[k], conc=e.conc.size;
+    const uniao=new Set([...e.sol,...e.conc]);
+    const sol=uniao.size+e.solQtd, nconc=Math.max(0,sol-conc);
+    totConc+=conc; totSol+=sol;
+    const pct=sol?Math.round(conc/sol*100):0;
+    const gcls=pct>=70?'verde':(pct>=40?'amarelo':'vermelho');
+    const src=logoSrc(k);
+    const logo=src?'<div class="empresa-logo-card"><img src="'+src+'" alt="'+escHtml(k)+'"></div>':'';
+    cards+='<div class="rs-card" style="--rs-cor:'+(RESUMO_COR[k]||'#C9D3DC')+'">'
+      +'<div class="rs-cab">'+logo+'<div class="rs-nome">'+escHtml(nomeExibicao(k))+'</div><div class="rs-pct">'+pct+'%</div></div>'
+      +'<div class="rs-corpo">'
+      +'<div class="rs-nums"><div><span>Solicitado</span><b>'+sol+'</b></div><div class="ok"><span>Concluídas</span><b>'+conc+'</b></div><div class="pend"><span>Não concluídas</span><b>'+nconc+'</b></div></div>'
+      +'<div class="barra-avanco"><div class="fill" style="width:'+pct+'%;background:'+fillGrad(gcls)+'"></div></div>'
+      +'<div class="rs-tipos"><div class="rs-tt">Tipo das concluídas</div><div class="rs-tg2">'
+      +'<div><b>'+e.cert+'</b><span>Certificadas</span></div>'
+      +'<div><b>'+e.nao+'</b><span title="Não certificação">Manutenção</span></div>'
+      +'<div><b>'+e.campo+'</b><span>Campo</span></div>'
+      +'<div><b>'+e.doc+'</b><span>Documental</span></div>'
+      +'</div></div></div></div>';
+  });
+  if(!cards)cards='<p class="ef-ajuda">Nenhuma pendência concluída ou solicitada no período.</p>';
+  const pctG=totSol?Math.round(totConc/totSol*100):0;
+  return '<div class="rs-topo"><div><h3>Resumo semanal de retirada de pendências</h3><p>Pendências encerradas no período, por empresa · '+resumoBR(resumoJanela.de)+' a '+resumoBR(resumoJanela.ate)+'</p></div>'
+    +'<div class="rs-periodo"><label>De<input type="date" id="resumoDe" value="'+resumoJanela.de+'" onchange="resumoMudarJanela()"></label>'
+    +'<label>Até<input type="date" id="resumoAte" value="'+resumoJanela.ate+'" onchange="resumoMudarJanela()"></label></div></div>'
+    +'<div class="kpis rs-kpis">'
+    +'<div class="kpi verde"><div class="rot">Concluídas</div><div class="val">'+totConc+'</div><div class="sub">encerradas no período</div></div>'
+    +'<div class="kpi navy"><div class="rot">Solicitado</div><div class="val">'+totSol+'</div><div class="sub">pedidas para baixa</div></div>'
+    +'<div class="kpi vermelho"><div class="rot">Não concluídas</div><div class="val">'+(totSol-totConc)+'</div><div class="sub">ainda em aberto</div></div>'
+    +'<div class="kpi azul"><div class="rot">Taxa de conclusão</div><div class="val">'+pctG+'%</div><div class="sub">concluídas ÷ solicitado</div></div>'
+    +'</div>'
+    +'<div class="rs-grade">'+cards+'</div>'
+    +'<p class="ef-ajuda rs-obs">Concluídas = pendências encerradas (Status “Encerrado”) com Data_Encerramento no período, por Empresa (ATERPA R somada à ATERPA). '
+    +(temLista?'Solicitado = IDs enviadas pela contratada no WhatsApp no período (mais as concluídas, sem repetir); a programação semanal de atuação não entra. Empresas sem lista no período ficam com Solicitado = Concluídas. ':'Lista do WhatsApp indisponível: Solicitado = Concluídas. ')
+    +'Tipo: Certificadas = Certificação; “Manutenção” = Não certificação; Campo = Punch List diferente de Documental.</p>';
+}
 function renderResumo(){
   const el=document.getElementById('resumo'); if(!el)return;
-  if(!ultimasLinhasBanco||!ultimasLinhasBanco.length){el.innerHTML='<p class="ef-ajuda">Carregando a base de pendências…</p>';return;}
+  const topo=resumoSemanalHtml();
+  const cert=resumoCertHtml();
+  el.innerHTML=topo+(cert?'<h2 class="secao">Em aberto · impactam certificação</h2>'+cert:'');
+}
+carregarProgramadasSemanal();
+function resumoCertHtml(){
+  if(!ultimasLinhasBanco||!ultimasLinhasBanco.length)return '';
   const PAC_OK=new Set(['1','2','3','1A','1B','1C']);
   const rows=ELEMENTOS_SELECIONADOS?ultimasLinhasBanco.filter(r=>ELEMENTOS_SELECIONADOS.has(String(r['Elemento']||'').trim())):ultimasLinhasBanco;
   const clp={}, exe={}, rev={};
@@ -1362,7 +1508,7 @@ function renderResumo(){
   let b2='';
   ord2.forEach(emp=>{ b2+='<tr><td>'+nomeLogo(emp)+'</td><td>'+(exe[emp]?n(exe[emp]):'—')+'</td><td>'+(rev[emp]?n(rev[emp]):'—')+'</td></tr>'; });
 
-  el.innerHTML=
+  const html=
     '<div class="kpis">'
     +'<div class="kpi navy"><div class="rot">Impactam certificação · visão CLP</div><div class="val">'+n(t1)+'</div><div class="sub">pendências em aberto, por Empresa</div></div>'
     +'<div class="kpi azul"><div class="rot">Certificáveis · por execução</div><div class="val">'+n(t2)+'</div><div class="sub">pendências em aberto, por Executante</div></div>'
@@ -1379,6 +1525,7 @@ function renderResumo(){
     +'<tr><td>Saldo (certificáveis − revegetação)</td><td colspan="2" class="saldo">'+n(saldo)+'</td></tr></tfoot></table></div>'
     +'</div>'
     +'<p class="ef-ajuda" style="margin-top:14px">Só pendências em aberto, Regional/Elemento conforme os filtros da página. “Impactam certificação” = coluna “Certificação ?” igual a Certificação. Por execução, executante em branco usa a Empresa. Revegetação = Tipo de Pendência Revegetação/Hidrossemeadura (qualquer classificação de certificação). ATERPA R está somada à ATERPA na visão CLP.</p>';
+  return html;
 }
 function renderTendencia(){
   const alvo=document.getElementById('tendencia'); if(!alvo)return;
