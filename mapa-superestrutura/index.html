@@ -70,7 +70,6 @@
           <button type="button" class="active" data-basemap="street" aria-pressed="true">Ruas</button>
           <button type="button" data-basemap="satellite" aria-pressed="false">Satélite</button>
         </div>
-        <label class="check-control"><input id="showPlanned" type="checkbox" checked><span>Mostrar previsto</span></label>
         <label class="check-control"><input id="showFronts" type="checkbox" checked><span>Mostrar frentes</span></label>
         <button id="replayButton" type="button" class="replay-trigger" aria-expanded="false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16l13-8Z"/></svg>
@@ -131,7 +130,6 @@
           <div id="mapStatus" class="map-status">Preparando eixo ferroviário</div>
           <div class="map-legend" aria-label="Legenda">
             <span><i class="line actual"></i>Realizado</span>
-            <span><i class="line planned"></i>Previsto</span>
             <span><i class="dot"></i>Frente atual</span>
           </div>
           <div class="map-readout"><span id="cursorPackage">Obra completa</span><strong id="cursorKm">Passe sobre traçado</strong></div>
@@ -144,9 +142,9 @@
           <div class="detail-progress"><span id="detailProgressBar"></span></div>
           <div class="detail-grid">
             <div><span>Realizado</span><strong id="detailReal">—</strong></div>
-            <div><span>Previsto</span><strong id="detailPlanned">—</strong></div>
+            <div><span>Extensão do escopo</span><strong id="detailPlanned">—</strong></div>
             <div><span>Avanço</span><strong id="detailPercent">—</strong></div>
-            <div><span>Diferença</span><strong id="detailDelta">—</strong></div>
+            <div><span>Frente (KM)</span><strong id="detailDelta">—</strong></div>
           </div>
           <div class="package-context">
             <span>Pacote atual</span>
@@ -165,7 +163,7 @@
         </div>
         <div class="table-scroll">
           <table>
-            <thead><tr><th>Atividade</th><th>Início</th><th>Realizado</th><th>Previsto</th><th>Avanço</th><th>Diferença</th><th>Pacote atual</th></tr></thead>
+            <thead><tr><th>Atividade</th><th>Início</th><th>Frente (KM)</th><th>Executado</th><th>Avanço</th><th>Trechos</th><th>Pacote atual</th></tr></thead>
             <tbody id="activityTableBody"></tbody>
           </table>
         </div>

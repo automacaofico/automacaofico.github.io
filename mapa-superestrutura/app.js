@@ -18,21 +18,28 @@
     { id: 'P08', name: 'Pacote 08', start: 239950, end: 292260, color: '#b27a19' }
   ];
 
+  // Mesmas atividades, ordem e cores do painel Super. Sem "previsto": a planilha só traz o realizado, em trechos.
   const DEFINITIONS = [
-    { id: 'release', name: 'Liberação de plataforma', excel: 'liberacao de plataforma', start: 0, plannedEnd: 104500, color: '#1a7a3a', segmented: true },
-    { id: 'prelast', name: 'Pré-lastro em plataforma', excel: 'pre lastro', start: 71300, plannedEnd: 78400, color: '#005a8a' },
-    { id: 'grade', name: 'Montagem de grade', excel: 'montagem de grade', start: 0, plannedEnd: 87337, color: '#1a5fa8' },
-    { id: 'brita1', name: '1ª Descarga de brita', excel: '1a descarga de brita', start: 0, plannedEnd: 80253, color: '#b87800' },
-    { id: 'socaria1', name: 'Socaria — 1º levante', excel: 'socaria 1o levante', start: 0, plannedEnd: 71300, color: '#c04a00' },
-    { id: 'socaria2', name: 'Socaria — 2º levante', excel: 'socaria 2o levante', start: 0, plannedEnd: 71300, color: '#b02020' },
-    { id: 'brita2', name: '2ª Descarga de brita', excel: '2a descarga de brita', start: 0, plannedEnd: 75776, color: '#8a5a00' },
-    { id: 'socaria3', name: 'Socaria — 3º levante', excel: 'socaria 3o levante', start: 0, plannedEnd: 71300, color: '#6b3db5' },
-    { id: 'socaria4', name: 'Socaria — 4º levante', excel: 'socaria 4o levante', start: 0, plannedEnd: 67283, color: '#1178a0' },
-    { id: 'brita3', name: '3ª Descarga de brita', excel: '3a descarga de brita', start: 0, plannedEnd: 75776, color: '#665500' },
-    { id: 'weld', name: 'Solda aluminotérmica', excel: 'solda aluminotermica', start: 0, plannedEnd: 52187, color: '#b55a00' },
-    { id: 'relief', name: 'Alívio de tensão', excel: 'alivio de tensao', start: 0, plannedEnd: 52948, color: '#2a8a50' }
+    { id: 'release', name: 'Liberação de plataforma', excel: 'liberacao de plataforma', start: 0, color: '#1a7a3a', segmented: true },
+    { id: 'prelast', name: 'Pré-lastro em plataforma', excel: 'pre lastro', start: 0, color: '#005a8a' },
+    { id: 'grade', name: 'Montagem de grade', excel: 'montagem de grade', start: 0, color: '#1a5fa8' },
+    { id: 'brita1', name: '1ª Descarga de brita', excel: '1a descarga de brita', start: 0, color: '#b87800' },
+    { id: 'socaria1', name: 'Socaria — 1º levante', excel: 'socaria 1o levante', start: 0, color: '#c04a00' },
+    { id: 'socaria2', name: 'Socaria — 2º levante', excel: 'socaria 2o levante', start: 0, color: '#b02020' },
+    { id: 'brita2', name: '2ª Descarga de brita', excel: '2a descarga de brita', start: 0, color: '#8a5a00' },
+    { id: 'socaria3', name: 'Socaria — 3º levante', excel: 'socaria 3o levante', start: 0, color: '#6b3db5' },
+    { id: 'socaria4', name: 'Socaria — 4º levante', excel: 'socaria 4o levante', start: 0, color: '#1178a0' },
+    { id: 'brita3', name: '3ª Descarga de brita', excel: '3a descarga de brita', start: 0, color: '#665500' },
+    { id: 'socaria5', name: 'Socaria — 5º levante', excel: 'socaria 5o levante', start: 0, color: '#7b6a00' },
+    { id: 'brita4', name: '4ª Descarga de brita', excel: '4o descarga de brita', start: 0, color: '#883366' },
+    { id: 'socaria6', name: 'Socaria — 6º levante', excel: 'socaria 6o levante', start: 0, color: '#3a7050' },
+    { id: 'brita5', name: '5ª Descarga de brita', excel: '5o descarga de brita', start: 0, color: '#4a6b8a' },
+    { id: 'weld', name: 'Solda aluminotérmica', excel: 'solda aluminotermica', start: 0, color: '#b55a00' },
+    { id: 'relief', name: 'Alívio de tensão', excel: 'alivio de tensao', start: 0, color: '#2a8a50' }
   ];
 
+  // Obra completa (km 000+000 → 292+260), como no painel Super. O avanço é a soma dos trechos executados / extensão do escopo.
+  const OBRA = { start: 0, end: 292260 };
   const state = {
     axis: [],
     activities: [],
@@ -60,6 +67,14 @@
   const percent = value => `${Math.max(0, value || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
   const sumLengths = intervals => intervals.reduce((total, item) => total + Math.max(0, item.end - item.start), 0);
   const lerp = (start, end, amount) => start + (end - start) * amount;
+  const scopeRange = () => PACKAGES.find(item => item.id === state.packageId) || OBRA;
+  // Mesma regra do painel Super: soma dos metros de cada trecho dentro do pacote (ou da obra) sobre a extensão do escopo.
+  function scoped(activity) {
+    const range = scopeRange();
+    const extent = Math.max(1, range.end - range.start);
+    const length = activity.intervals.reduce((total, item) => total + Math.max(0, Math.min(item.end, range.end) - Math.max(item.start, range.start)), 0);
+    return { length, extent, progress: length / extent * 100 };
+  }
 
   function parseDate(value) {
     if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
@@ -83,7 +98,7 @@
   }
 
   function parseIntervals(rows, titlePattern, stopPattern) {
-    const titleIndex = findRow(rows, cells => cells.some(cell => cell.includes(titlePattern)));
+    const titleIndex = findRow(rows, cells => cells.some(cell => cell.length < 60 && cell.includes(titlePattern)));
     if (titleIndex < 0) return [];
     const headerIndex = findRow(rows, cells => cells.some(cell => cell.includes('trecho')) && cells.some(cell => cell.includes('inicio')) && cells.some(cell => cell.includes('fim')), titleIndex + 1);
     if (headerIndex < 0) return [];
@@ -121,41 +136,47 @@
       dataDate = parseDate(raw);
     }
 
-    const activityHeader = findRow(rows, cells => cells.some(cell => cell === 'atividade') && cells.some(cell => cell.includes('km real')));
-    const actualByName = new Map();
+    // Aba ENTRADA: cada atividade tem até 6 pares KM INÍCIO / KM FINAL (trechos executados, com gaps).
+    // Planilhas antigas (coluna "KM Real") continuam lidas como um único trecho a partir do início da atividade.
+    const activityHeader = findRow(rows, cells => cells.some(cell => cell === 'atividade') && cells.some(cell => cell.includes('km inicio') || cell.includes('km real')));
+    const segmentsByName = new Map();
     if (activityHeader >= 0) {
       const headers = rows[activityHeader].map(norm);
       const nameColumn = findColumn(headers, ['atividade']);
-      const actualColumn = findColumn(headers, ['km real']);
+      const legacyColumn = headers.some(cell => cell.includes('km inicio')) ? -1 : findColumn(headers, ['km real']);
       for (let index = activityHeader + 1; index < rows.length; index += 1) {
         const name = norm(rows[index][nameColumn]);
         if (!name || name.startsWith('3 liberacao')) break;
-        const actual = number(rows[index][actualColumn]);
-        if (actual !== null) actualByName.set(name, actual);
+        const segments = [];
+        if (legacyColumn >= 0) {
+          const actual = number(rows[index][legacyColumn]);
+          if (actual !== null && actual > 0) segments.push({ start: 0, end: actual });
+        } else {
+          for (let column = nameColumn + 1; column + 1 < rows[index].length; column += 2) {
+            const start = typeof rows[index][column] === 'number' ? rows[index][column] : null;
+            const end = typeof rows[index][column + 1] === 'number' ? rows[index][column + 1] : null;
+            if (start !== null && end !== null && end > start) segments.push({ start, end });
+          }
+        }
+        segmentsByName.set(name, segments.sort((x, y) => x.start - y.start));
       }
     }
-
+    const segmentsFor = definition => {
+      if (segmentsByName.has(definition.excel)) return segmentsByName.get(definition.excel);
+      for (const [key, value] of segmentsByName.entries()) {
+        if (key.includes(definition.excel) || definition.excel.includes(key)) return value;
+      }
+      return [];
+    };
     const releaseIntervals = parseIntervals(rows, 'liberacao de plataforma', 'pre lastro em colchao').map(item => ({ ...item, completed: true }));
     const cushionIntervals = parseIntervals(rows, 'pre lastro em colchao', null);
     const activities = DEFINITIONS.map(definition => {
-      let actualEnd = definition.start;
-      let intervals = [];
-      if (definition.segmented) {
-        intervals = releaseIntervals;
-        actualEnd = intervals.length ? Math.max(...intervals.map(item => item.end)) : definition.start;
-      } else {
-        for (const [key, value] of actualByName.entries()) {
-          if (key === definition.excel || key.includes(definition.excel) || definition.excel.includes(key)) {
-            actualEnd = value;
-            break;
-          }
-        }
-      }
-      const actualLength = definition.segmented ? sumLengths(intervals) : Math.max(0, actualEnd - definition.start);
-      const plannedLength = Math.max(1, definition.plannedEnd - definition.start);
-      return { ...definition, actualEnd, actualLength, plannedLength, intervals, progress: actualLength / plannedLength * 100 };
+      const intervals = definition.segmented ? releaseIntervals : segmentsFor(definition);
+      const actualEnd = intervals.length ? Math.max(...intervals.map(item => item.end)) : definition.start;
+      const actualStart = intervals.length ? Math.min(...intervals.map(item => item.start)) : definition.start;
+      const actualLength = sumLengths(intervals);
+      return { ...definition, start: actualStart, actualEnd, actualLength, intervals };
     });
-
     return {
       date: dataDate,
       activities,
@@ -229,8 +250,9 @@
     const allCushion = completedCushion + sumLengths(state.cushion.pending);
     el('metricDate').textContent = state.date ? state.date.toLocaleDateString('pt-BR') : '—';
     el('metricStarted').textContent = `${started}/${state.activities.length}`;
-    el('metricRelease').textContent = release ? percent(release.progress) : '—';
-    el('releaseCaption').textContent = release ? `${km(release.actualLength)} executados` : 'sobre previsto';
+    const releaseScope = release ? scoped(release) : null;
+    el('metricRelease').textContent = releaseScope ? percent(releaseScope.progress) : '—';
+    el('releaseCaption').textContent = release ? `${km(releaseScope.length)} de ${km(releaseScope.extent)}` : 'da extensão';
     el('metricLeader').textContent = leader ? station(leader.actualEnd) : '—';
     el('leaderCaption').textContent = leader?.name || 'atividade mais avançada';
     el('metricCushion').textContent = allCushion ? percent(completedCushion / allCushion * 100) : '—';
@@ -242,8 +264,8 @@
     el('activityList').innerHTML = state.activities.map(activity => `
       <button class="activity-card ${activity.id === state.selectedId ? 'active' : ''}" data-activity="${activity.id}" style="--activity-color:${activity.color}">
         <span class="name">${activity.name}</span>
-        <span class="meta"><span>${station(activity.actualEnd)}</span><b>${percent(activity.progress)}</b></span>
-        <span class="mini-progress"><i style="width:${Math.min(100, activity.progress)}%"></i></span>
+        <span class="meta"><span>${station(activity.actualEnd)}</span><b>${percent(scoped(activity).progress)}</b></span>
+        <span class="mini-progress"><i style="width:${Math.min(100, scoped(activity).progress)}%"></i></span>
       </button>`).join('');
     document.querySelectorAll('[data-activity]').forEach(button => button.addEventListener('click', () => selectActivity(button.dataset.activity)));
   }
@@ -251,34 +273,35 @@
   function renderDetails() {
     const activity = selectedActivity();
     if (!activity) return;
+    const metrics = scoped(activity);
     const currentPackage = packageAt(activity.actualEnd);
-    const delta = activity.actualEnd - activity.plannedEnd;
     el('detailName').textContent = activity.name;
     el('detailStatus').textContent = activity.actualLength > 0 ? 'Em execução' : 'Não iniciada';
-    el('detailProgressBar').style.width = `${Math.min(100, activity.progress)}%`;
+    el('detailProgressBar').style.width = `${Math.min(100, metrics.progress)}%`;
     el('detailProgressBar').style.background = activity.color;
-    el('detailReal').textContent = km(activity.actualLength);
-    el('detailPlanned').textContent = km(activity.plannedLength);
-    el('detailPercent').textContent = percent(activity.progress);
-    el('detailDelta').textContent = `${delta >= 0 ? '+' : '−'}${km(Math.abs(delta))}`;
-    el('detailDelta').className = delta >= 0 ? 'delta-positive' : 'delta-negative';
+    el('detailReal').textContent = km(metrics.length);
+    el('detailPlanned').textContent = km(metrics.extent);
+    el('detailPercent').textContent = percent(metrics.progress);
+    el('detailDelta').textContent = activity.actualLength > 0 ? `${String(Math.floor(activity.actualEnd / 1000)).padStart(3, '0')}+${String(Math.round(activity.actualEnd % 1000)).padStart(3, '0')}` : '—';
+    el('detailDelta').className = '';
     el('detailPackage').textContent = currentPackage.name;
     el('detailSection').textContent = `${station(currentPackage.start)} — ${station(currentPackage.end)}`;
-    el('detailNote').textContent = activity.segmented ? `${activity.intervals.length} trecho(s) liberado(s), somados no avanço.` : `Frente registrada em ${station(activity.actualEnd)}.`;
+    el('detailNote').textContent = activity.actualLength > 0
+      ? `${activity.intervals.length} trecho(s) executado(s), somados no avanço. Frente registrada em ${station(activity.actualEnd)}.`
+      : 'Nenhum trecho executado registrado na planilha.';
   }
 
   function renderTable() {
     el('activityTableBody').innerHTML = state.activities.map(activity => {
-      const delta = activity.actualEnd - activity.plannedEnd;
+      const metrics = scoped(activity);
       return `<tr data-table-activity="${activity.id}" class="${activity.id === state.selectedId ? 'active' : ''}" style="--row-color:${activity.color}">
         <td><span class="table-activity"><i></i>${activity.name}</span></td>
-        <td>${station(activity.start)}</td><td>${station(activity.actualEnd)}</td><td>${station(activity.plannedEnd)}</td>
-        <td>${percent(activity.progress)}</td><td class="${delta >= 0 ? 'delta-positive' : 'delta-negative'}">${delta >= 0 ? '+' : '−'}${km(Math.abs(delta))}</td>
-        <td>${packageAt(activity.actualEnd).name}</td></tr>`;
+        <td>${activity.actualLength > 0 ? station(activity.start) : '—'}</td><td>${activity.actualLength > 0 ? station(activity.actualEnd) : '—'}</td><td>${km(metrics.length)}</td>
+        <td>${percent(metrics.progress)}</td><td>${activity.intervals.length}</td>
+        <td>${activity.actualLength > 0 ? packageAt(activity.actualEnd).name : '—'}</td></tr>`;
     }).join('');
     document.querySelectorAll('[data-table-activity]').forEach(row => row.addEventListener('click', () => selectActivity(row.dataset.tableActivity)));
   }
-
   function selectActivity(id) {
     state.selectedId = id;
     renderActivities();
@@ -371,8 +394,6 @@
     state.map.addSource('packages', { type: 'geojson', data: packages });
     state.map.addLayer({ id: 'axis-casing', type: 'line', source: 'packages', paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 5, 14, 11], 'line-opacity': .88 } });
     state.map.addLayer({ id: 'package-lines', type: 'line', source: 'packages', paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 2.5, 14, 6], 'line-opacity': .82 } });
-    state.map.addSource('planned', { type: 'geojson', data: collection() });
-    state.map.addLayer({ id: 'planned-line', type: 'line', source: 'planned', paint: { 'line-color': ['get', 'color'], 'line-width': 7, 'line-opacity': .48, 'line-dasharray': [1, 1.4] } });
     state.map.addSource('actual', { type: 'geojson', data: collection() });
     state.map.addLayer({ id: 'actual-casing', type: 'line', source: 'actual', paint: { 'line-color': '#ffffff', 'line-width': 11, 'line-opacity': .95 } });
     state.map.addLayer({ id: 'actual-line', type: 'line', source: 'actual', paint: { 'line-color': ['get', 'color'], 'line-width': 7, 'line-opacity': 1 } });
@@ -433,7 +454,7 @@
 
   function filteredIntervals(activity) {
     const packageFilter = PACKAGES.find(item => item.id === state.packageId);
-    const ranges = activity.segmented ? activity.intervals : [{ start: activity.start, end: activity.actualEnd }];
+    const ranges = activity.intervals;
     return ranges.map(range => ({ start: Math.max(range.start, packageFilter?.start ?? range.start), end: Math.min(range.end, packageFilter?.end ?? range.end) })).filter(range => range.end > range.start);
   }
 
@@ -441,23 +462,18 @@
     if (!state.mapReady || !state.activities.length) return;
     const activity = selectedActivity();
     const packageFilter = PACKAGES.find(item => item.id === state.packageId);
-    const plannedStart = Math.max(activity.start, packageFilter?.start ?? activity.start);
-    const plannedEnd = Math.min(activity.plannedEnd, packageFilter?.end ?? activity.plannedEnd);
-    const planned = plannedEnd > plannedStart ? [lineFeature(plannedStart, plannedEnd, { color: activity.color })] : [];
     const actual = filteredIntervals(activity).map(range => lineFeature(range.start, range.end, { color: activity.color }));
     const cushion = [...state.cushion.completed.map(item => ({ ...item, status: 'Concluído' })), ...state.cushion.pending.map(item => ({ ...item, status: 'Pendente' }))]
       .map(item => ({ ...item, start: Math.max(item.start, packageFilter?.start ?? item.start), end: Math.min(item.end, packageFilter?.end ?? item.end) }))
       .filter(item => item.end > item.start)
       .map(item => lineFeature(item.start, item.end, { status: item.status }));
     const fronts = state.activities.filter(item => item.actualLength > 0).filter(item => !packageFilter || (item.actualEnd >= packageFilter.start && item.actualEnd <= packageFilter.end)).map(item => ({
-      type: 'Feature', properties: { id: item.id, name: item.name, station: item.actualEnd, color: item.color, selected: item.id === state.selectedId, progress: item.progress, package: packageAt(item.actualEnd).name, context: 'FRENTE ATUAL', note: `Registro oficial em ${state.date ? state.date.toLocaleDateString('pt-BR') : 'data-base atual'}.` }, geometry: { type: 'Point', coordinates: pointAtStation(item.actualEnd) }
+      type: 'Feature', properties: { id: item.id, name: item.name, station: item.actualEnd, color: item.color, selected: item.id === state.selectedId, progress: scoped(item).progress, package: packageAt(item.actualEnd).name, context: 'FRENTE ATUAL', note: `Registro oficial em ${state.date ? state.date.toLocaleDateString('pt-BR') : 'data-base atual'}.` }, geometry: { type: 'Point', coordinates: pointAtStation(item.actualEnd) }
     }));
-    state.map.getSource('planned').setData(collection(planned));
     state.map.getSource('actual').setData(collection(actual));
     state.map.getSource('cushion').setData(collection(cushion));
     state.map.getSource('fronts').setData(collection(fronts));
     const normalVisibility = state.replay.active ? 'none' : 'visible';
-    state.map.setLayoutProperty('planned-line', 'visibility', !state.replay.active && el('showPlanned').checked ? 'visible' : 'none');
     ['fronts', 'fronts-hit'].forEach(layer => state.map.setLayoutProperty(layer, 'visibility', !state.replay.active && el('showFronts').checked ? 'visible' : 'none'));
     ['actual-casing', 'actual-line', 'cushion-line'].forEach(layer => state.map.setLayoutProperty(layer, 'visibility', normalVisibility));
   }
@@ -506,7 +522,7 @@
       const selected = activity.id === state.selectedId;
       const offset = (index - (DEFINITIONS.length - 1) / 2) * 2.35;
       features.push(lineFeature(activity.start, end, { id: activity.id, name: activity.name, color: activity.color, selected, offset }));
-      fronts.push({ type: 'Feature', properties: { id: activity.id, name: activity.name, station: end, color: activity.color, selected, progress: Math.max(0, end - activity.start) / Math.max(1, activity.plannedEnd - activity.start) * 100, package: packageAt(end).name, context: replayContext, note: `Posição em ${currentDate.toLocaleDateString('pt-BR')}.` }, geometry: { type: 'Point', coordinates: pointAtStation(end) } });
+      fronts.push({ type: 'Feature', properties: { id: activity.id, name: activity.name, station: end, color: activity.color, selected, progress: Math.max(0, end - activity.start) / (OBRA.end - OBRA.start) * 100, package: packageAt(end).name, context: replayContext, note: `Posição em ${currentDate.toLocaleDateString('pt-BR')}.` }, geometry: { type: 'Point', coordinates: pointAtStation(end) } });
     });
     state.map.getSource('replay-lines').setData(collection(features));
     state.map.getSource('replay-fronts').setData(collection(fronts));
@@ -656,10 +672,9 @@
   function bindControls() {
     setTheme(document.documentElement.dataset.theme || 'light', false);
     PACKAGES.forEach(item => el('packageSelect').insertAdjacentHTML('beforeend', `<option value="${item.id}">${item.name} · ${station(item.start)}–${station(item.end)}</option>`));
-    el('packageSelect').addEventListener('change', event => { state.packageId = event.target.value; updateMapData(); fitCurrent(); });
+    el('packageSelect').addEventListener('change', event => { state.packageId = event.target.value; renderAll(); updateMapData(); fitCurrent(); });
     document.querySelectorAll('[data-basemap]').forEach(button => button.addEventListener('click', () => setBasemap(button.dataset.basemap)));
     el('themeToggle').addEventListener('click', toggleTheme);
-    el('showPlanned').addEventListener('change', updateMapData);
     el('showFronts').addEventListener('change', updateMapData);
     el('fitButton').addEventListener('click', fitCurrent);
     el('refreshButton').addEventListener('click', () => loadWorkbook());
