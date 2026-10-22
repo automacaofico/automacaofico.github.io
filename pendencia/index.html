@@ -1070,6 +1070,7 @@ function renderEmpresa(key){
     +'<div class="kpi vermelho"><div class="rot">Restantes</div><div class="val">'+E.pendGeral+'</div><div class="sub">A tratar</div></div>'
     +'<div class="kpi laranja"><div class="rot">Pacotes</div><div class="val">'+pactoKeys.length+'</div><div class="sub">'+pactoKeys.map(k=>k.toUpperCase()).join(' · ')+'</div></div>'
     +'</div>';
+  h+=tendEmpresaHTML(key);
 
   h+='<div class="grid-2" style="margin-top:16px;align-items:start">'
     +'<div>'
@@ -1584,7 +1585,78 @@ function resumoCertHtml(){
     +'<p class="ef-ajuda" style="margin-top:14px">Só pendências em aberto, Regional/Elemento conforme os filtros da página. “Impactam certificação” = coluna “Certificação ?” igual a Certificação. Por execução, executante em branco usa a Empresa. Revegetação = Tipo de Pendência Revegetação/Hidrossemeadura (qualquer classificação de certificação). ATERPA R está somada à ATERPA na visão CLP.</p>';
   return html;
 }
-function renderTendencia(){
+// ============================================================
+// TENDÊNCIA DE TÉRMINO POR EMPRESA — mesmos parâmetros da aba "Tendência - Protocolo Leo" (CENARIO_ATUAL):
+//  ritmo diário = ROUNDUP(encerradas no mês da data de referência ÷ dias úteis seg–sáb do mês);
+//  dias p/ zerar = ROUNDUP(em aberto ÷ ritmo); data = esses dias úteis (seg–sáb) somados à data de referência.
+// Universo: Pacotes 1-3, na mesma visão (CLP/Execução), regional e filtro de Elemento do painel.
+// ============================================================
+let TEND_EMP=null;
+const TEND_MESES=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+function tendParseBR(s){const m=/(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(String(s||''));return m?new Date(Date.UTC(+m[3],+m[2]-1,+m[1])):null;}
+function tendFmt(d){return String(d.getUTCDate()).padStart(2,'0')+'/'+String(d.getUTCMonth()+1).padStart(2,'0')+'/'+d.getUTCFullYear();}
+function tendSomaUteis(d0,n){const d=new Date(d0.getTime());let k=0;while(k<n){d.setUTCDate(d.getUTCDate()+1);if(d.getUTCDay()!==0)k++;}return d;}
+function tendCalc(aberto,enc,dias,ref,meta){
+  const r={aberto:aberto,enc:enc,ritmo:null,diasZerar:null,data:null,desvio:null,zerado:!aberto};
+  if(!aberto||!enc||!dias)return r;
+  r.ritmo=Math.ceil(enc/dias); r.diasZerar=Math.ceil(aberto/r.ritmo);
+  r.data=tendSomaUteis(ref,r.diasZerar);
+  r.desvio=meta?Math.round((r.data-meta)/86400000):null;
+  return r;
+}
+function calcTendEmp(){
+  TEND_EMP=null;
+  const c=CENARIO_ATUAL, ref=tendParseBR(c.dataReferencia), meta=tendParseBR(c.metaFinal); if(!ref)return;
+  // Bloco "Total (por Executante)" do mês da data de referência — mesma base da aba Tendência (Pacotes 1-3):
+  // totEnc = encerradas no mês, nec = em aberto atual. Trocar para o detalhamento do mês seguinte quando a data de referência virar o mês.
+  const bl=TENDENCIA_SETEMBRO_DETALHE.blocos[0]; if(!bl)return;
+  const ini=Date.UTC(ref.getUTCFullYear(),ref.getUTCMonth(),1);
+  let dias=0; for(let x=ini;x<=ref.getTime();x+=86400000){ if(new Date(x).getUTCDay()!==0)dias++; }
+  const res={ref:ref,meta:meta,dias:dias,mes:TEND_MESES[ref.getUTCMonth()],por:{},total:tendCalc(bl.encerradas.nec,bl.encerradas.totEnc,dias,ref,meta)};
+  bl.empresas.forEach(e=>{res.por[e.emp]=tendCalc(e.nec,e.totEnc,dias,ref,meta);});
+  TEND_EMP=res;
+}
+// A aba Tendência trabalha por Executante: ATERPA R está somada à ATERPA e a chave da GSA é "GSA".
+function tendDaEmpresa(key){
+  const T=TEND_EMP; if(!T)return null;
+  const alias={'GRUPO GSA SERVICE':'GSA','ATERPA R':'ATERPA'};
+  return T.por[key]||T.por[alias[key]]||null;
+}
+function tendDesvioHTML(t){
+  if(t.desvio==null)return '—';
+  const n=Math.abs(t.desvio);
+  if(t.desvio>0)return '<span style="color:var(--vermelho);font-weight:800">'+n+' dias de atraso</span>';
+  if(t.desvio<0)return '<span style="color:var(--verde);font-weight:800">'+n+' dias de adiantamento</span>';
+  return '<span style="color:var(--verde);font-weight:800">No prazo</span>';
+}
+function tendEmpresaHTML(key){
+  const T=TEND_EMP; if(!T)return '';
+  const t=tendDaEmpresa(key); if(!t)return '';
+  const cab='<h4 style="color:var(--navy);font-size:12.5px;text-transform:uppercase;letter-spacing:.5px;margin:18px 0 10px">Tendência de término <span style="color:var(--cinza-txt);font-weight:600;text-transform:none">(ritmo real de '+T.mes+', por Executante, mesmos parâmetros da aba Tendência'+(key==='ATERPA R'?' · ATERPA R somada à ATERPA':'')+')</span></h4>';
+  if(t.zerado)return cab+'<div class="alerta" style="margin-bottom:6px"><div class="tit"><span class="ico">✔</span>Sem pendências em aberto nesta visão.</div></div>';
+  if(!t.ritmo)return cab+'<div class="alerta crit" style="margin-bottom:6px"><div class="tit"><span class="ico">▲</span>Sem tendência: nenhuma pendência encerrada em '+T.mes+' para calcular o ritmo ('+t.aberto.toLocaleString('pt-BR')+' em aberto).</div></div>';
+  return cab+'<div class="kpis stagger" style="grid-template-columns:repeat(4,1fr)">'
+    +'<div class="kpi azul"><div class="rot">Ritmo real diário ('+T.mes+')</div><div class="val">'+t.ritmo+'</div><div class="sub">'+t.enc+' encerradas ÷ '+T.dias+' dias úteis</div></div>'
+    +'<div class="kpi laranja"><div class="rot">Dias úteis p/ zerar em aberto</div><div class="val">'+t.diasZerar+'</div><div class="sub">'+t.aberto.toLocaleString('pt-BR')+' em aberto ÷ '+t.ritmo+' por dia</div></div>'
+    +'<div class="kpi vermelho"><div class="rot">Tendência de término</div><div class="val" style="font-size:22px">'+tendFmt(t.data)+'</div><div class="sub">dias úteis seg–sáb a partir de '+tendFmt(T.ref)+'</div></div>'
+    +'<div class="kpi navy"><div class="rot">Desvio vs meta final ('+tendFmt(T.meta)+')</div><div class="val" style="font-size:18px">'+tendDesvioHTML(t)+'</div></div>'
+    +'</div>';
+}
+function tendTabelaHTML(){
+  const T=TEND_EMP; if(!T)return '';
+  const linhas=Object.keys(T.por).map(k=>({k:k,t:T.por[k]}))
+    .sort((a,b)=>(a.t.data?a.t.data.getTime():(a.t.zerado?0:9e15))-(b.t.data?b.t.data.getTime():(b.t.zerado?0:9e15)));
+  const tr=(nome,t,neg)=>'<tr'+(neg?' style="font-weight:800"':'')+'><td>'+nome+'</td><td>'+t.aberto.toLocaleString('pt-BR')+'</td><td>'+t.enc.toLocaleString('pt-BR')+'</td>'
+    +(t.zerado?'<td colspan="4"><span style="color:var(--verde);font-weight:800">Sem pendências em aberto</span></td>'
+      :(!t.ritmo?'<td colspan="4"><span style="color:var(--vermelho);font-weight:800">Sem tendência — nenhuma encerrada em '+T.mes+'</span></td>'
+      :'<td>'+t.ritmo+'</td><td>'+t.diasZerar+'</td><td><b>'+tendFmt(t.data)+'</b></td><td>'+tendDesvioHTML(t)+'</td>'))+'</tr>';
+  let h='<div class="tend-mes"><h3>Tendência de término por empresa</h3>'
+    +'<p class="ef-ajuda" style="margin-top:-6px">Mesmos parâmetros do cenário acima: ritmo real diário de '+T.mes+' ('+T.dias+' dias úteis seg–sáb), em aberto atual, dias úteis somados à data de referência ('+tendFmt(T.ref)+') e comparados à meta final ('+tendFmt(T.meta)+'). Por Executante, Pacotes 1-3 (ATERPA R somada à ATERPA), como nas demais tabelas desta aba.</p>'
+    +'<div style="overflow-x:auto"><table class="tend-tabela"><thead><tr><th>Empresa</th><th>Em aberto</th><th>Encerradas em '+T.mes+'</th><th>Ritmo real diário</th><th>Dias úteis p/ zerar</th><th>Tendência de término</th><th>Desvio vs meta</th></tr></thead><tbody>'
+    +linhas.map(x=>tr(nomeExibicao(x.k),x.t,false)).join('')
+    +'</tbody><tfoot>'+tr('Total',T.total,true).replace('<tr','<tr')+'</tfoot></table></div></div>';
+  return h;
+}function renderTendencia(){
   const alvo=document.getElementById('tendencia'); if(!alvo)return;
   let h='<h2 class="secao">Tendência · Baixa de pendências (Meta × Real)</h2>'
     +'<p class="ef-ajuda">Acompanhamento semanal de encerramento de pendências por executante, vindo da aba "Tendência - Protocolo Leo" da planilha EAP.</p>';
@@ -1615,6 +1687,7 @@ function renderTendencia(){
       +'<div class="alerta crit" style="margin-top:14px"><div class="tit"><span class="ico">▲</span>'+c.desvioTexto+'</div></div>'
       +'</div>';
   }
+  h+=tendTabelaHTML();
 
   const detalheMesHTML=(D2,nomeMes,rotuloBlocos,textoSemanas,necRot)=>{
     const sems=D2.semanas;
@@ -1653,7 +1726,7 @@ function renderTendencia(){
   alvo.innerHTML=h;
 }
 
-function renderAll(){renderChrome();renderConsolidado();renderResumo();renderTendencia();D.EMP_ORDER.forEach(renderEmpresa);renderCharts();}
+function renderAll(){calcTendEmp();renderChrome();renderConsolidado();renderResumo();renderTendencia();D.EMP_ORDER.forEach(renderEmpresa);renderCharts();}
 
 function mostrar(id,btn){
   document.querySelectorAll('.painel').forEach(p=>p.classList.remove('ativo'));
