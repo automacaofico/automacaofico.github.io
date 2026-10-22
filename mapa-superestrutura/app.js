@@ -34,7 +34,7 @@
     { id: 'brita4', name: '4ª Descarga de brita', excel: '4o descarga de brita', start: 0, color: '#883366' },
     { id: 'socaria6', name: 'Socaria — 6º levante', excel: 'socaria 6o levante', start: 0, color: '#3a7050' },
     { id: 'brita5', name: '5ª Descarga de brita', excel: '5o descarga de brita', start: 0, color: '#4a6b8a' },
-    { id: 'weld', name: 'Solda aluminotérmica', excel: 'solda aluminotermica', start: 0, color: '#b55a00' },
+    { id: 'weld', name: 'Solda aluminotérmica', excel: 'solda aluminotermica', start: 0, color: '#b55a00', material: true },
     { id: 'relief', name: 'Alívio de tensão', excel: 'alivio de tensao', start: 0, color: '#2a8a50' }
   ];
 
@@ -65,11 +65,18 @@
   const km = metres => `${(Math.max(0, metres || 0) / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} km`;
   const station = metres => `KM ${(Math.max(0, metres || 0) / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`;
   const percent = value => `${Math.max(0, value || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`;
+  const hasProgress = activity => activity.actualLength > 0 || (activity.material && activity.materialConsumed > 0);
+  const quantity = (value, unit) => unit === 'pç' ? `${Math.round(value).toLocaleString('pt-BR')} pç` : km(value);
   const sumLengths = intervals => intervals.reduce((total, item) => total + Math.max(0, item.end - item.start), 0);
   const lerp = (start, end, amount) => start + (end - start) * amount;
   const scopeRange = () => PACKAGES.find(item => item.id === state.packageId) || OBRA;
   // Mesma regra do painel Super: soma dos metros de cada trecho dentro do pacote (ou da obra) sobre a extensão do escopo.
   function scoped(activity) {
+    // Solda aluminotérmica não tem trecho em KM: avanço = peças consumidas ÷ total previsto (aba MATERIAIS), sempre na obra completa.
+    if (activity.material) {
+      const total = activity.materialTotal || 0;
+      return { length: activity.materialConsumed || 0, extent: total, progress: total ? (activity.materialConsumed || 0) / total * 100 : 0, unit: 'pç' };
+    }
     const range = scopeRange();
     const extent = Math.max(1, range.end - range.start);
     const length = activity.intervals.reduce((total, item) => total + Math.max(0, Math.min(item.end, range.end) - Math.max(item.start, range.start)), 0);
@@ -168,6 +175,22 @@
       }
       return [];
     };
+    // Aba MATERIAIS: solda aluminotérmica (peças) = QNDE CONSUMIDA ÷ TOTAL 1-8.
+    let weldTotal = 0;
+    let weldConsumed = 0;
+    const materialsSheet = workbook.SheetNames.find(name => norm(name) === 'materiais');
+    if (materialsSheet) {
+      const materialRows = XLSX.utils.sheet_to_json(workbook.Sheets[materialsSheet], { header: 1, raw: true, defval: null });
+      const materialHeader = materialRows[0] ? materialRows[0].map(norm) : [];
+      const totalColumn = materialHeader.findIndex(cell => cell.includes('total 1 8'));
+      const consumedColumn = materialHeader.findIndex(cell => cell.includes('consumida'));
+      const weldRow = materialRows.find(row => norm(row[0]).includes('solda aluminotermica'));
+      if (weldRow && totalColumn >= 0 && consumedColumn >= 0) {
+        weldTotal = number(weldRow[totalColumn]) || 0;
+        weldConsumed = number(weldRow[consumedColumn]) || 0;
+      }
+    }
+
     const releaseIntervals = parseIntervals(rows, 'liberacao de plataforma', 'pre lastro em colchao').map(item => ({ ...item, completed: true }));
     const cushionIntervals = parseIntervals(rows, 'pre lastro em colchao', null);
     const activities = DEFINITIONS.map(definition => {
@@ -175,7 +198,7 @@
       const actualEnd = intervals.length ? Math.max(...intervals.map(item => item.end)) : definition.start;
       const actualStart = intervals.length ? Math.min(...intervals.map(item => item.start)) : definition.start;
       const actualLength = sumLengths(intervals);
-      return { ...definition, start: actualStart, actualEnd, actualLength, intervals };
+      return { ...definition, start: actualStart, actualEnd, actualLength, intervals, materialTotal: definition.material ? weldTotal : 0, materialConsumed: definition.material ? weldConsumed : 0 };
     });
     return {
       date: dataDate,
@@ -243,7 +266,7 @@
   }
 
   function renderMetrics() {
-    const started = state.activities.filter(activity => activity.actualLength > 0).length;
+    const started = state.activities.filter(hasProgress).length;
     const release = state.activities.find(activity => activity.id === 'release');
     const leader = [...state.activities].sort((a, b) => b.actualEnd - a.actualEnd)[0];
     const completedCushion = sumLengths(state.cushion.completed);
@@ -264,7 +287,7 @@
     el('activityList').innerHTML = state.activities.map(activity => `
       <button class="activity-card ${activity.id === state.selectedId ? 'active' : ''}" data-activity="${activity.id}" style="--activity-color:${activity.color}">
         <span class="name">${activity.name}</span>
-        <span class="meta"><span>${station(activity.actualEnd)}</span><b>${percent(scoped(activity).progress)}</b></span>
+        <span class="meta"><span>${activity.material ? (activity.materialConsumed > 0 ? `${Math.round(activity.materialConsumed).toLocaleString('pt-BR')} de ${Math.round(activity.materialTotal).toLocaleString('pt-BR')} pç` : '—') : station(activity.actualEnd)}</span><b>${percent(scoped(activity).progress)}</b></span>
         <span class="mini-progress"><i style="width:${Math.min(100, scoped(activity).progress)}%"></i></span>
       </button>`).join('');
     document.querySelectorAll('[data-activity]').forEach(button => button.addEventListener('click', () => selectActivity(button.dataset.activity)));
@@ -276,17 +299,19 @@
     const metrics = scoped(activity);
     const currentPackage = packageAt(activity.actualEnd);
     el('detailName').textContent = activity.name;
-    el('detailStatus').textContent = activity.actualLength > 0 ? 'Em execução' : 'Não iniciada';
+    el('detailStatus').textContent = hasProgress(activity) ? 'Em execução' : 'Não iniciada';
     el('detailProgressBar').style.width = `${Math.min(100, metrics.progress)}%`;
     el('detailProgressBar').style.background = activity.color;
-    el('detailReal').textContent = km(metrics.length);
-    el('detailPlanned').textContent = km(metrics.extent);
+    el('detailReal').textContent = quantity(metrics.length, metrics.unit);
+    el('detailPlanned').textContent = quantity(metrics.extent, metrics.unit);
     el('detailPercent').textContent = percent(metrics.progress);
-    el('detailDelta').textContent = activity.actualLength > 0 ? `${String(Math.floor(activity.actualEnd / 1000)).padStart(3, '0')}+${String(Math.round(activity.actualEnd % 1000)).padStart(3, '0')}` : '—';
+    el('detailDelta').textContent = activity.material ? 'sem KM' : activity.actualLength > 0 ? `${String(Math.floor(activity.actualEnd / 1000)).padStart(3, '0')}+${String(Math.round(activity.actualEnd % 1000)).padStart(3, '0')}` : '—';
     el('detailDelta').className = '';
-    el('detailPackage').textContent = currentPackage.name;
-    el('detailSection').textContent = `${station(currentPackage.start)} — ${station(currentPackage.end)}`;
-    el('detailNote').textContent = activity.actualLength > 0
+    el('detailPackage').textContent = activity.material ? 'Obra completa' : currentPackage.name;
+    el('detailSection').textContent = activity.material ? 'Medida por consumo de material, sem KM' : `${station(currentPackage.start)} — ${station(currentPackage.end)}`;
+    el('detailNote').textContent = activity.material
+      ? 'Avanço = peças de solda consumidas ÷ total previsto (aba MATERIAIS da planilha). Não há trecho em KM para exibir no mapa.'
+      : activity.actualLength > 0
       ? `${activity.intervals.length} trecho(s) executado(s), somados no avanço. Frente registrada em ${station(activity.actualEnd)}.`
       : 'Nenhum trecho executado registrado na planilha.';
   }
@@ -296,8 +321,8 @@
       const metrics = scoped(activity);
       return `<tr data-table-activity="${activity.id}" class="${activity.id === state.selectedId ? 'active' : ''}" style="--row-color:${activity.color}">
         <td><span class="table-activity"><i></i>${activity.name}</span></td>
-        <td>${activity.actualLength > 0 ? station(activity.start) : '—'}</td><td>${activity.actualLength > 0 ? station(activity.actualEnd) : '—'}</td><td>${km(metrics.length)}</td>
-        <td>${percent(metrics.progress)}</td><td>${activity.intervals.length}</td>
+        <td>${activity.actualLength > 0 ? station(activity.start) : '—'}</td><td>${activity.actualLength > 0 ? station(activity.actualEnd) : '—'}</td><td>${quantity(metrics.length, metrics.unit)}</td>
+        <td>${percent(metrics.progress)}</td><td>${activity.material ? '—' : activity.intervals.length}</td>
         <td>${activity.actualLength > 0 ? packageAt(activity.actualEnd).name : '—'}</td></tr>`;
     }).join('');
     document.querySelectorAll('[data-table-activity]').forEach(row => row.addEventListener('click', () => selectActivity(row.dataset.tableActivity)));
@@ -629,6 +654,7 @@
   function zoomFront() {
     const activity = selectedActivity();
     if (!activity || !state.map) return;
+    if (activity.material) { toast('Solda aluminotérmica é medida por material, sem localização em KM'); return; }
     state.map.flyTo({ center: pointAtStation(activity.actualEnd), zoom: 13.3, duration: 1000 });
   }
 
