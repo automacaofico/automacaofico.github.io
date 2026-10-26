@@ -659,7 +659,7 @@ function tabelaTiposHTML(tipos){
   const cert=tipos.reduce((s,t)=>s+t.cert,0), naoCert=tipos.reduce((s,t)=>s+t.naoCert,0), semCert=tipos.reduce((s,t)=>s+t.semCert,0);
   const exec=tipos.reduce((s,t)=>s+t.exec,0);
   const finalizado=tipos.reduce((s,t)=>s+t.finSemImp+t.finCert,0);
-  const pend=total-finalizado;
+  const soma=k=>tipos.reduce((s,t)=>s+(t[k]||0),0); // total de cada coluna = soma das linhas
   const certResolv=tipos.reduce((s,t)=>s+t.finCert,0), naoCertResolv=tipos.reduce((s,t)=>s+(t.finNaoCert||0),0);
   const certSaldo=cert-certResolv, naoCertSaldo=naoCert-naoCertResolv;
   let h='<div style="overflow-x:auto;margin-top:16px"><table class="tipos g-tabela"><thead>'
@@ -687,8 +687,8 @@ function tabelaTiposHTML(tipos){
     +'<td class="num g-certif">'+cert+'</td><td class="num g-certif">'+certResolv+'</td><td class="num g-certif">'+certSaldo+'</td>'
     +'<td class="num g-certif">'+naoCert+'</td><td class="num g-certif">'+naoCertResolv+'</td><td class="num g-certif">'+naoCertSaldo+'</td>'
     +'<td class="num g-certif g-vazio">'+semCert+'</td>'
-    +'<td class="num g-origem" colspan="4"></td><td class="num g-origem g-vazio"></td>'
-    +'<td class="num g-exec">'+exec+'</td><td class="num g-exec" colspan="2"></td><td class="num g-exec">'+pend+'</td><td class="num g-exec"></td></tr>'
+    +'<td class="num g-origem">'+soma('fisc')+'</td><td class="num g-origem">'+soma('fund')+'</td><td class="num g-origem">'+soma('impl')+'</td><td class="num g-origem">'+soma('proto')+'</td><td class="num g-origem g-vazio">'+soma('semOrigem')+'</td>'
+    +'<td class="num g-exec">'+exec+'</td><td class="num g-exec">'+soma('finSemImp')+'</td><td class="num g-exec">'+soma('finCert')+'</td><td class="num g-exec">'+soma('pendExec')+'</td><td class="num g-exec">'+soma('pendFin')+'</td></tr>'
     +'</tbody></table></div>'
     +'<div class="g-legenda">✓ Certificação (Certif. + Não certif. + S/ classif.) e Origem (Fiscaliz. + Fundiário + Implant. + Protocolo + S/ origem) somam exatamente o Total em cada linha — "S/ classif." e "S/ origem" são as pendências sem essa coluna preenchida na planilha. "Resolvidas" = finalizadas (coluna Status_Pendencia) dentro de cada classificação.</div>';
   return h;
