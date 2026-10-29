@@ -142,7 +142,11 @@
   .pts li.crit .tg{background:var(--bad-bg);color:var(--bad);}
   .pts li.team .tg{background:color-mix(in srgb,var(--blue) 16%,var(--paper));color:var(--blue);}
   .fields textarea{width:100%;min-height:92px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--ink);font:inherit;font-size:14px;resize:vertical;}
-  .pg{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin:18px 0 10px;}
+  .refs{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;}
+  .refs a{display:flex;flex-direction:column;gap:2px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;text-decoration:none;color:var(--ink);background:color-mix(in srgb,var(--blue) 4%,var(--paper));transition:border-color .15s;}
+  .refs a:hover{border-color:var(--blue);}
+  .refs a b{font-size:14px;} .refs a span{font-size:12px;color:var(--ink-soft);}
+  .refs a b::after{content:' ↗';color:var(--blue);}  .pg{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin:18px 0 10px;}
   #pts > .pg:first-child{margin-top:0;}
   .edrow{display:grid;grid-template-columns:112px 104px 1fr 42px;gap:8px;align-items:start;margin-bottom:10px;}
   .edrow select,.edrow textarea{padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--ink);font:inherit;font-size:14px;width:100%;}
@@ -204,6 +208,15 @@
   <h2 class="sec">Fontes dos dados</h2>
   <section class="card">
     <div class="tablewrap"><table class="src" id="srcTable"></table></div>
+  </section>
+  <h2 class="sec">Referências</h2>
+  <section class="card">
+    <ul class="refs">
+      <li><a href="https://app.powerbi.com/groups/me/apps/ba87b3db-58a3-4bb1-8b14-f5617adff583/reports/4833d79b-1ab6-4d6f-a3e0-64185202e37a/ReportSection?experience=power-bi" target="_blank" rel="noopener"><b>BI de RNC</b><span>Power BI</span></a></li>
+      <li><a href="https://app.powerbi.com/groups/me/reports/0fe80916-66ad-4111-b612-2f4ee4fe8db0/b326ff01b5c8e97eaaeb?experience=power-bi&amp;bookmarkGuid=2a5ba0a53b235cd1c32b" target="_blank" rel="noopener"><b>BI de Databook</b><span>Power BI</span></a></li>
+      <li><a href="https://app.powerbi.com/groups/me/reports/fdb326ec-1f43-4400-bf10-b0fc093c2625/4813f8da2cc50169cbde?experience=power-bi" target="_blank" rel="noopener"><b>BI de pendências</b><span>Power BI</span></a></li>
+      <li><a href="https://brunodssantosp.github.io/asbuilt-geometria/#/dashboard" target="_blank" rel="noopener"><b>Dashboard de As Built</b><span>Dashboard web</span></a></li>
+    </ul>
   </section>
 
   <h2 class="sec">Como o avanço é calculado</h2>
