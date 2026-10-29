@@ -162,7 +162,7 @@
     <div class="band-text">
       <p class="kicker">Ferrovia de Integração Centro-Oeste</p>
       <h1 class="display">Avanço Geral</h1>
-      <p>Regional 1 · Pacotes 1 a 3. Combina o avanço físico de planejamento, as pendências, as RNCs e os databooks em um único indicador.</p>
+      <p>Regional 1 · Pacotes 1 a 3. Combina o avanço físico de planejamento, as pendências certificáveis, as RNCs e os databooks em um único indicador.</p>
     </div>
   </div>
 </div>
@@ -202,9 +202,9 @@
   <h2 class="sec">Como o avanço é calculado</h2>
   <section class="card">
     <ul class="method">
-      <li><b>Avanço geral</b> = 10% × Físico de planejamento + 35% × Pendências + 40% × RNC + 15% × Databooks BKs.</li>
+      <li><b>Avanço geral</b> = 10% × Físico de planejamento + 35% × Pendências certificáveis + 40% × RNC + 15% × Databooks BKs.</li>
       <li><b>Físico de planejamento:</b> avanço real acumulado do pacote dividido pelo peso do pacote no empreendimento (planilha “Pacote a Pacote”, último mês com dado).</li>
-      <li><b>Pendências:</b> pendências encerradas ÷ pendências registradas, lidas diariamente da base do painel de Gestão de Pendências.</li>
+      <li><b>Pendências certificáveis:</b> pendências certificáveis encerradas ÷ pendências certificáveis registradas (coluna “Certificação ?” = Certificação), lidas diariamente da base do painel de Gestão de Pendências.</li>
       <li><b>RNC:</b> RNCs encerradas ÷ RNCs registradas no pacote.</li>
       <li><b>Databooks BKs:</b> databooks aprovados ÷ databooks do pacote. Databook ou RNC que cita mais de um pacote conta no primeiro pacote citado.</li>
       <li>O consolidado soma os três pacotes antes de calcular cada percentual. Se alguma fonte ainda não tiver sido enviada, o avanço geral aparece como parcial.</li>
@@ -214,7 +214,7 @@
   <details class="card upl" id="upl">
     <summary>Atualizar dados (upload dos arquivos)</summary>
     <div class="uplbody">
-      <p class="hint" style="margin:0">As <b>Pendências</b> são lidas sozinhas da base diária. Envie aqui os 3 arquivos padrões: o sistema lê o arquivo no seu navegador, mostra o resultado e só publica quando você clicar em “Publicar”.</p>
+      <p class="hint" style="margin:0">As <b>Pendências certificáveis</b> são lidas sozinhas da base diária. Envie aqui os 3 arquivos padrões: o sistema lê o arquivo no seu navegador, mostra o resultado e só publica quando você clicar em “Publicar”.</p>
       <div class="drops">
         <label class="drop" data-k="fisico"><span class="t">Físico de planejamento</span><span class="w">Peso 10% · “Pacote a Pacote”.xlsx</span><span class="f" data-f>Clique ou arraste o arquivo</span><span class="res" data-r></span><input type="file" accept=".xlsx,.xlsm"></label>
         <label class="drop" data-k="rnc"><span class="t">RNC</span><span class="w">Peso 40% · “Base_Reg. 1 e 2”.xlsx</span><span class="f" data-f>Clique ou arraste o arquivo</span><span class="res" data-r></span><input type="file" accept=".xlsx,.xlsm"></label>
@@ -248,7 +248,7 @@
   var PESOS = { fisico: 0.10, pend: 0.35, rnc: 0.40, bk: 0.15 };
   var COMP = [
     { id: 'fisico', nome: 'Físico de planejamento', cor: 'var(--c-fis)' },
-    { id: 'pend', nome: 'Pendências', cor: 'var(--c-pen)' },
+    { id: 'pend', nome: 'Pendências certificáveis', cor: 'var(--c-pen)' },
     { id: 'rnc', nome: 'RNC', cor: 'var(--c-rnc)' },
     { id: 'bk', nome: 'Databooks BKs', cor: 'var(--c-bk)' }
   ];
@@ -421,7 +421,7 @@
     var f = d.fisico && d.fisico.pacotes && d.fisico.pacotes[p];
     out.fisico = f ? { v: f.real / f.peso, det: 'previsto ' + fmtPct(f.previsto / f.peso), n: f.real, d: f.peso } : null;
     var pe = state.pend && state.pend[p];
-    out.pend = pe ? { v: pe.enc / pe.total, det: fmtInt(pe.enc) + ' de ' + fmtInt(pe.total) + ' encerradas', n: pe.enc, d: pe.total } : null;
+    out.pend = pe ? { v: pe.enc / pe.total, det: fmtInt(pe.enc) + ' de ' + fmtInt(pe.total) + ' certificáveis encerradas', n: pe.enc, d: pe.total } : null;
     var r = d.rnc && d.rnc.pacotes && d.rnc.pacotes[p];
     out.rnc = r ? { v: r.fechadas / r.total, det: fmtInt(r.fechadas) + ' de ' + fmtInt(r.total) + ' encerradas', n: r.fechadas, d: r.total } : null;
     var b = d.databooks && d.databooks.pacotes && d.databooks.pacotes[p];
@@ -496,7 +496,7 @@
     document.getElementById('srcTable').innerHTML =
       '<thead><tr><th>Componente</th><th>Peso</th><th>Arquivo / origem</th><th>Referência</th><th>Atualizado em</th><th></th></tr></thead><tbody>' +
       lin('Físico de planejamento', '10%', d.fisico && esc(d.fisico.arquivo), d.fisico && ('mês ' + esc(d.fisico.mes)), d.fisico && fmtWhen(d.fisico.atualizadoEm), !!d.fisico) +
-      lin('Pendências', '35%', 'Base_Pendencias_FICO.xlsx (leitura diária)', state.pendRef && esc(state.pendRef), state.pendRef ? 'automático' : '', !!state.pend) +
+      lin('Pendências certificáveis', '35%', 'Base_Pendencias_FICO.xlsx (leitura diária)', state.pendRef && esc(state.pendRef), state.pendRef ? 'automático' : '', !!state.pend) +
       lin('RNC', '40%', d.rnc && esc(d.rnc.arquivo), d.rnc && esc(d.rnc.dataRef), d.rnc && fmtWhen(d.rnc.atualizadoEm), !!d.rnc) +
       lin('Databooks BKs', '15%', d.databooks && esc(d.databooks.arquivo), '', d.databooks && fmtWhen(d.databooks.atualizadoEm), !!d.databooks) +
       '</tbody>';
@@ -524,7 +524,7 @@
     if (pend.length) {
       var ab = pend.reduce(function (s, o) { return s + o.ab; }, 0), tt = pend.reduce(function (s, o) { return s + o.total; }, 0);
       var pior = pend.slice().sort(function (a, b) { return a.v - b.v; })[0];
-      out.push({ sev: 'crit', txt: fmtInt(ab) + ' pendências em aberto nos Pacotes 1 a 3 (' + fmtPct(ab / tt) + ' do total). Menor índice de encerramento: Pacote ' + pior.p + ', com ' + fmtPct(pior.v) + ' (' + fmtInt(pior.ab) + ' abertas).' });
+      out.push({ sev: 'crit', txt: fmtInt(ab) + ' pendências certificáveis em aberto nos Pacotes 1 a 3 (' + fmtPct(ab / tt) + ' do total). Menor índice de encerramento: Pacote ' + pior.p + ', com ' + fmtPct(pior.v) + ' (' + fmtInt(pior.ab) + ' abertas).' });
     }
     // databooks
     var bk = PACOTES.map(function (p) { var o = d.databooks && d.databooks.pacotes && d.databooks.pacotes[p]; return o ? { p: p, pend: o.total - o.aprovados, v: o.aprovados / o.total } : null; }).filter(Boolean);
@@ -581,7 +581,7 @@
     }
 
     // 1) visão geral
-    var s1 = slide('Avanço Geral', 'Soma ponderada: Físico 10% · Pendências 35% · RNC 40% · Databooks BKs 15%');
+    var s1 = slide('Avanço Geral', 'Soma ponderada: Físico 10% · Pendências certificáveis 35% · RNC 40% · Databooks BKs 15%');
     s1.addChart(P.charts.DOUGHNUT, [{ name: 'Avanço', labels: ['Avanço', 'Falta'], values: [(g.v || 0) * 100, 100 - (g.v || 0) * 100] }],
       { x: 0.7, y: 1.7, w: 4.6, h: 4.6, holeSize: 74, chartColors: ['3578BC', TRACK], showLegend: false, showLabel: false, showValue: false, showPercent: false, dataBorder: { pt: 0, color: 'FFFFFF' } });
     s1.addText(g.v == null ? '—' : pp(g.v) + '%', { x: 0.7, y: 3.35, w: 4.6, h: 1.0, align: 'center', fontFace: FONT, fontSize: 44, bold: true, color: INK, margin: 0 });
@@ -654,6 +654,7 @@
       var pac = {};
       rows.forEach(function (r) {
         var p = firstPacote(r['Pacote']); if (p == null || PACOTES.indexOf(p) < 0) return;
+        if (String(r['Certificação ?']).trim().toUpperCase() !== 'CERTIFICAÇÃO') return;
         var st = String(r['Status_Pendencia']).trim().toUpperCase(); if (!st) return;
         var o = pac[p] || (pac[p] = { total: 0, enc: 0 });
         o.total++; if (st === 'ENCERRADO') o.enc++;
