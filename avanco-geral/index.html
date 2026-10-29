@@ -219,17 +219,7 @@
     </ul>
   </section>
 
-  <h2 class="sec">Como o avanço é calculado</h2>
-  <section class="card">
-    <ul class="method">
-      <li><b>Avanço geral</b> = 10% × Físico de planejamento + 35% × Pendências certificáveis + 40% × RNC + 15% × Databooks BKs.</li>
-      <li><b>Físico de planejamento:</b> avanço real acumulado do pacote dividido pelo peso do pacote no empreendimento (planilha “Pacote a Pacote”, último mês com dado).</li>
-      <li><b>Pendências certificáveis:</b> pendências certificáveis encerradas ÷ pendências certificáveis registradas (coluna “Certificação ?” = Certificação), lidas diariamente da base do painel de Gestão de Pendências.</li>
-      <li><b>RNC:</b> RNCs encerradas ÷ RNCs registradas no pacote.</li>
-      <li><b>Databooks BKs:</b> databooks aprovados ÷ databooks do pacote. Databook ou RNC que cita mais de um pacote conta no primeiro pacote citado.</li>
-      <li>O consolidado soma os três pacotes antes de calcular cada percentual. Se alguma fonte ainda não tiver sido enviada, o avanço geral aparece como parcial.</li>
-    </ul>
-  </section>
+  
 
   <details class="card upl" id="upl">
     <summary>Atualizar dados (upload dos arquivos)</summary>
@@ -871,7 +861,6 @@
       setMsg('err', '⚠️ Não publiquei. Os dados atuais foram preservados. Motivo: ' + e.message);
     }).then(function () { btn.disabled = !pendingCount(); });
   });
-
 
   // exportar PPT
   var btnPpt = document.getElementById('btnPpt');
