@@ -142,6 +142,13 @@
   .pts li.crit .tg{background:var(--bad-bg);color:var(--bad);}
   .pts li.team .tg{background:color-mix(in srgb,var(--blue) 16%,var(--paper));color:var(--blue);}
   .fields textarea{width:100%;min-height:92px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--ink);font:inherit;font-size:14px;resize:vertical;}
+  .pg{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin:18px 0 10px;}
+  #pts > .pg:first-child{margin-top:0;}
+  .edrow{display:grid;grid-template-columns:112px 104px 1fr 42px;gap:8px;align-items:start;margin-bottom:10px;}
+  .edrow select,.edrow textarea{padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--ink);font:inherit;font-size:14px;width:100%;}
+  .edrow textarea{resize:vertical;min-height:46px;}
+  .edrow .edrm{padding:8px 0;}
+  @media(max-width:640px){.edrow{grid-template-columns:1fr 1fr 42px;}.edrow .edtxt{grid-column:1/-1;grid-row:2;}.edrow .edrm{grid-column:3;grid-row:1;}}
   .method{font-size:13px;color:var(--ink-mid);line-height:1.6;} .method li{margin-bottom:4px;}
 
   footer{border-top:1px solid var(--line);margin-top:20px;padding:22px 28px 30px;text-align:center;font-size:12px;color:var(--ink-soft);}
@@ -189,7 +196,7 @@
   </section>
 
   <h2 class="sec">Pontos de atenção</h2>
-  <section class="card" id="ptsBox"><ul class="pts" id="pts"></ul></section>
+  <section class="card" id="ptsBox"><div class="toolbar" style="margin-bottom:6px"><button type="button" class="b sec" id="btnEdPts">✎ Editar pontos de atenção</button></div><div id="pts"></div><div id="edBox" style="display:none"></div></section>
 
   <h2 class="sec">Avanço por pacote</h2>
   <div class="pgrid" id="pgrid"></div>
@@ -224,7 +231,6 @@
         <div><label for="agUser">Responsável pela atualização</label><input id="agUser" type="text" maxlength="120" placeholder="Seu nome" autocomplete="name"></div>
         <div><label for="agToken">Chave de publicação (GitHub)</label><input id="agToken" type="password" autocomplete="off" placeholder="Cole aqui a chave"><div class="hint">Fica guardada só neste navegador. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Como criar a chave</a>: acesso ao repositório <span class="mono">automacaofico.github.io</span>, permissão “Contents: Read and write”.</div></div>
       </div>
-      <div class="fields"><div style="grid-column:1/-1"><label for="agPontos">Pontos de atenção do time (um por linha)</label><textarea id="agPontos" placeholder="Ex.: Pacote 2 — liberar frente de OAE para encerrar as pendências de drenagem"></textarea><div class="hint">Aparecem na caixa “Pontos de atenção” e no PPT, junto com os alertas automáticos. Entram na publicação como os arquivos.</div></div></div>
       <div class="btns">
         <button type="button" class="b" id="btnPub" disabled>Publicar atualização</button>
         <button type="button" class="b sec" id="btnPrev" disabled>Só visualizar (não publica)</button>
@@ -503,7 +509,12 @@
   }
 
   // ---------- pontos de atenção ----------
+  // Cada ponto: { id (só os automáticos), pac (0 = geral, 1-3 = pacote), sev (warn|crit|team), txt }.
+  // Os automáticos são recalculados a cada carga; o que o time edita/cria fica em dados.pontos
+  // ({ itens: [{pac,sev,txt}], ocultos: [ids de automáticos removidos ou substituídos] }).
   function pp(x) { return (x * 100).toFixed(1).replace('.', ','); }
+  var GRUPOS = [0, 1, 2, 3];
+  function nomeGrupo(g) { return g ? 'Pacote ' + g : 'Geral'; }
   function pontosAuto() {
     var out = [], cons = consolidado(), d = state.dados;
     // componente que mais custa pontos ao avanço geral
@@ -511,121 +522,233 @@
     var totalPerda = perdas.reduce(function (s, o) { return s + o.perda; }, 0);
     perdas.sort(function (a, b) { return b.perda - a.perda; });
     if (perdas.length > 1 && perdas[0].perda > 0) {
-      out.push({ sev: 'warn', txt: perdas[0].c.nome + ' é o componente que mais pesa contra: faltam ' + pp(perdas[0].perda) + ' dos ' + pp(totalPerda) + ' pontos que separam o avanço geral dos 100%.' });
+      out.push({ id: 'geral', pac: 0, sev: 'warn', txt: perdas[0].c.nome + ' é o componente que mais pesa contra: faltam ' + pp(perdas[0].perda) + ' dos ' + pp(totalPerda) + ' pontos que separam o avanço geral dos 100%.' });
     }
-    // físico abaixo do previsto
     PACOTES.forEach(function (p) {
-      var f = d.fisico && d.fisico.pacotes && d.fisico.pacotes[p]; if (!f) return;
-      var gap = (f.real - f.previsto) / f.peso;
-      if (gap < -0.01) out.push({ sev: gap < -0.05 ? 'crit' : 'warn', txt: 'Pacote ' + p + ': físico em ' + fmtPct(f.real / f.peso) + ', ' + pp(-gap) + ' p.p. abaixo do previsto (' + fmtPct(f.previsto / f.peso) + ').' });
+      var f = d.fisico && d.fisico.pacotes && d.fisico.pacotes[p];
+      if (f) {
+        var gap = (f.real - f.previsto) / f.peso;
+        if (gap < -0.01) out.push({ id: 'fis' + p, pac: p, sev: gap < -0.05 ? 'crit' : 'warn', txt: 'Físico em ' + fmtPct(f.real / f.peso) + ', ' + pp(-gap) + ' p.p. abaixo do previsto (' + fmtPct(f.previsto / f.peso) + ').' });
+      }
+      var pe = state.pend && state.pend[p];
+      if (pe && pe.total - pe.enc > 0) {
+        var vp = pe.enc / pe.total;
+        out.push({ id: 'pen' + p, pac: p, sev: vp < 0.8 ? 'crit' : 'warn', txt: fmtInt(pe.total - pe.enc) + ' pendências certificáveis em aberto (' + fmtPct(1 - vp) + ' do total); encerramento em ' + fmtPct(vp) + '.' });
+      }
+      var b = d.databooks && d.databooks.pacotes && d.databooks.pacotes[p];
+      if (b && b.total - b.aprovados > 0) {
+        var vb = b.aprovados / b.total;
+        out.push({ id: 'bk' + p, pac: p, sev: vb < 0.7 ? 'crit' : 'warn', txt: (b.total - b.aprovados) + ' databooks ainda sem aprovação; aprovação em ' + fmtPct(vb) + '.' });
+      }
+      var r = d.rnc && d.rnc.pacotes && d.rnc.pacotes[p];
+      if (r && r.total - r.fechadas > 0) {
+        var vr = r.fechadas / r.total;
+        out.push({ id: 'rnc' + p, pac: p, sev: vr < 0.9 ? 'crit' : 'warn', txt: fmtInt(r.total - r.fechadas) + ' RNCs em aberto; encerramento em ' + fmtPct(vr) + '.' });
+      }
     });
-    // pendências
-    var pend = PACOTES.map(function (p) { var o = state.pend && state.pend[p]; return o ? { p: p, ab: o.total - o.enc, total: o.total, v: o.enc / o.total } : null; }).filter(Boolean);
-    if (pend.length) {
-      var ab = pend.reduce(function (s, o) { return s + o.ab; }, 0), tt = pend.reduce(function (s, o) { return s + o.total; }, 0);
-      var pior = pend.slice().sort(function (a, b) { return a.v - b.v; })[0];
-      out.push({ sev: 'crit', txt: fmtInt(ab) + ' pendências certificáveis em aberto nos Pacotes 1 a 3 (' + fmtPct(ab / tt) + ' do total). Menor índice de encerramento: Pacote ' + pior.p + ', com ' + fmtPct(pior.v) + ' (' + fmtInt(pior.ab) + ' abertas).' });
-    }
-    // databooks
-    var bk = PACOTES.map(function (p) { var o = d.databooks && d.databooks.pacotes && d.databooks.pacotes[p]; return o ? { p: p, pend: o.total - o.aprovados, v: o.aprovados / o.total } : null; }).filter(Boolean);
-    if (bk.length) {
-      var pb = bk.reduce(function (s, o) { return s + o.pend; }, 0), maior = bk.slice().sort(function (a, b) { return b.pend - a.pend; })[0];
-      out.push({ sev: 'warn', txt: pb + ' databooks ainda sem aprovação nos Pacotes 1 a 3; a maior fila está no Pacote ' + maior.p + ' (' + maior.pend + ', aprovação em ' + fmtPct(maior.v) + ').' });
-    }
-    // RNC
-    var rn = PACOTES.map(function (p) { var o = d.rnc && d.rnc.pacotes && d.rnc.pacotes[p]; return o ? { p: p, ab: o.total - o.fechadas } : null; }).filter(Boolean);
-    if (rn.length) {
-      var ra = rn.reduce(function (s, o) { return s + o.ab; }, 0), mr = rn.slice().sort(function (a, b) { return b.ab - a.ab; })[0];
-      out.push({ sev: 'warn', txt: ra + ' RNCs em aberto nos Pacotes 1 a 3; maior volume no Pacote ' + mr.p + ' (' + mr.ab + ').' });
-    }
     return out;
   }
+  function normItem(x) {
+    if (typeof x === 'string') { var m = x.match(/^\s*pacote\s*([123])\b/i); return { pac: m ? +m[1] : 0, sev: 'team', txt: x.trim() }; }
+    return { pac: +x.pac || 0, sev: x.sev === 'crit' || x.sev === 'warn' ? x.sev : 'team', txt: String(x.txt || '').trim() };
+  }
+  function pontosManuais() { var c = state.dados.pontos; return ((c && c.itens) || []).map(normItem).filter(function (o) { return o.txt; }); }
+  function pontosOcultos() { var c = state.dados.pontos; return (c && c.ocultos) || []; }
   function pontosTodos() {
-    var manual = (state.dados.pontos && state.dados.pontos.itens || []).map(function (t) { return { sev: 'team', txt: t }; });
-    return manual.concat(pontosAuto());
+    var oc = pontosOcultos();
+    return pontosManuais().concat(pontosAuto().filter(function (o) { return oc.indexOf(o.id) < 0; }));
   }
   var TAG = { team: 'Time', warn: 'Atenção', crit: 'Crítico' };
   function renderPontos() {
     var el = document.getElementById('pts');
-    if (state.loading) { el.innerHTML = '<li class="na">Carregando…</li>'; return; }
-    var l = pontosTodos();
-    el.innerHTML = l.length ? l.map(function (o) {
-      return '<li class="' + o.sev + '"><i></i><span class="tg">' + TAG[o.sev] + '</span><span>' + esc(o.txt) + '</span></li>';
-    }).join('') : '<li class="na">Sem pontos de atenção: envie os arquivos para gerar os alertas.</li>';
+    if (ed.aberto) return;
+    if (state.loading) { el.innerHTML = '<ul class="pts"><li class="na">Carregando…</li></ul>'; return; }
+    var l = pontosTodos(), html = '';
+    GRUPOS.forEach(function (g) {
+      var it = l.filter(function (o) { return o.pac === g; });
+      if (!it.length) return;
+      html += '<h4 class="pg">' + nomeGrupo(g) + '</h4><ul class="pts">' + it.map(function (o) {
+        return '<li class="' + o.sev + '"><i></i><span class="tg">' + TAG[o.sev] + '</span><span>' + esc(o.txt) + '</span></li>';
+      }).join('') + '</ul>';
+    });
+    el.innerHTML = html || '<ul class="pts"><li class="na">Sem pontos de atenção: envie os arquivos para gerar os alertas.</li></ul>';
   }
 
+  // ---------- edição dos pontos de atenção ----------
+  var ed = { aberto: false, rows: [], ocultos: [] };
+  var edBox = document.getElementById('edBox'), edMsg;
+  function edIniciar() {
+    ed.ocultos = pontosOcultos().slice();
+    ed.rows = pontosTodos().map(function (o) { return { id: o.id || null, pac: o.pac, sev: o.sev, txt: o.txt, orig: o.id ? { pac: o.pac, sev: o.sev, txt: o.txt } : null }; });
+  }
+  function edLinha(r, i) {
+    var pacs = GRUPOS.map(function (g) { return '<option value="' + g + '"' + (g === r.pac ? ' selected' : '') + '>' + nomeGrupo(g) + '</option>'; }).join('');
+    var sevs = [['warn', 'Atenção'], ['crit', 'Crítico'], ['team', 'Time']].map(function (s) { return '<option value="' + s[0] + '"' + (s[0] === r.sev ? ' selected' : '') + '>' + s[1] + '</option>'; }).join('');
+    return '<div class="edrow" data-i="' + i + '"><select class="edpac" aria-label="Pacote">' + pacs + '</select><select class="edsev" aria-label="Tipo">' + sevs + '</select>' +
+      '<textarea class="edtxt" rows="2" aria-label="Texto do ponto de atenção">' + esc(r.txt) + '</textarea>' +
+      '<button type="button" class="b sec edrm" data-a="rm" title="Remover este ponto" aria-label="Remover">✕</button></div>';
+  }
+  function edRender() {
+    var u = '', t = '';
+    try { u = localStorage.getItem('fico_ag_user') || ''; t = localStorage.getItem('fico_ag_token') || ''; } catch (e) {}
+    if (document.getElementById('edUser')) { u = document.getElementById('edUser').value || u; t = document.getElementById('edToken').value || t; }
+    edBox.innerHTML =
+      '<p class="hint" style="margin:0 0 12px">Edite o texto, o pacote ou o tipo de qualquer ponto, remova o que não vale mais ou adicione novos. Alertas automáticos que você alterar deixam de se atualizar sozinhos.</p>' +
+      ed.rows.map(edLinha).join('') +
+      '<div class="btns" style="margin:4px 0 16px"><button type="button" class="b sec" data-a="add">+ Adicionar ponto</button><button type="button" class="b sec" data-a="rest">Restaurar alertas automáticos</button></div>' +
+      '<div class="fields"><div><label for="edUser">Responsável pela atualização</label><input id="edUser" type="text" maxlength="120" placeholder="Seu nome" autocomplete="name" value="' + esc(u) + '"></div>' +
+      '<div><label for="edToken">Chave de publicação (GitHub)</label><input id="edToken" type="password" autocomplete="off" placeholder="Cole aqui a chave" value="' + esc(t) + '"><div class="hint">Fica guardada só neste navegador.</div></div></div>' +
+      '<div class="btns" style="margin-top:14px"><button type="button" class="b" data-a="pub">Publicar pontos de atenção</button><button type="button" class="b sec" data-a="prev">Só visualizar (não publica)</button><button type="button" class="b sec" data-a="cancel">Cancelar</button></div>' +
+      '<div class="msg" id="edMsg" style="margin-top:12px"></div>';
+    edMsg = document.getElementById('edMsg');
+  }
+  function edLer() {
+    var antigo = ed.rows;
+    ed.rows = Array.prototype.map.call(edBox.querySelectorAll('.edrow'), function (el) {
+      var r = antigo[+el.dataset.i];
+      return { id: r.id, orig: r.orig, pac: +el.querySelector('.edpac').value, sev: el.querySelector('.edsev').value, txt: el.querySelector('.edtxt').value.trim() };
+    });
+  }
+  function edResultado() {
+    edLer();
+    var itens = [], oc = ed.ocultos.slice();
+    function oculta(id) { if (id && oc.indexOf(id) < 0) oc.push(id); }
+    ed.rows.forEach(function (r) {
+      if (!r.txt) { oculta(r.id); return; }
+      if (r.id && r.orig && r.txt === r.orig.txt && r.pac === r.orig.pac && r.sev === r.orig.sev) return;
+      oculta(r.id);
+      itens.push({ pac: r.pac, sev: r.sev, txt: r.txt });
+    });
+    return { itens: itens, ocultos: oc, atualizadoEm: new Date().toISOString() };
+  }
+  function edAbrir() {
+    edIniciar(); ed.aberto = true; edRender();
+    edBox.style.display = 'block'; document.getElementById('pts').style.display = 'none'; document.getElementById('btnEdPts').style.display = 'none';
+  }
+  function edFechar() {
+    ed.aberto = false; edBox.style.display = 'none'; edBox.innerHTML = '';
+    document.getElementById('pts').style.display = ''; document.getElementById('btnEdPts').style.display = '';
+    renderPontos();
+  }
+  function edSet(kind, text) { edMsg.className = 'msg show ' + kind; edMsg.textContent = text; }
+  document.getElementById('btnEdPts').addEventListener('click', edAbrir);
+  edBox.addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-a]'); if (!b) return;
+    var a = b.dataset.a;
+    if (a === 'cancel') { edFechar(); return; }
+    if (a === 'add') { edLer(); ed.rows.push({ id: null, orig: null, pac: 0, sev: 'team', txt: '' }); edRender(); var t = edBox.querySelectorAll('.edtxt'); t[t.length - 1].focus(); return; }
+    if (a === 'rm') {
+      edLer(); var i = +b.closest('.edrow').dataset.i, r = ed.rows[i];
+      if (r.id && ed.ocultos.indexOf(r.id) < 0) ed.ocultos.push(r.id);
+      ed.rows.splice(i, 1); edRender(); return;
+    }
+    if (a === 'rest') {
+      edLer(); var tem = {}; ed.rows.forEach(function (r) { if (r.id) tem[r.id] = 1; });
+      ed.ocultos = [];
+      pontosAuto().forEach(function (o) { if (!tem[o.id]) ed.rows.push({ id: o.id, pac: o.pac, sev: o.sev, txt: o.txt, orig: { pac: o.pac, sev: o.sev, txt: o.txt } }); });
+      edRender(); edSet('ok', 'Alertas automáticos restaurados nesta lista. Publique para salvar.'); return;
+    }
+    if (a === 'prev') {
+      state.dados.pontos = edResultado(); state.previewOnly = true; edFechar(); render(); return;
+    }
+    if (a === 'pub') {
+      var user = document.getElementById('edUser').value.trim(), token = document.getElementById('edToken').value.trim();
+      if (!user) { edSet('err', 'Informe o responsável pela atualização.'); return; }
+      if (!token) { edSet('err', 'Cole a chave de publicação (GitHub). Sem ela só é possível visualizar.'); return; }
+      try { localStorage.setItem('fico_ag_user', user); localStorage.setItem('fico_ag_token', token); } catch (e) {}
+      var pontos = edResultado();
+      b.disabled = true; edSet('busy', '🔄 Publicando…');
+      publicarChaves(user, token, { pontos: pontos }).then(function (novo) {
+        state.dados = novo; edFechar(); render();
+      }).catch(function (err) {
+        edSet('err', '⚠️ Não publiquei. Os dados atuais foram preservados. Motivo: ' + err.message); b.disabled = false;
+      });
+    }
+  });
+
   // ---------- exportar PPT ----------
-  var HX = { fisico: '3578BC', pend: 'F89B32', rnc: '1F7A4D', bk: '8A5CC4' };
+  // Padrão clean das reuniões: fundo branco, título em negrito preto no canto superior esquerdo e
+  // filete azul-ciano abaixo. Um slide de visão geral + um slide por pacote, com os pontos de atenção ao lado.
   function buildPptx() {
     var P = new PptxGenJS();
     P.layout = 'LAYOUT_WIDE'; P.title = 'Avanço Geral — FICO';
-    var W = 13.33, NAVY = '10203A', INK = '16233A', MID = '45566F', SOFT = '7C8AA3', TRACK = 'E3E9F3', BG = 'F4F7FB', FONT = 'Arial';
-    var cons = consolidado(), g = geral(cons), now = new Date();
+    var W = 13.33, CY = '00A8F0', INK = '000000', TXT = '2B2B2B', MID = '5F6B7A', SOFT = '8A94A3', TRACK = 'E3E9F3', HF = 'Montserrat', BF = 'Calibri';
+    var SEV = { crit: 'D64545', warn: 'E8920C', team: '0088C7' };
+    var cons = consolidado(), now = new Date();
     var p2 = function (n) { return String(n).padStart(2, '0'); };
     var dstr = p2(now.getDate()) + '/' + p2(now.getMonth() + 1) + '/' + now.getFullYear();
-    var logo = document.querySelector('.band-logo'), logoData = logo.src.replace(/^data:/, '');
-    var lh = 0.7, lw = lh * ((logo.naturalWidth || 187) / (logo.naturalHeight || 100));
+    var todos = pontosTodos();
 
-    function slide(titulo, sub) {
-      var s = P.addSlide(); s.background = { color: BG };
-      s.addShape(P.ShapeType.rect, { x: 0, y: 0, w: W, h: 1.2, fill: { color: NAVY }, line: { color: NAVY } });
-      s.addImage({ data: logoData, x: 0.45, y: 0.25, w: lw, h: lh });
-      s.addText(titulo, { x: 0.45 + lw + 0.35, y: 0.2, w: 9, h: 0.55, fontFace: FONT, fontSize: 26, bold: true, color: 'FFFFFF', margin: 0 });
-      s.addText(sub, { x: 0.45 + lw + 0.35, y: 0.75, w: 10, h: 0.3, fontFace: FONT, fontSize: 12, color: 'C7D6EA', margin: 0 });
-      s.addText('Ferrovia de Integração Centro-Oeste · Regional 1 · Pacotes 1 a 3 · gerado em ' + dstr, { x: 0.45, y: 7.08, w: 12.4, h: 0.28, fontFace: FONT, fontSize: 9, color: SOFT, margin: 0 });
+    function slide(titulo) {
+      var s = P.addSlide(); s.background = { color: 'FFFFFF' };
+      s.addText(titulo, { x: 0.35, y: 0.1, w: 12.6, h: 0.36, fontFace: HF, fontSize: 18, bold: true, color: INK, margin: 0, valign: 'middle' });
+      s.addShape(P.ShapeType.rect, { x: 0, y: 0.5, w: W, h: 0.025, fill: { color: CY }, line: { color: CY, width: 0 } });
+      s.addText('Ferrovia de Integração Centro-Oeste · Regional 1 · gerado em ' + dstr, { x: 0.35, y: 7.1, w: 9, h: 0.25, fontFace: BF, fontSize: 9, color: SOFT, margin: 0 });
       return s;
     }
     function bar(s, x, y, w, h, v, cor) {
-      s.addShape(P.ShapeType.rect, { x: x, y: y, w: w, h: h, fill: { color: TRACK }, line: { color: TRACK } });
-      if (v > 0) s.addShape(P.ShapeType.rect, { x: x, y: y, w: Math.max(0.02, w * Math.min(v, 1)), h: h, fill: { color: cor }, line: { color: cor } });
+      s.addShape(P.ShapeType.rect, { x: x, y: y, w: w, h: h, fill: { color: TRACK }, line: { color: TRACK, width: 0 } });
+      if (v > 0) s.addShape(P.ShapeType.rect, { x: x, y: y, w: Math.max(0.02, w * Math.min(v, 1)), h: h, fill: { color: cor || CY }, line: { color: cor || CY, width: 0 } });
+    }
+    // quadro da esquerda: mesmo card do painel (título, avanço, barra geral e os quatro componentes)
+    var HX = { fisico: '3578BC', pend: 'F89B32', rnc: '1F7A4D', bk: '8A5CC4' }, LINE = 'D7E0EE', CARD_INK = '16233A';
+    function painel(s, titulo, vals, g, sub) {
+      var cx = 0.4, cy = 0.85, cw = 6.9, ch = 6.1, ix = cx + 0.32, iw = cw - 0.64;
+      s.addShape(P.ShapeType.rect, { x: cx, y: cy, w: cw, h: ch, fill: { color: 'FFFFFF' }, line: { color: LINE, width: 0.75 } });
+      s.addShape(P.ShapeType.rect, { x: cx, y: cy, w: cw, h: 0.06, fill: { color: '3578BC' }, line: { color: '3578BC', width: 0 } });
+      s.addText(titulo, { x: ix, y: cy + 0.25, w: 3.6, h: 0.5, fontFace: BF, fontSize: 20, bold: true, color: CARD_INK, margin: 0, valign: 'middle' });
+      s.addText(g.v == null ? '—' : pp(g.v) + '%', { x: cx + cw - 3.4, y: cy + 0.18, w: 3.08, h: 0.7, align: 'right', fontFace: HF, fontSize: 36, bold: true, color: CARD_INK, margin: 0, valign: 'middle' });
+      if (sub) s.addText(sub, { x: ix, y: cy + 0.75, w: iw, h: 0.25, fontFace: BF, fontSize: 10.5, color: MID, margin: 0 });
+      bar(s, ix, cy + 1.12, iw, 0.14, g.v || 0, '3578BC');
+      COMP.forEach(function (c, k) {
+        var x = vals[c.id], y = cy + 1.6 + k * 1.1, pes = Math.round(PESOS[c.id] * 100), cor = HX[c.id];
+        s.addShape(P.ShapeType.rect, { x: ix, y: y + 0.08, w: 0.14, h: 0.14, fill: { color: cor }, line: { color: cor, width: 0 } });
+        s.addText([{ text: c.nome + ' ', options: { color: CARD_INK } }, { text: '(' + pes + '%)', options: { color: SOFT } }], { x: ix + 0.26, y: y, w: iw - 1.9, h: 0.3, fontFace: BF, fontSize: 14, margin: 0, valign: 'middle' });
+        s.addText(x ? pp(x.v) + '%' : '—', { x: ix + iw - 1.4, y: y - 0.02, w: 1.4, h: 0.34, align: 'right', fontFace: BF, fontSize: 16, bold: true, color: CARD_INK, margin: 0, valign: 'middle' });
+        bar(s, ix, y + 0.4, iw, 0.1, x ? x.v : 0, cor);
+        s.addText(x ? (x.det || '') : 'sem dados', { x: ix, y: y + 0.55, w: iw, h: 0.25, fontFace: BF, fontSize: 10.5, color: SOFT, margin: 0 });
+      });
+      if (g.parcial) s.addText('Parcial · faltam ' + g.falta.join(', '), { x: ix, y: cy + ch - 0.4, w: iw, h: 0.25, fontFace: BF, fontSize: 10, italic: true, color: 'A8620F', margin: 0 });
+    }    // coluna da direita: pontos de atenção
+    function pontosPainel(s, lista) {
+      var x = 7.6, w = 5.35;
+      s.addText('Pontos de atenção', { x: x, y: 0.8, w: w, h: 0.3, fontFace: HF, fontSize: 13, bold: true, color: INK, margin: 0 });
+      s.addShape(P.ShapeType.rect, { x: x, y: 1.15, w: w, h: 0.012, fill: { color: 'D5DAE1' }, line: { color: 'D5DAE1', width: 0 } });
+      if (!lista.length) { s.addText('Sem pontos de atenção registrados.', { x: x, y: 1.35, w: w, h: 0.3, fontFace: BF, fontSize: 12.5, italic: true, color: MID, margin: 0 }); return; }
+      var fs = 13, gapY = 0.14, tw = w - 0.2, alt;
+      function medir(f) {
+        var cpl = Math.floor(tw * 72 / (f * 0.46)), lh = f * 1.22 / 72;
+        return lista.map(function (o) { return Math.ceil((TAG[o.sev].length + 2 + o.txt.length) / cpl) * lh + 0.04; });
+      }
+      alt = medir(fs);
+      while (fs > 10 && alt.reduce(function (a, h) { return a + h + gapY; }, 0) > 5.6) { fs -= 0.5; alt = medir(fs); }
+      var y = 1.35;
+      lista.forEach(function (o, i) {
+        s.addShape(P.ShapeType.rect, { x: x, y: y, w: 0.06, h: alt[i], fill: { color: SEV[o.sev] }, line: { color: SEV[o.sev], width: 0 } });
+        s.addText([{ text: TAG[o.sev].toUpperCase() + '  ', options: { bold: true, color: SEV[o.sev], fontSize: fs - 2.5 } }, { text: o.txt, options: { color: TXT, fontSize: fs } }],
+          { x: x + 0.2, y: y, w: tw, h: alt[i], fontFace: BF, margin: 0, valign: 'top' });
+        y += alt[i] + gapY;
+      });
     }
 
-    // 1) visão geral
-    var s1 = slide('Avanço Geral', 'Soma ponderada: Físico 10% · Pendências certificáveis 35% · RNC 40% · Databooks BKs 15%');
-    s1.addChart(P.charts.DOUGHNUT, [{ name: 'Avanço', labels: ['Avanço', 'Falta'], values: [(g.v || 0) * 100, 100 - (g.v || 0) * 100] }],
-      { x: 0.7, y: 1.7, w: 4.6, h: 4.6, holeSize: 74, chartColors: ['3578BC', TRACK], showLegend: false, showLabel: false, showValue: false, showPercent: false, dataBorder: { pt: 0, color: 'FFFFFF' } });
-    s1.addText(g.v == null ? '—' : pp(g.v) + '%', { x: 0.7, y: 3.35, w: 4.6, h: 1.0, align: 'center', fontFace: FONT, fontSize: 44, bold: true, color: INK, margin: 0 });
-    s1.addText('AVANÇO GERAL', { x: 0.7, y: 4.3, w: 4.6, h: 0.35, align: 'center', fontFace: FONT, fontSize: 12, bold: true, color: SOFT, margin: 0 });
-    s1.addText('Pacotes 1 a 3 consolidados', { x: 5.9, y: 1.55, w: 7, h: 0.4, fontFace: FONT, fontSize: 16, bold: true, color: INK, margin: 0 });
-    COMP.forEach(function (c, i) {
-      var x = cons[c.id], y = 2.15 + i * 1.12, cor = HX[c.id === 'bk' ? 'bk' : c.id], contrib = x ? PESOS[c.id] * x.v : 0;
-      s1.addShape(P.ShapeType.rect, { x: 5.9, y: y + 0.07, w: 0.16, h: 0.16, fill: { color: cor }, line: { color: cor } });
-      s1.addText(c.nome + '  ·  peso ' + Math.round(PESOS[c.id] * 100) + '%', { x: 6.15, y: y, w: 4.7, h: 0.3, fontFace: FONT, fontSize: 13, color: MID, margin: 0 });
-      s1.addText(x ? pp(x.v) + '%' : 'sem dados', { x: 10.9, y: y - 0.04, w: 1.9, h: 0.38, align: 'right', fontFace: FONT, fontSize: 18, bold: true, color: INK, margin: 0 });
-      bar(s1, 5.9, y + 0.42, 6.9, 0.16, x ? x.v : 0, cor);
-      s1.addText(x ? pp(contrib) + ' de ' + Math.round(PESOS[c.id] * 100) + ' pontos' : 'aguardando arquivo', { x: 5.9, y: y + 0.62, w: 6.9, h: 0.26, fontFace: FONT, fontSize: 10, color: SOFT, margin: 0 });
+    // 1) visão geral (consolidado)
+    var g = geral(cons), valsC = {};
+    var fT = 0, fP = 0;
+    PACOTES.forEach(function (p) { var f = state.dados.fisico && state.dados.fisico.pacotes && state.dados.fisico.pacotes[p]; if (f) { fT += f.peso; fP += f.previsto; } });
+    COMP.forEach(function (c) {
+      var x = cons[c.id];
+      valsC[c.id] = x ? { v: x.v, det: c.id === 'fisico' ? (fT ? 'previsto ' + fmtPct(fP / fT) : '') : fmtInt(x.n) + ' de ' + fmtInt(x.d) } : null;
     });
-    if (g.parcial) s1.addText('Resultado parcial — faltam: ' + g.falta.join(', ') + '.', { x: 5.9, y: 6.62, w: 6.9, h: 0.3, fontFace: FONT, fontSize: 10, italic: true, color: 'A8620F', margin: 0 });
+    var mini = PACOTES.map(function (p) { return { nome: 'Pacote ' + p, v: fmtPct(geral(valoresPacote(p)).v) }; });
+    var s1 = slide('Avanço Geral');
+    painel(s1, 'Pacotes 1 a 3', valsC, g, mini.map(function (m) { return m.nome + ' ' + m.v; }).join('   ·   '));
+    pontosPainel(s1, todos.filter(function (o) { return o.pac === 0; }));
 
-    // 2) por pacote
-    var s2 = slide('Avanço por pacote', 'Componentes e peso de cada um no avanço geral');
-    var cw = 3.95, gap = 0.25, x0 = 0.45;
-    PACOTES.forEach(function (p, i) {
-      var vals = valoresPacote(p), gp = geral(vals), x = x0 + i * (cw + gap);
-      s2.addShape(P.ShapeType.rect, { x: x, y: 1.5, w: cw, h: 5.4, fill: { color: 'FFFFFF' }, line: { color: 'D7E0EE', width: 0.75 } });
-      s2.addShape(P.ShapeType.rect, { x: x, y: 1.5, w: cw, h: 0.06, fill: { color: '3578BC' }, line: { color: '3578BC' } });
-      s2.addText('Pacote ' + p, { x: x + 0.25, y: 1.7, w: 2, h: 0.5, fontFace: FONT, fontSize: 18, bold: true, color: INK, margin: 0 });
-      s2.addText(fmtPct(gp.v), { x: x + 1.8, y: 1.62, w: cw - 2.05, h: 0.65, align: 'right', fontFace: FONT, fontSize: 30, bold: true, color: INK, margin: 0 });
-      bar(s2, x + 0.25, 2.38, cw - 0.5, 0.14, gp.v || 0, '3578BC');
-      COMP.forEach(function (c, k) {
-        var v = vals[c.id], y = 2.8 + k * 1.02, cor = HX[c.id];
-        s2.addText(c.nome + ' (' + Math.round(PESOS[c.id] * 100) + '%)', { x: x + 0.25, y: y, w: cw - 1.5, h: 0.28, fontFace: FONT, fontSize: 11, color: MID, margin: 0 });
-        s2.addText(v ? fmtPct(v.v) : '—', { x: x + cw - 1.25, y: y - 0.03, w: 1.0, h: 0.32, align: 'right', fontFace: FONT, fontSize: 14, bold: true, color: INK, margin: 0 });
-        bar(s2, x + 0.25, y + 0.36, cw - 0.5, 0.1, v ? v.v : 0, cor);
-        s2.addText(v ? v.det : 'sem dados', { x: x + 0.25, y: y + 0.5, w: cw - 0.5, h: 0.24, fontFace: FONT, fontSize: 9, color: SOFT, margin: 0 });
-      });
-      if (gp.parcial) s2.addText('Parcial — faltam ' + gp.falta.join(', '), { x: x + 0.25, y: 6.62, w: cw - 0.5, h: 0.24, fontFace: FONT, fontSize: 8.5, italic: true, color: 'A8620F', margin: 0 });
-    });
-
-    // 3) pontos de atenção
-    var s3 = slide('Pontos de atenção', 'Pontos do time e alertas calculados a partir dos dados');
-    var pts = pontosTodos().slice(0, 9), SEV = { team: '3578BC', warn: 'F89B32', crit: 'B3261E' };
-    if (!pts.length) s3.addText('Sem pontos de atenção registrados.', { x: 0.6, y: 1.7, w: 12, h: 0.4, fontFace: FONT, fontSize: 14, color: MID, margin: 0 });
-    pts.forEach(function (o, i) {
-      var y = 1.55 + i * 0.6;
-      s3.addShape(P.ShapeType.rect, { x: 0.45, y: y, w: 0.07, h: 0.5, fill: { color: SEV[o.sev] }, line: { color: SEV[o.sev] } });
-      s3.addText(TAG[o.sev].toUpperCase(), { x: 0.65, y: y, w: 1.0, h: 0.5, fontFace: FONT, fontSize: 9, bold: true, color: SEV[o.sev], valign: 'middle', margin: 0 });
-      s3.addText(o.txt, { x: 1.7, y: y, w: 11.1, h: 0.5, fontFace: FONT, fontSize: 12.5, color: INK, valign: 'middle', margin: 0, fit: 'shrink' });
+    // 2-4) um slide por pacote
+    PACOTES.forEach(function (p) {
+      var vals = valoresPacote(p), sp = slide('Avanço Geral – Pacote ' + p);
+      painel(sp, 'Pacote ' + p, vals, geral(vals));
+      pontosPainel(sp, todos.filter(function (o) { return o.pac === p; }));
     });
     return P;
   }
@@ -699,28 +822,35 @@
   function b64(str) { var b = new TextEncoder().encode(str), s = ''; for (var i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); }
   function unb64(s) { var bin = atob(s.replace(/\s/g, '')), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return new TextDecoder().decode(u); }
 
+  // grava as chaves informadas em dados.json (mantendo o restante) via API do GitHub
+  function publicarChaves(user, token, mapa) {
+    var chaves = Object.keys(mapa);
+    var api = 'https://api.github.com/repos/' + REPO + '/contents/' + DADOS_PATH;
+    var H = { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' };
+    return fetch(api + '?t=' + Date.now(), { headers: H, cache: 'no-store' }).then(function (r) {
+      if (r.status === 404) return { sha: undefined, dados: {} };
+      if (!r.ok) throw new Error(r.status === 401 || r.status === 403 ? 'chave recusada pelo GitHub (HTTP ' + r.status + ')' : 'HTTP ' + r.status);
+      return r.json().then(function (j) { return { sha: j.sha, dados: JSON.parse(unb64(j.content)) }; });
+    }).then(function (cur) {
+      var novo = Object.assign({ versao: 1 }, cur.dados);
+      chaves.forEach(function (k) { novo[k] = mapa[k]; });
+      var body = { message: 'Atualiza Avanço Geral · ' + chaves.map(function (k) { return NOMES[k]; }).join(', ') + '\n\nResponsável: ' + user, content: b64(JSON.stringify(novo, null, 1)) };
+      if (cur.sha) body.sha = cur.sha;
+      return fetch(api, { method: 'PUT', headers: Object.assign({ 'Content-Type': 'application/json' }, H), body: JSON.stringify(body) }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.message || 'HTTP ' + r.status); return novo; });
+      });
+    });
+  }
+
   document.getElementById('btnPub').addEventListener('click', function () {
     var btn = this, user = userEl.value.trim(), token = tokEl.value.trim();
     if (!user) { setMsg('err', 'Informe o responsável pela atualização.'); return; }
     if (!token) { setMsg('err', 'Cole a chave de publicação (GitHub). Sem ela só é possível visualizar.'); return; }
     try { localStorage.setItem('fico_ag_user', user); localStorage.setItem('fico_ag_token', token); } catch (e) {}
     btn.disabled = true; setMsg('busy', '🔄 Publicando…');
-    var api = 'https://api.github.com/repos/' + REPO + '/contents/' + DADOS_PATH;
-    var H = { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' };
-    var enviados = Object.keys(state.pending);
-    fetch(api + '?t=' + Date.now(), { headers: H, cache: 'no-store' }).then(function (r) {
-      if (r.status === 404) return { sha: undefined, dados: {} };
-      if (!r.ok) throw new Error(r.status === 401 || r.status === 403 ? 'chave recusada pelo GitHub (HTTP ' + r.status + ')' : 'HTTP ' + r.status);
-      return r.json().then(function (j) { return { sha: j.sha, dados: JSON.parse(unb64(j.content)) }; });
-    }).then(function (cur) {
-      var novo = Object.assign({ versao: 1 }, cur.dados);
-      enviados.forEach(function (k) { novo[k] = state.pending[k]; });
-      var body = { message: 'Atualiza Avanço Geral · ' + enviados.map(function (k) { return NOMES[k]; }).join(', ') + '\n\nResponsável: ' + user, content: b64(JSON.stringify(novo, null, 1)) };
-      if (cur.sha) body.sha = cur.sha;
-      return fetch(api, { method: 'PUT', headers: Object.assign({ 'Content-Type': 'application/json' }, H), body: JSON.stringify(body) }).then(function (r) {
-        return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.message || 'HTTP ' + r.status); return novo; });
-      });
-    }).then(function (novo) {
+    var enviados = Object.keys(state.pending), mapa = {};
+    enviados.forEach(function (k) { mapa[k] = state.pending[k]; });
+    publicarChaves(user, token, mapa).then(function (novo) {
       state.dados = novo; state.pending = {}; state.previewOnly = false; render(); refreshBtns();
       document.querySelectorAll('.drop [data-r]').forEach(function (e) { e.textContent = ''; });
       setMsg('ok', '✅ Publicado: ' + enviados.map(function (k) { return NOMES[k]; }).join(', ') + '. O painel já mostra os novos números; a Central de Acesso atualiza o horário em alguns minutos.');
@@ -729,15 +859,6 @@
     }).then(function () { btn.disabled = !pendingCount(); });
   });
 
-  // pontos de atenção digitados pelo time
-  var ptsEl = document.getElementById('agPontos');
-  ptsEl.addEventListener('input', function () {
-    var itens = ptsEl.value.split('\n').map(function (t) { return t.trim(); }).filter(Boolean);
-    var atual = (state.dados.pontos && state.dados.pontos.itens) || [];
-    if (JSON.stringify(itens) === JSON.stringify(atual)) delete state.pending.pontos;
-    else state.pending.pontos = { itens: itens, atualizadoEm: new Date().toISOString() };
-    refreshBtns();
-  });
 
   // exportar PPT
   var btnPpt = document.getElementById('btnPpt');
@@ -756,7 +877,6 @@
 
   function fim() {
     state.loading = false;
-    if (!ptsEl.value && state.dados.pontos && state.dados.pontos.itens) ptsEl.value = state.dados.pontos.itens.join('\n');
     btnPpt.disabled = typeof PptxGenJS === 'undefined';
     render();
   }
