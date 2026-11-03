@@ -223,7 +223,7 @@
       <div class="drops">
         <label class="drop" data-k="fisico"><span class="t">Físico de planejamento</span><span class="w">Peso 10% · “Pacote a Pacote”.xlsx</span><span class="f" data-f>Clique ou arraste o arquivo</span><span class="res" data-r></span><input type="file" accept=".xlsx,.xlsm"></label>
         <label class="drop" data-k="rnc"><span class="t">RNC (só identificadas pela OIA)</span><span class="w">Peso 40% · “Base_Reg. 1 e 2”.xlsx</span><span class="f" data-f>Clique ou arraste o arquivo</span><span class="res" data-r></span><input type="file" accept=".xlsx,.xlsm"></label>
-        <label class="drop" data-k="databooks"><span class="t">Databooks BKs</span><span class="w">Peso 15% · “BK_FICO_Lote01…”.xlsx</span><span class="f" data-f>Clique ou arraste o arquivo</span><span class="res" data-r></span><input type="file" accept=".xlsx,.xlsm"></label>
+        <label class="drop" data-k="databooks"><span class="t">Databooks BKs</span><span class="w">Peso 40% · “BK_FICO_Lote01…”.xlsx</span><span class="f" data-f>Clique ou arraste o arquivo</span><span class="res" data-r></span><input type="file" accept=".xlsx,.xlsm"></label>
       </div>
       <div class="fields">
         <div><label for="agUser">Responsável pela atualização</label><input id="agUser" type="text" maxlength="120" placeholder="Seu nome" autocomplete="name"></div>
@@ -249,7 +249,7 @@
   var REPO = 'automacaofico/automacaofico.github.io';
   var DADOS_PATH = 'avanco-geral/dados.json';
   var RAW = 'https://raw.githubusercontent.com/';
-  var PESOS = { fisico: 0.10, pend: 0.35, rnc: 0.40, bk: 0.15 };
+  var PESOS = { fisico: 0.10, pend: 0.10, rnc: 0.40, bk: 0.40 };
   var COMP = [
     { id: 'fisico', nome: 'Físico de planejamento', cor: 'var(--c-fis)' },
     { id: 'pend', nome: 'Pendências certificáveis', cor: 'var(--c-pen)' },
@@ -502,9 +502,9 @@
     document.getElementById('srcTable').innerHTML =
       '<thead><tr><th>Componente</th><th>Peso</th><th>Arquivo / origem</th><th>Referência</th><th>Atualizado em</th><th></th></tr></thead><tbody>' +
       lin('Físico de planejamento', '10%', d.fisico && esc(d.fisico.arquivo), d.fisico && ('mês ' + esc(d.fisico.mes)), d.fisico && fmtWhen(d.fisico.atualizadoEm), !!d.fisico) +
-      lin('Pendências certificáveis', '35%', 'Base_Pendencias_FICO.xlsx (leitura diária)', state.pendRef && esc(state.pendRef), state.pendRef ? 'automático' : '', !!state.pend) +
+      lin('Pendências certificáveis', '10%', 'Base_Pendencias_FICO.xlsx (leitura diária)', state.pendRef && esc(state.pendRef), state.pendRef ? 'automático' : '', !!state.pend) +
       lin('RNC (identificadas pela OIA)', '40%', d.rnc && esc(d.rnc.arquivo), d.rnc && esc(d.rnc.dataRef), d.rnc && fmtWhen(d.rnc.atualizadoEm), !!d.rnc) +
-      lin('Databooks BKs', '15%', d.databooks && esc(d.databooks.arquivo), '', d.databooks && fmtWhen(d.databooks.atualizadoEm), !!d.databooks) +
+      lin('Databooks BKs', '40%', d.databooks && esc(d.databooks.arquivo), '', d.databooks && fmtWhen(d.databooks.atualizadoEm), !!d.databooks) +
       '</tbody>';
   }
 
