@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Painel por Empresa — FICO</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="logos.js"></script>
+<style>
+  :root{
+    --navy:#142A4C; --navy2:#1E3A63; --laranja:#F89B32; --laranja2:#FFB259; --azul:#3578BC;
+    --verde:#2E9B4E; --vermelho:#D14545;
+    --cinza-bg:#EEF1F6; --cinza-borda:#E1E6EE; --cinza-txt:#5A6A7E; --branco:#FFFFFF; --preto:#1A1A1A;
+    --sh-sm:0 2px 6px rgba(20,42,76,.08); --sh-navy:0 10px 30px rgba(20,42,76,.35);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--cinza-bg);font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:var(--preto);font-size:14px;-webkit-font-smoothing:antialiased;min-height:100vh}
+  .app{max-width:1440px;margin:0 auto;padding:0 26px 48px}
+  a{color:inherit}
+
+  header.topo{background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 55%,#24467a 100%);color:#fff;padding:22px 34px;border-radius:0 0 18px 18px;position:relative;box-shadow:var(--sh-navy);overflow:hidden}
+  header.topo::before{content:"";position:absolute;left:0;top:0;bottom:0;width:10px;background:linear-gradient(180deg,var(--laranja),var(--laranja2))}
+  .topo-row{display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+  .topo-esq{display:flex;align-items:center;gap:20px}
+  .topo-logo{background:#fff;border-radius:12px;padding:8px 12px;height:72px;display:flex;align-items:center}
+  .topo-logo img{height:56px;display:block}
+  header.topo h1{font-size:23px;font-weight:800;line-height:1.2}
+  header.topo p{font-size:13px;opacity:.82;margin-top:3px}
+  .topo-dir{text-align:right;font-size:12px;line-height:1.7}
+  .topo-dir b{font-size:15px}
+  .topo-dir a{display:inline-block;margin-bottom:6px;padding:4px 12px;border:1px solid rgba(255,255,255,.35);border-radius:9px;text-decoration:none;font-weight:600}
+  .chip-prot{display:inline-block;background:var(--laranja);color:var(--navy);font-size:10.5px;font-weight:800;letter-spacing:.5px;padding:2px 9px;border-radius:9px;margin-left:8px;vertical-align:middle}
+
+  .abas{display:flex;gap:6px;margin:16px 0 2px;border-bottom:2px solid var(--cinza-borda)}
+  .abas button{border:0;background:none;font:inherit;font-weight:700;font-size:14px;color:var(--cinza-txt);padding:9px 16px;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
+  .abas button.ativo{color:var(--navy);border-bottom-color:var(--laranja)}
+  .so-painel[hidden]{display:none}
+  .filtros{display:flex;flex-wrap:wrap;align-items:center;gap:12px 22px;padding:14px 4px;border-bottom:1px solid var(--cinza-borda);margin-bottom:18px}
+  .filtros label{font-size:12.5px;color:var(--cinza-txt);font-weight:600;display:flex;align-items:center;gap:8px}
+  .seg{display:inline-flex;background:#E4E9F1;border-radius:11px;padding:3px}
+  .seg button{border:0;background:none;padding:7px 14px;font:inherit;font-weight:700;font-size:12.5px;color:var(--cinza-txt);border-radius:9px;cursor:pointer}
+  .seg button.ativo{background:var(--navy);color:#fff}
+  select{font:inherit;font-weight:700;color:var(--navy);padding:8px 12px;border:1px solid var(--cinza-borda);border-radius:10px;background:#fff;min-width:230px}
+  .btn{border:1px solid var(--cinza-borda);background:#fff;font:inherit;font-weight:700;font-size:12.5px;color:var(--navy);padding:8px 14px;border-radius:10px;cursor:pointer;margin-left:auto}
+
+  .empresa-hero{display:flex;align-items:center;gap:20px;background:linear-gradient(135deg,var(--navy),#24467a);color:#fff;border-radius:16px;padding:16px 24px;margin-bottom:14px}
+  .empresa-hero .lg{background:#fff;border-radius:11px;padding:8px 14px;min-width:120px;height:66px;display:flex;align-items:center;justify-content:center}
+  .empresa-hero img{max-height:50px;max-width:170px;display:block}
+  .empresa-hero .sem-logo{color:var(--navy);font-weight:800}
+  .empresa-hero h2{font-size:22px;font-weight:800}
+  .empresa-hero p{font-size:13px;opacity:.85;margin-top:2px}
+
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+  .kpi{background:#fff;border:1px solid var(--cinza-borda);border-left:5px solid var(--navy);border-radius:13px;padding:13px 16px;box-shadow:var(--sh-sm)}
+  .kpi.rnc{border-left-color:var(--azul)}
+  .kpi small{font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--cinza-txt)}
+  .kpi strong{display:block;font-size:29px;font-weight:800;color:var(--navy);line-height:1.2;margin-top:2px;font-variant-numeric:tabular-nums}
+  .kpi span{font-size:12px;color:var(--cinza-txt)}
+
+  h3.secao{font-size:14px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;color:var(--navy);margin:20px 0 9px;padding-left:10px;border-left:4px solid var(--laranja)}
+  h3.secao small{font-weight:600;text-transform:none;letter-spacing:0;color:var(--cinza-txt);font-size:12px;margin-left:6px}
+  .card{background:#fff;border:1px solid var(--cinza-borda);border-radius:14px;padding:15px 18px;box-shadow:var(--sh-sm);min-width:0}
+  .card h4{font-size:12.5px;color:var(--navy);font-weight:800;margin-bottom:10px}
+  .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+  @media (max-width:1000px){.grid2,.grid3{grid-template-columns:minmax(0,1fr)}}
+  .rolagem{overflow-x:auto}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--cinza-txt);text-align:left;padding:7px 8px;border-bottom:2px solid var(--cinza-borda);white-space:nowrap;background:#fff}
+  td{padding:7px 8px;border-bottom:1px solid var(--cinza-borda);vertical-align:middle}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+  tr.clicavel{cursor:pointer}
+  tr.clicavel:hover td{background:#F4F7FB}
+  tr.total td{font-weight:800;background:#F7F9FC;border-bottom:0}
+  .barra{display:flex;gap:2px;height:12px;min-width:130px;background:transparent}
+  .barra i{display:block;height:100%;border-radius:0}
+  .barra i:first-child{border-radius:4px 0 0 4px}
+  .barra i:last-child{border-radius:0 4px 4px 0}
+  .barra i:only-child{border-radius:4px}
+  .enc{background:var(--verde)} .abe{background:var(--laranja)} .atr{background:var(--vermelho)} .azu{background:var(--azul)}
+  .legenda{display:flex;gap:14px;font-size:11.5px;color:var(--cinza-txt);margin-bottom:8px;flex-wrap:wrap}
+  .legenda i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+
+  .hbar{display:grid;grid-template-columns:minmax(90px,38%) 1fr 44px;align-items:center;gap:8px;padding:3px 0;font-size:12px}
+  .hbar .rot{line-height:1.25}
+  .hbar .trilho{height:11px}
+  .hbar .trilho i{display:block;height:100%;border-radius:0 4px 4px 0;background:var(--azul);min-width:2px}
+  .hbar b{text-align:right;font-variant-numeric:tabular-nums}
+  .vazio{color:var(--cinza-txt);font-size:12.5px;padding:8px 0}
+
+  table.matriz th,table.matriz td{text-align:center;padding:6px 5px;border:2px solid #fff;font-variant-numeric:tabular-nums}
+  table.matriz th{background:#F4F6FA;white-space:normal;font-size:10.5px;min-width:62px}
+  table.matriz td.rot,table.matriz th.rot{text-align:left;font-weight:700;background:#F4F6FA;white-space:nowrap}
+  table.matriz td.cel{cursor:pointer}
+  table.matriz td.zero{color:#C4CCD8}
+  table.matriz td.soma{font-weight:800;background:#F4F6FA}
+
+  .nota{font-size:11.5px;color:var(--cinza-txt);margin-top:9px;line-height:1.5}
+  .aviso{background:#FFF6EA;border:1px solid #F8D9AE;border-radius:11px;padding:10px 14px;font-size:12.5px;margin-bottom:14px}
+  input.busca{font:inherit;padding:8px 12px;border:1px solid var(--cinza-borda);border-radius:10px;width:320px;max-width:100%;margin-bottom:10px}
+  .lista{max-height:520px;overflow:auto}
+  .lista th{position:sticky;top:0;z-index:1}
+  .tag{display:inline-block;font-size:10.5px;font-weight:800;padding:1px 7px;border-radius:7px;background:#FCE9E9;color:#A32E2E;white-space:nowrap}
+  #dica{position:fixed;display:none;background:var(--navy);color:#fff;font-size:12px;padding:6px 10px;border-radius:8px;pointer-events:none;z-index:50;max-width:280px;line-height:1.4}
+  footer{margin-top:24px;font-size:11.5px;color:var(--cinza-txt);text-align:center;line-height:1.6}
+  #carregando{padding:60px;text-align:center;color:var(--cinza-txt)}
+
+  @media print{
+    @page{size:landscape;margin:8mm}
+    html,body{background:#fff}
+    *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}
+    .app{max-width:100%;padding:0}
+    .filtros,.abas,#dica,input.busca{display:none !important}
+    .card,.kpi{box-shadow:none;break-inside:avoid}
+    .lista{max-height:none;overflow:visible}
+    .rolagem{overflow:visible}
+    h3.secao{break-after:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topo">
+    <div class="topo-row">
+      <div class="topo-esq">
+        <div class="topo-logo"><img id="logoFico" alt="FICO"></div>
+        <div>
+          <h1>Painel por Empresa <span class="chip-prot">PROTÓTIPO</span></h1>
+          <p>Ferrovia de Integração Centro-Oeste · Regional 1 · Pendências e RNCs por empresa e executante</p>
+        </div>
+      </div>
+      <div class="topo-dir">
+        <a href="../index.html">← Central FICO</a><br>
+        Pendências (EAP): <b id="refEap">—</b><br>
+        RNCs: <b id="refRnc">—</b>
+      </div>
+    </div>
+  </header>
+
+  <nav class="abas" id="abas">
+    <button type="button" data-v="painel">Por empresa</button>
+    <button type="button" data-v="comparacao">Empresa x Executante</button>
+  </nav>
+
+  <div class="filtros">
+    <label class="so-painel">Ver por:
+      <span class="seg" id="segModo">
+        <button type="button" data-v="empresa">Empresa</button>
+        <button type="button" data-v="executante">Executante</button>
+      </span>
+    </label>
+    <label class="so-painel">Selecionar: <select id="selEmpresa"></select></label>
+    <label class="so-painel">RNCs identificadas por:
+      <span class="seg" id="segRnc">
+        <button type="button" data-v="todas">OIA + VALE</button>
+        <button type="button" data-v="OIA">Só OIA</button>
+        <button type="button" data-v="VALE">Só VALE</button>
+      </span>
+    </label>
+    <button type="button" class="btn" onclick="window.print()">Imprimir / salvar PDF</button>
+  </div>
+
+  <main id="main"><div id="carregando">Carregando as bases…</div></main>
+
+  <footer>
+    Pendências: aba “Banco de Dados” da EAP, Pacotes 1, 2 e 3 (e 1A, 1B, 1C). Executante em branco = própria Empresa. “Encerradas” = Status_Pendencia Encerrado.<br>
+    RNCs: Regional 1, contagens agregadas por Contratada. A base de RNCs não informa Executante nem se liga às pendências da EAP.
+  </footer>
+</div>
+<div id="dica"></div>
+
+<script>
+const CONFIG={
+  XLSX_URL:'https://raw.githubusercontent.com/automacaofico/pendenciasr1/main/Base_Pendencias_FICO.xlsx',
+  MANUAL_URL:'https://raw.githubusercontent.com/automacaofico/pendenciasr1/main/manual-data.json',
+  RNC_URL:'rnc.json'
+};
+const PACOTES={1:'P1',2:'P2',3:'P3','1A':'P1A','1B':'P1B','1C':'P1C'};
+const CANON={APIA:'ÁPIA'};
+const NOMES={GSA:'GRUPO GSA SERVICE'};
+const fmt=n=>Number(n||0).toLocaleString('pt-BR');
+const pct=(a,b)=>b?(a/b*100).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%':'—';
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const canon=v=>{const k=String(v==null?'':v).trim().toUpperCase();return CANON[k]||k;};
+const nome=e=>NOMES[e]||e;
+const tituloCase=s=>String(s||'').trim().toLowerCase().replace(/(^|\s)([a-zà-ú])/g,(m,a,b)=>a+b.toUpperCase());
+const dataBR=v=>{
+  if(typeof v==='number'){const d=new Date(Date.UTC(1899,11,30)+v*864e5);return d.toISOString().slice(0,10).split('-').reverse().join('/');}
+  return String(v==null?'':v).trim();
+};
+function logoSrc(e){
+  if(e==='VALE')return 'data:image/png;base64,'+LOGO_VALE;
+  return LOGOS[e]?'data:image/'+(LOGO_MIME[e]||'png')+';base64,'+LOGOS[e]:'';
+}
+
+let PEND=[],TODAS=[],RNC=[],META={};
+const estado={aba:'painel',modo:'empresa',sel:'',rnc:'todas',busca:''};
+
+function montarPendencias(wb){
+  const linhas=XLSX.utils.sheet_to_json(wb.Sheets['Banco de Dados'],{range:1,defval:null});
+  PEND=[];
+  TODAS=linhas.filter(r=>String(r['Id_Pendencia']==null?'':r['Id_Pendencia']).trim()).map(r=>{
+    const pacote=String(r['Pacote']==null?'':r['Pacote']).trim().toUpperCase();
+    return {id:r['Id_Pendencia'],pacote,emp:canon(r['Empresa']),exe:canon(r['Executante']),escopo:!!PACOTES[pacote],
+      enc:String(r['Status_Pendencia']||'').trim().toUpperCase()==='ENCERRADO',
+      cert:String(r['Certificação ?']||'').trim().toUpperCase()==='CERTIFICAÇÃO'};
+  });
+  linhas.forEach(r=>{
+    const pac=PACOTES[String(r['Pacote']==null?'':r['Pacote']).trim().toUpperCase()];
+    if(!pac)return;
+    const empOriginal=canon(r['Empresa']);
+    const emp=empOriginal==='ATERPA R'?'ATERPA':empOriginal; // ATERPA R é o escopo remunerado da própria ATERPA
+    PEND.push({
+      id:r['Id_Pendencia'],pac,emp,aterpaR:empOriginal==='ATERPA R',
+      exe:canon(r['Executante'])||emp,
+      enc:String(r['Status_Pendencia']||'').trim().toUpperCase()==='ENCERRADO',
+      cert:String(r['Certificação ?']||'').trim().toUpperCase()==='CERTIFICAÇÃO',
+      tipo:tituloCase(r['Punch List'])||'Sem classificação',
+      seg:String(r['Segmento']==null?'':r['Segmento']).trim().replace(/^-$/,'')||'Sem segmento',
+      desc:r['Descrição Pendencia'],elem:r['Elemento'],prazo:r['Data_Prazo'],km:r['KM Inicial']
+    });
+  });
+}
+const rncVisiveis=()=>estado.rnc==='todas'?RNC:RNC.filter(r=>r.idPor===estado.rnc);
+const resumoP=l=>{const enc=l.filter(p=>p.enc).length;return{tot:l.length,enc,abe:l.length-enc,cert:l.filter(p=>p.cert&&!p.enc).length};};
+function resumoR(l){
+  const s={tot:0,abe:0,atr:0,noPrazo:0,semPrazo:0};
+  l.forEach(r=>{s.tot+=r.n;if(r.status!=='ENCERRADA')s.abe+=r.n;if(r.status==='ATRASADO')s.atr+=r.n;if(r.status==='NO PRAZO')s.noPrazo+=r.n;if(r.status==='SEM PRAZO')s.semPrazo+=r.n;});
+  return s;
+}
+const campoGrupo=()=>estado.modo==='empresa'?'emp':'exe';
+const campoOposto=()=>estado.modo==='empresa'?'exe':'emp';
+function contar(lista,chave,peso){
+  const m=new Map();
+  lista.forEach(i=>m.set(i[chave],(m.get(i[chave])||0)+(peso?i[peso]:1)));
+  return [...m.entries()].sort((a,b)=>b[1]-a[1]);
+}
+
+function kpi(rot,val,sub,cls){return '<div class="kpi '+(cls||'')+'"><small>'+rot+'</small><strong>'+val+'</strong><span>'+sub+'</span></div>';}
+function barraDupla(enc,abe,maxTot){
+  const l=v=>(v/maxTot*100).toFixed(2)+'%';
+  return '<div class="barra" data-dica="Encerradas: '+fmt(enc)+' · Em aberto: '+fmt(abe)+'">'
+    +(enc?'<i class="enc" style="width:'+l(enc)+'"></i>':'')+(abe?'<i class="abe" style="width:'+l(abe)+'"></i>':'')+'</div>';
+}
+function barrasH(itens,fim){
+  if(!itens.length)return '<div class="vazio">Nada a mostrar.</div>';
+  const max=itens[0][1];
+  return itens.slice(0,fim||8).map(([k,v])=>'<div class="hbar" data-dica="'+esc(k)+': '+fmt(v)+'"><span class="rot">'+esc(k)+'</span><span class="trilho"><i style="width:'+(v/max*100).toFixed(1)+'%"></i></span><b>'+fmt(v)+'</b></div>').join('')
+    +(itens.length>(fim||8)?'<div class="nota">+ '+(itens.length-(fim||8))+' outros</div>':'');
+}
+const legendaPend='<div class="legenda"><span><i class="enc"></i>Encerradas</span><span><i class="abe"></i>Em aberto</span></div>';
+
+function tabelaResumo(grupos,opts){
+  const maxTot=Math.max(...grupos.map(g=>g.p.tot),1), comRnc=opts.rnc;
+  const tot=grupos.reduce((a,g)=>{a.tot+=g.p.tot;a.enc+=g.p.enc;a.abe+=g.p.abe;a.cert+=g.p.cert;if(g.r){a.rt+=g.r.tot;a.ra+=g.r.abe;a.rx+=g.r.atr;}return a;},{tot:0,enc:0,abe:0,cert:0,rt:0,ra:0,rx:0});
+  return legendaPend+'<div class="rolagem"><table><thead><tr><th>'+opts.titulo+'</th><th class="n">Pendências</th><th class="n">Encerradas</th><th class="n">Em aberto</th><th class="n">Certificáveis em aberto</th><th class="n">Avanço</th><th>Situação</th>'
+    +(comRnc?'<th class="n">RNCs</th><th class="n">RNCs abertas</th><th class="n">Atrasadas</th>':'')+'</tr></thead><tbody>'
+    +grupos.map(g=>'<tr class="'+(opts.click?'clicavel':'')+'" data-ir="'+esc(g.k)+'"><td><b>'+esc(nome(g.k))+'</b></td><td class="n">'+fmt(g.p.tot)+'</td><td class="n">'+fmt(g.p.enc)+'</td><td class="n">'+fmt(g.p.abe)+'</td><td class="n">'+fmt(g.p.cert)+'</td><td class="n">'+pct(g.p.enc,g.p.tot)+'</td><td>'+barraDupla(g.p.enc,g.p.abe,maxTot)+'</td>'
+      +(comRnc?'<td class="n">'+(g.r?fmt(g.r.tot):'—')+'</td><td class="n">'+(g.r?fmt(g.r.abe):'—')+'</td><td class="n">'+(g.r?fmt(g.r.atr):'—')+'</td>':'')+'</tr>').join('')
+    +'<tr class="total"><td>Total</td><td class="n">'+fmt(tot.tot)+'</td><td class="n">'+fmt(tot.enc)+'</td><td class="n">'+fmt(tot.abe)+'</td><td class="n">'+fmt(tot.cert)+'</td><td class="n">'+pct(tot.enc,tot.tot)+'</td><td></td>'
+    +(comRnc?'<td class="n">'+fmt(tot.rt)+'</td><td class="n">'+fmt(tot.ra)+'</td><td class="n">'+fmt(tot.rx)+'</td>':'')+'</tr></tbody></table></div>';
+}
+
+function matriz(){
+  const emps=contar(PEND,'emp').map(x=>x[0]), exes=contar(PEND,'exe').map(x=>x[0]);
+  const cel={};PEND.forEach(p=>{const k=p.emp+'|'+p.exe;cel[k]=cel[k]||{t:0,a:0};cel[k].t++;if(!p.enc)cel[k].a++;});
+  const max=Math.max(...Object.values(cel).map(c=>c.a),1);
+  // Escala sequencial de um só tom: quanto mais pendências em aberto, mais escuro.
+  const fundo=v=>{if(!v)return '';const a=.12+.78*Math.sqrt(v/max);return 'background:rgba(53,120,188,'+a.toFixed(2)+');color:'+(a>.55?'#fff':'var(--navy)');};
+  return '<div class="rolagem"><table class="matriz"><thead><tr><th class="rot">Empresa ↓ · Executante →</th>'+exes.map(e=>'<th>'+esc(nome(e))+'</th>').join('')+'</tr></thead><tbody>'
+    +emps.map(e=>'<tr><td class="rot">'+esc(nome(e))+'</td>'+exes.map(x=>{const c=cel[e+'|'+x];
+      return c?'<td class="cel" style="'+fundo(c.a)+'" data-ir="'+esc(e)+'" data-dica="'+esc(nome(e))+' → '+esc(nome(x))+': '+fmt(c.a)+' em aberto de '+fmt(c.t)+'">'+fmt(c.a)+'</td>':'<td class="zero">·</td>';}).join('')+'</tr>').join('')
+    +'</tbody></table></div><div class="nota">Cada célula mostra as pendências em aberto; passe o mouse para ver o total. Quanto mais escura, mais pendências em aberto.</div>';
+}
+
+function visaoGeral(){
+  const p=resumoP(PEND), r=resumoR(rncVisiveis()), modo=estado.modo, campo=campoGrupo();
+  const chaves=contar(PEND,campo).map(x=>x[0]);
+  const grupos=chaves.map(k=>({k,p:resumoP(PEND.filter(x=>x[campo]===k)),r:modo==='empresa'?resumoR(rncVisiveis().filter(x=>x.empresa===k)):null})).sort((a,b)=>b.p.abe-a.p.abe);
+  let h='<div class="kpis">'+kpi('Pendências',fmt(p.tot),'Pacotes 1, 2 e 3')+kpi('Encerradas',fmt(p.enc),pct(p.enc,p.tot)+' de avanço')+kpi('Em aberto',fmt(p.abe),'A tratar')+kpi('Certificáveis em aberto',fmt(p.cert),'Impactam certificação')
+    +kpi('RNCs',fmt(r.tot),'Regional 1','rnc')+kpi('RNCs abertas',fmt(r.abe),fmt(r.atr)+' atrasadas','rnc')+'</div>';
+  h+='<h3 class="secao">'+(modo==='empresa'?'Empresas':'Executantes')+' <small>clique em uma linha para abrir o detalhe</small></h3><div class="card">'
+    +tabelaResumo(grupos,{titulo:modo==='empresa'?'Empresa':'Executante',rnc:modo==='empresa',click:true})
+    +'<div class="nota">'+(modo==='executante'?'RNCs não aparecem nesta visão porque a base de RNCs não informa Executante.':'As colunas de RNC somam só as empresas desta tabela. As demais RNCs estão em “Empresas só com RNC”, abaixo.')+'</div></div>';
+  h+='<h3 class="secao">Empresa × Executante <small>quem executa as pendências de cada empresa</small></h3><div class="card">'+matriz()+'</div>';
+  const soRnc=rncSemPendencia();
+  if(modo==='empresa'&&soRnc.length){
+    const lin=soRnc.map(k=>({k,r:resumoR(rncVisiveis().filter(x=>x.empresa===k))})).filter(x=>x.r.tot).sort((a,b)=>b.r.tot-a.r.tot);
+    h+='<h3 class="secao">Empresas só com RNC <small>não aparecem como Empresa na EAP</small></h3><div class="card rolagem"><table><thead><tr><th>Empresa</th><th class="n">RNCs</th><th class="n">Abertas</th><th class="n">Atrasadas</th></tr></thead><tbody>'
+      +lin.map(x=>'<tr class="clicavel" data-ir="'+esc(x.k)+'"><td><b>'+esc(x.k)+'</b></td><td class="n">'+fmt(x.r.tot)+'</td><td class="n">'+fmt(x.r.abe)+'</td><td class="n">'+fmt(x.r.atr)+'</td></tr>').join('')+'</tbody></table></div>';
+  }
+  return h;
+}
+
+function blocoRnc(k){
+  const l=rncVisiveis().filter(r=>r.empresa===k), r=resumoR(l), ab=l.filter(x=>x.status!=='ENCERRADA');
+  const titulo='<h3 class="secao">RNCs <small>'+(estado.rnc==='todas'?'identificadas pela OIA e pela VALE':'só identificadas pela '+estado.rnc)+' · referência '+esc(META.rncRef)+'</small></h3>';
+  if(!r.tot)return titulo+'<div class="card vazio">Nenhuma RNC registrada para esta empresa neste filtro.</div>';
+  let h=titulo+'<div class="kpis">'+kpi('RNCs',fmt(r.tot),pct(r.tot-r.abe,r.tot)+' encerradas','rnc')+kpi('Em aberto',fmt(r.abe),'A tratar','rnc')+kpi('Atrasadas',fmt(r.atr),'Prazo da etapa vencido','rnc')+kpi('No prazo',fmt(r.noPrazo),fmt(r.semPrazo)+' sem prazo','rnc')+'</div>';
+  h+='<div class="grid3"><div class="card"><h4>RNCs por pacote</h4>'+barrasH(contar(l,'pacote','n'))+'</div>';
+  h+='<div class="card"><h4>RNCs abertas: com quem está</h4>'+barrasH(contar(ab,'grupo','n'))+'</div>';
+  h+='<div class="card"><h4>RNCs abertas: em qual etapa</h4>'+barrasH(contar(ab,'etapa','n'),6)+'</div></div>';
+  const cl=ab.length?contar(ab,'classif','n'):contar(l,'classif','n');
+  h+='<div class="card" style="margin-top:14px"><h4>Principais classificações '+(ab.length?'das RNCs abertas':'(todas encerradas)')+'</h4>'+barrasH(cl,8)+'</div>';
+  return h;
+}
+
+function listaAbertas(lista){
+  const q=estado.busca.trim().toLowerCase();
+  const fil=q?lista.filter(p=>[p.id,p.exe,p.emp,p.seg,p.tipo,p.desc,p.elem].join(' ').toLowerCase().includes(q)):lista;
+  const col=estado.modo==='empresa'?'Executante':'Empresa';
+  return '<div class="lista"><table><thead><tr><th class="n">ID</th><th>Pacote</th><th>Segmento</th><th>'+col+'</th><th>Tipo</th><th>Elemento</th><th>Descrição</th><th>KM</th><th>Prazo</th><th>Cert.</th></tr></thead><tbody>'
+    +fil.slice(0,300).map(p=>'<tr><td class="n">'+esc(p.id)+'</td><td>'+esc(p.pac)+'</td><td>'+esc(p.seg)+'</td><td>'+esc(nome(p[campoOposto()]))+'</td><td>'+esc(p.tipo)+'</td><td>'+esc(p.elem)+'</td><td>'+esc(p.desc)+'</td><td>'+esc(p.km)+'</td><td>'+esc(dataBR(p.prazo))+'</td><td>'+(p.cert?'<span class="tag">Impacta</span>':'')+'</td></tr>').join('')
+    +'</tbody></table></div><div class="nota">'+(fil.length>300?'Mostrando 300 de '+fmt(fil.length)+'. Use a busca para refinar.':fmt(fil.length)+' pendências em aberto.')+'</div>';
+}
+
+function detalhe(k){
+  const modo=estado.modo, campo=campoGrupo(), oposto=campoOposto();
+  const lista=PEND.filter(p=>p[campo]===k), p=resumoP(lista), logo=logoSrc(k);
+  const pacs=[...new Set(lista.map(x=>x.pac))].sort(), r=modo==='empresa'?resumoR(rncVisiveis().filter(x=>x.empresa===k)):null;
+  const nR=modo==='empresa'?lista.filter(x=>x.aterpaR).length:0;
+  let h='<div class="empresa-hero"><div class="lg">'+(logo?'<img src="'+logo+'" alt="'+esc(k)+'">':'<span class="sem-logo">'+esc(k)+'</span>')+'</div><div><h2>'+esc(nome(k))+'</h2><p>'
+    +(modo==='empresa'?'Visão por Empresa':'Visão por Executante')+(pacs.length?' · '+pacs.join(', '):'')+(nR?' · inclui '+fmt(nR)+' pendências de ATERPA R':'')+'</p></div></div>';
+  if(!lista.length)return h+'<div class="aviso">Esta empresa não aparece na coluna '+(modo==='empresa'?'Empresa':'Executante')+' da EAP nos Pacotes 1, 2 e 3. Abaixo estão apenas as RNCs dela.</div>'+blocoRnc(k);
+  h+='<div class="kpis">'+kpi('Pendências',fmt(p.tot),modo==='empresa'?'Sob responsabilidade':'Executadas por ela')+kpi('Encerradas',fmt(p.enc),pct(p.enc,p.tot)+' de avanço')+kpi('Em aberto',fmt(p.abe),'A tratar')+kpi('Certificáveis em aberto',fmt(p.cert),'Impactam certificação')
+    +(r?kpi('RNCs abertas',fmt(r.abe),'de '+fmt(r.tot)+' · '+fmt(r.atr)+' atrasadas','rnc'):'')+'</div>';
+  const grupos=contar(lista,oposto).map(x=>x[0]).map(c=>({k:c,p:resumoP(lista.filter(q=>q[oposto]===c))}));
+  h+='<h3 class="secao">'+(modo==='empresa'?'Quem executa':'Para quais empresas executa')+'</h3><div class="card">'+tabelaResumo(grupos,{titulo:modo==='empresa'?'Executante':'Empresa'})+'</div>';
+  const ab=lista.filter(x=>!x.enc);
+  h+='<h3 class="secao">Pendências em aberto</h3><div class="grid3"><div class="card"><h4>Por tipo</h4>'+barrasH(contar(ab,'tipo'))+'</div><div class="card"><h4>Por pacote</h4>'+barrasH(contar(ab,'pac'))+'</div><div class="card"><h4>Por segmento</h4>'+barrasH(contar(ab,'seg'),8)+'</div></div>';
+  if(r)h+=blocoRnc(k);
+  else h+='<div class="nota">RNCs não aparecem na visão por Executante, porque a base de RNCs não informa quem executa. Troque para “Empresa” para vê-las.</div>';
+  h+='<h3 class="secao">Lista de pendências em aberto</h3><div class="card"><input class="busca" id="busca" placeholder="Buscar por ID, segmento, tipo, descrição…" value="'+esc(estado.busca)+'"><div id="areaLista">'+listaAbertas(ab)+'</div></div>';
+  return h;
+}
+
+// Aba Empresa x Executante: usa todas as linhas da EAP e mantém ATERPA R separada, como na planilha.
+function faixasIds(ids){
+  const v=[...new Set(ids.map(Number))].filter(Number.isFinite).sort((a,b)=>a-b), o=[];
+  v.forEach(n=>{const u=o[o.length-1];if(u&&n===u[1]+1)u[1]=n;else o.push([n,n]);});
+  return o.map(([a,b])=>a===b?a:a+'-'+b).join(', ');
+}
+function tabelaMatriz(lista,ordem){
+  const emps=contar(ordem,'emp').map(x=>x[0]);
+  const exes=contar(ordem.filter(p=>p.exe),'exe').map(x=>x[0]);
+  const colunas=ordem.some(p=>!p.exe)?[...exes,'']:exes;
+  const cel=(e,x)=>lista.filter(p=>p.emp===e&&p.exe===x).length;
+  const max=Math.max(...emps.flatMap(e=>colunas.map(x=>cel(e,x))),1);
+  const fundo=v=>{const a=.1+.8*Math.sqrt(v/max);return 'background:rgba(53,120,188,'+a.toFixed(2)+');color:'+(a>.55?'#fff':'var(--navy)');};
+  const rotulo=x=>x?nome(x):'Em branco';
+  return '<div class="rolagem"><table class="matriz"><thead><tr><th class="rot">Empresa ↓ · Executante →</th>'+colunas.map(x=>'<th>'+esc(rotulo(x))+'</th>').join('')+'<th>Total</th></tr></thead><tbody>'
+    +emps.map(e=>{
+      const celulas=colunas.map(x=>{const v=cel(e,x);return v?'<td style="'+fundo(v)+'" data-dica="'+esc(nome(e))+' → '+esc(rotulo(x))+': '+fmt(v)+'">'+fmt(v)+'</td>':'<td class="zero">·</td>';}).join('');
+      return '<tr><td class="rot">'+esc(nome(e))+'</td>'+celulas+'<td class="soma">'+fmt(lista.filter(p=>p.emp===e).length)+'</td></tr>';
+    }).join('')
+    +'<tr><td class="rot soma">Total</td>'+colunas.map(x=>'<td class="soma">'+fmt(lista.filter(p=>p.exe===x).length)+'</td>').join('')+'<td class="soma">'+fmt(lista.length)+'</td></tr></tbody></table></div>';
+}
+function comparacao(){
+  const n=TODAS.length, ambos=TODAS.filter(p=>p.emp&&p.exe).length, soEmp=TODAS.filter(p=>p.emp&&!p.exe), soExe=TODAS.filter(p=>!p.emp&&p.exe).length, nenhum=TODAS.filter(p=>!p.emp&&!p.exe).length;
+  let h='<div class="kpis">'+kpi('Linhas da EAP',fmt(n),'Todos os pacotes')+kpi('Ambos preenchidos',fmt(ambos),pct(ambos,n)+' das linhas')+kpi('Empresa sem Executante',fmt(soEmp.length),pct(soEmp.length,n)+' das linhas')+kpi('Executante sem Empresa',fmt(soExe),pct(soExe,n)+' das linhas')+kpi('Sem os dois',fmt(nenhum),pct(nenhum,n)+' das linhas')+'</div>';
+  const grupos=[...new Set(soEmp.map(p=>p.emp+'|'+p.pacote))].map(k=>{const [emp,pacote]=k.split('|');return {emp,pacote,l:soEmp.filter(p=>p.emp===emp&&p.pacote===pacote)};}).sort((a,b)=>b.l.length-a.l.length);
+  const linha=(rot,pac,l,fim)=>{const a=l.filter(p=>!p.enc).length;return '<td>'+rot+'</td><td class="n">'+pac+'</td><td class="n">'+fmt(l.length)+'</td><td class="n">'+fmt(a)+'</td><td class="n">'+fmt(l.length-a)+'</td><td class="n">'+fmt(l.filter(p=>p.cert&&!p.enc).length)+'</td>'+fim;};
+  h+='<h3 class="secao">Pendências com Empresa e sem Executante <small>por Empresa e Pacote</small></h3><div class="card rolagem"><table><thead><tr><th>Empresa</th><th class="n">Pacote</th><th class="n">Total</th><th class="n">Em aberto</th><th class="n">Encerradas</th><th class="n">Certificáveis em aberto</th><th>No escopo do painel?</th><th>IDs</th></tr></thead><tbody>'
+    +grupos.map(g=>'<tr>'+linha('<b>'+esc(nome(g.emp))+'</b>',esc(g.pacote||'—'),g.l,'<td>'+(g.l[0].escopo?'Sim':'Não')+'</td><td>'+esc(faixasIds(g.l.map(p=>p.id)))+'</td>')+'</tr>').join('')
+    +'<tr class="total">'+linha('Total','',soEmp,'<td></td><td></td>')+'</tr></tbody></table></div>';
+  const esc13=TODAS.filter(p=>p.escopo);
+  h+='<h3 class="secao">Pendências por Empresa e Executante <small>Pacotes 1, 2 e 3</small></h3><div class="card">'+tabelaMatriz(esc13,esc13)+'</div>';
+  h+='<h3 class="secao">Em aberto por Empresa e Executante <small>Pacotes 1, 2 e 3</small></h3><div class="card">'+tabelaMatriz(esc13.filter(p=>!p.enc),esc13)
+    +'<div class="nota">Aqui Executante em branco aparece como “Em branco”. Na aba Por empresa, essas pendências contam como da própria Empresa. ATERPA R aparece separada, como na planilha.</div></div>';
+  return h;
+}
+
+function rncSemPendencia(){const pe=new Set(PEND.map(p=>p.emp));return [...new Set(RNC.map(r=>r.empresa))].filter(k=>!pe.has(k)).sort();}
+
+function preencherSelect(){
+  const s=document.getElementById('selEmpresa'), campo=campoGrupo();
+  const nomes=contar(PEND,campo).map(x=>x[0]).sort((a,b)=>nome(a).localeCompare(nome(b),'pt-BR'));
+  let h='<option value="">Visão geral</option><optgroup label="'+(estado.modo==='empresa'?'Empresas na EAP':'Executantes na EAP')+'">'+nomes.map(k=>'<option value="'+esc(k)+'">'+esc(nome(k))+'</option>').join('')+'</optgroup>';
+  if(estado.modo==='empresa')h+='<optgroup label="Só com RNC">'+rncSemPendencia().map(k=>'<option value="'+esc(k)+'">'+esc(k)+'</option>').join('')+'</optgroup>';
+  s.innerHTML=h;
+  if(![...s.options].some(o=>o.value===estado.sel))estado.sel='';
+  s.value=estado.sel;
+}
+function marcarSeg(id,val){document.querySelectorAll('#'+id+' button').forEach(b=>b.classList.toggle('ativo',b.dataset.v===val));}
+function salvarUrl(){
+  const q=new URLSearchParams();
+  if(estado.aba==='comparacao'){history.replaceState(null,'',location.pathname+'?aba=comparacao');return;}
+  if(estado.sel)q.set('e',estado.sel);
+  if(estado.modo!=='empresa')q.set('v',estado.modo);
+  if(estado.rnc!=='todas')q.set('rnc',estado.rnc);
+  history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:''));
+}
+function render(){
+  const comp=estado.aba==='comparacao';
+  document.querySelectorAll('#abas button').forEach(b=>b.classList.toggle('ativo',b.dataset.v===estado.aba));
+  document.querySelectorAll('.so-painel').forEach(e=>{e.hidden=comp;});
+  preencherSelect();marcarSeg('segModo',estado.modo);marcarSeg('segRnc',estado.rnc);
+  document.getElementById('main').innerHTML=comp?comparacao():estado.sel?detalhe(estado.sel):visaoGeral();
+  salvarUrl();
+}
+
+document.addEventListener('click',ev=>{
+  const a=ev.target.closest('#abas button');
+  if(a){estado.aba=a.dataset.v;window.scrollTo(0,0);return render();}
+  const b=ev.target.closest('#segModo button');
+  if(b){estado.modo=b.dataset.v;estado.sel='';estado.busca='';return render();}
+  const c=ev.target.closest('#segRnc button');
+  if(c){estado.rnc=c.dataset.v;return render();}
+  const t=ev.target.closest('[data-ir]');
+  if(t&&(t.classList.contains('clicavel')||t.classList.contains('cel'))){
+    if(t.classList.contains('cel'))estado.modo='empresa';
+    estado.sel=t.dataset.ir;estado.busca='';render();window.scrollTo(0,0);
+  }
+});
+document.getElementById('selEmpresa').addEventListener('change',e=>{estado.sel=e.target.value;estado.busca='';render();window.scrollTo(0,0);});
+document.addEventListener('input',e=>{
+  if(e.target.id!=='busca')return;
+  estado.busca=e.target.value;
+  const campo=campoGrupo();
+  document.getElementById('areaLista').innerHTML=listaAbertas(PEND.filter(p=>p[campo]===estado.sel&&!p.enc));
+});
+const dica=document.getElementById('dica');
+document.addEventListener('mousemove',e=>{
+  const t=e.target.closest&&e.target.closest('[data-dica]');
+  if(!t){dica.style.display='none';return;}
+  dica.textContent=t.dataset.dica;dica.style.display='block';
+  dica.style.left=Math.min(e.clientX+14,innerWidth-296)+'px';dica.style.top=(e.clientY+14)+'px';
+});
+
+(async function iniciar(){
+  document.getElementById('logoFico').src='data:image/png;base64,'+LOGO_FICO;
+  const q=new URLSearchParams(location.search);
+  estado.aba=q.get('aba')==='comparacao'?'comparacao':'painel';estado.sel=q.get('e')||'';estado.modo=q.get('v')==='executante'?'executante':'empresa';estado.rnc=['OIA','VALE'].includes(q.get('rnc'))?q.get('rnc'):'todas';
+  try{
+    const agora='?t='+Date.now();
+    const [rX,rR,rM]=await Promise.all([fetch(CONFIG.XLSX_URL+agora),fetch(CONFIG.RNC_URL+agora,{cache:'no-store'}),fetch(CONFIG.MANUAL_URL+agora).catch(()=>null)]);
+    if(!rX.ok||!rR.ok)throw new Error('HTTP '+rX.status+' / '+rR.status);
+    montarPendencias(XLSX.read(await rX.arrayBuffer(),{type:'array'}));
+    const j=await rR.json();
+    RNC=j.linhas.map(l=>Object.fromEntries(j.campos.map((c,i)=>[c,l[i]])));
+    META.rncRef=j.dataRef;
+    document.getElementById('refRnc').textContent=j.dataRef;
+    if(rM&&rM.ok)document.getElementById('refEap').textContent=String((await rM.json()).meta.DATA_REFERENCIA||'').trim();
+    render();
+  }catch(e){
+    console.error(e);
+    document.getElementById('main').innerHTML='<div class="aviso">Não consegui carregar as bases: '+esc(e.message)+'</div>';
+  }
+})();
+</script>
+</body>
+</html>
