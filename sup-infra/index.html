@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Painel SUP x Infra — FICO</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="../empresas/logos.js"></script>
+<style>
+  :root{
+    --navy:#142A4C; --navy2:#1E3A63; --laranja:#F89B32; --laranja2:#FFB259; --azul:#3578BC; --roxo:#6B46A8;
+    --verde:#2E9B4E; --vermelho:#D14545;
+    --cinza-bg:#EEF1F6; --cinza-borda:#E1E6EE; --cinza-txt:#5A6A7E; --branco:#FFFFFF; --preto:#1A1A1A;
+    --sh-sm:0 2px 6px rgba(20,42,76,.08); --sh-navy:0 10px 30px rgba(20,42,76,.35);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--cinza-bg);font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:var(--preto);font-size:14px;-webkit-font-smoothing:antialiased;min-height:100vh}
+  .app{max-width:1440px;margin:0 auto;padding:0 26px 48px}
+  a{color:inherit}
+
+  header.topo{background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 55%,#24467a 100%);color:#fff;padding:22px 34px;border-radius:0 0 18px 18px;position:relative;box-shadow:var(--sh-navy);overflow:hidden}
+  header.topo::before{content:"";position:absolute;left:0;top:0;bottom:0;width:10px;background:linear-gradient(180deg,var(--laranja),var(--laranja2))}
+  .topo-row{display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+  .topo-esq{display:flex;align-items:center;gap:20px}
+  .topo-logo{background:#fff;border-radius:12px;padding:8px 12px;height:72px;display:flex;align-items:center}
+  .topo-logo img{height:56px;display:block}
+  header.topo h1{font-size:23px;font-weight:800;line-height:1.2}
+  header.topo p{font-size:13px;opacity:.82;margin-top:3px}
+  .topo-dir{text-align:right;font-size:12px;line-height:1.7}
+  .topo-dir b{font-size:13.5px}
+  .topo-dir a{display:inline-block;margin-bottom:6px;padding:4px 12px;border:1px solid rgba(255,255,255,.35);border-radius:9px;text-decoration:none;font-weight:600}
+  .chip-prot{display:inline-block;background:var(--laranja);color:var(--navy);font-size:10.5px;font-weight:800;letter-spacing:.5px;padding:2px 9px;border-radius:9px;margin-left:8px;vertical-align:middle}
+
+  .filtros{display:flex;flex-wrap:wrap;align-items:center;gap:12px 22px;padding:14px 4px;border-bottom:1px solid var(--cinza-borda);margin-bottom:18px}
+  .btn{border:1px solid var(--cinza-borda);background:#fff;font:inherit;font-weight:700;font-size:12.5px;color:var(--navy);padding:8px 14px;border-radius:10px;cursor:pointer;margin-left:auto}
+
+  .disc{background:#fff;border:1px solid var(--cinza-borda);border-top:5px solid var(--cor);border-radius:14px;padding:15px 18px;box-shadow:var(--sh-sm);min-width:0}
+  .disc.sup{--cor:var(--roxo)} .disc.infra{--cor:var(--azul)}
+  .disc h2{font-size:18px;font-weight:800;color:var(--navy)}
+  .disc>p{font-size:12px;color:var(--cinza-txt);margin:2px 0 12px}
+  .frentes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .frente small{font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--cinza-txt)}
+  .frente strong{display:block;font-size:27px;font-weight:800;color:var(--navy);line-height:1.2;margin-top:2px;font-variant-numeric:tabular-nums}
+  .frente span{font-size:12px;color:var(--cinza-txt);line-height:1.35;display:block}
+
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px}
+  .kpi{background:#F7F9FC;border-radius:11px;padding:10px 13px}
+  .kpi small{font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--cinza-txt)}
+  .kpi strong{display:block;font-size:23px;font-weight:800;color:var(--navy);line-height:1.2;margin-top:2px;font-variant-numeric:tabular-nums}
+  .kpi span{font-size:11.5px;color:var(--cinza-txt)}
+
+  h3.secao{font-size:14px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;color:var(--navy);margin:22px 0 9px;padding-left:10px;border-left:4px solid var(--laranja)}
+  h3.secao small{font-weight:600;text-transform:none;letter-spacing:0;color:var(--cinza-txt);font-size:12px;margin-left:6px}
+  .card{background:#fff;border:1px solid var(--cinza-borda);border-radius:14px;padding:15px 18px;box-shadow:var(--sh-sm);min-width:0}
+  .card h4{font-size:13px;color:var(--navy);font-weight:800;margin-bottom:10px}
+  .card h4.sup::before,.card h4.infra::before{content:"";display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:7px}
+  .card h4.sup::before{background:var(--roxo)} .card h4.infra::before{background:var(--azul)}
+  .card h5{font-size:12px;color:var(--navy);font-weight:800;margin:14px 0 6px}
+  .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+  @media (max-width:1000px){.grid2{grid-template-columns:minmax(0,1fr)}}
+
+  .hbar{display:grid;grid-template-columns:minmax(90px,40%) 1fr 44px;align-items:center;gap:8px;padding:3px 0;font-size:12px}
+  .hbar .rot{line-height:1.25}
+  .hbar .trilho{height:11px}
+  .hbar .trilho i{display:block;height:100%;border-radius:0 4px 4px 0;background:var(--cor,var(--azul));min-width:2px}
+  .hbar b{text-align:right;font-variant-numeric:tabular-nums}
+  .barras.sup{--cor:var(--roxo)} .barras.infra{--cor:var(--azul)}
+  .vazio{color:var(--cinza-txt);font-size:12.5px;padding:8px 0}
+  .nota{font-size:11.5px;color:var(--cinza-txt);margin-top:9px;line-height:1.5}
+  .aviso{background:#FFF6EA;border:1px solid #F8D9AE;border-radius:11px;padding:10px 14px;font-size:12.5px;line-height:1.5;margin-bottom:12px}
+  #dica{position:fixed;display:none;background:var(--navy);color:#fff;font-size:12px;padding:6px 10px;border-radius:8px;pointer-events:none;z-index:50;max-width:280px;line-height:1.4}
+  footer{margin-top:24px;font-size:11.5px;color:var(--cinza-txt);text-align:center;line-height:1.6}
+  #carregando{padding:60px;text-align:center;color:var(--cinza-txt)}
+  @media (max-width:640px){.app{padding:0 16px 32px}header.topo{padding:18px 20px}.topo-dir{text-align:left}.btn{margin-left:0}}
+
+  @media print{
+    @page{size:landscape;margin:8mm}
+    html,body{background:#fff}
+    *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}
+    .app{max-width:100%;padding:0}
+    .filtros,#dica{display:none !important}
+    .card,.disc{box-shadow:none;break-inside:avoid}
+    h3.secao{break-after:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topo">
+    <div class="topo-row">
+      <div class="topo-esq">
+        <div class="topo-logo"><img id="logoFico" alt="FICO"></div>
+        <div>
+          <h1>Painel SUP x Infra <span class="chip-prot">PROTÓTIPO</span></h1>
+          <p>Ferrovia de Integração Centro-Oeste · Regional 1 · Pendências e RNCs por Superestrutura e Infraestrutura</p>
+        </div>
+      </div>
+      <div class="topo-dir">
+        <a href="../index.html">← Central FICO</a><br>
+        Pendências (EAP): <b id="refEap">—</b><br>
+        RNCs: <b id="refRnc">—</b>
+      </div>
+    </div>
+  </header>
+
+  <div class="filtros" style="margin-top:6px">
+    <button type="button" class="btn" onclick="window.print()">Imprimir / salvar PDF</button>
+  </div>
+
+  <main id="main"><div id="carregando">Carregando as bases…</div></main>
+
+  <footer>
+    SUP nas pendências: Empresa ou Executante SOMAFEL. Infra: todo o restante dos Pacotes 1, 2 e 3 (e 1A, 1B, 1C). Executante em branco = própria Empresa.<br>
+    RNCs: Regional 1, contagens agregadas da Base Reg, identificadas pela OIA e pela VALE. SUP conta só as RNCs da SOMAFEL.
+  </footer>
+</div>
+<div id="dica"></div>
+
+<script>
+const CONFIG={
+  XLSX_URL:'https://raw.githubusercontent.com/automacaofico/pendenciasr1/main/Base_Pendencias_FICO.xlsx',
+  MANUAL_URL:'https://raw.githubusercontent.com/automacaofico/pendenciasr1/main/manual-data.json',
+  RNC_URL:'../empresas/rnc.json'
+};
+const PACOTES={1:'P1',2:'P2',3:'P3','1A':'P1A','1B':'P1B','1C':'P1C'};
+const NOME={SUP:'Superestrutura (SUP)',INFRA:'Infraestrutura (Infra)'};
+const fmt=n=>Number(n||0).toLocaleString('pt-BR');
+const dec=(v,c=1)=>Number(v).toLocaleString('pt-BR',{minimumFractionDigits:c,maximumFractionDigits:c});
+const pct=(a,b)=>b?dec(a/b*100)+'%':'—';
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const caixa=v=>String(v==null?'':v).trim().toUpperCase();
+const CANON_TIPO={'bueiro':'Bueiros','obras complementares':'Obras Complementares','drenagem profunda':'Dreno Profundo'};
+const tipoProtocolo=v=>{const t=String(v==null?'':v).trim();return CANON_TIPO[t.toLowerCase()]||t||'Sem tipo de protocolo';};
+
+let PEND=[],RNC=[],META={};
+
+function montarPendencias(wb){
+  PEND=XLSX.utils.sheet_to_json(wb.Sheets['Banco de Dados'],{range:1,defval:null}).flatMap(r=>{
+    const pac=PACOTES[caixa(r['Pacote'])];
+    if(!pac)return [];
+    const emp=caixa(r['Empresa']),exe=caixa(r['Executante']);
+    const nomeEmp={APIA:'ÁPIA','ATERPA R':'ATERPA'}[emp]||emp; // ATERPA R é o escopo remunerado da própria ATERPA
+    return [{pac,emp:nomeEmp||exe||'SEM EMPRESA',disc:emp==='SOMAFEL'||exe==='SOMAFEL'?'SUP':'INFRA',
+      enc:caixa(r['Status_Pendencia'])==='ENCERRADO',
+      cert:caixa(r['Certificação ?'])==='CERTIFICAÇÃO',
+      tipo:tipoProtocolo(r['Tipo de Protocolo'])}];
+  });
+}
+const discRnc=r=>r.empresa==='SOMAFEL'?'SUP':'INFRA';
+const resumoP=l=>{const enc=l.filter(p=>p.enc).length;return{tot:l.length,enc,abe:l.length-enc,cert:l.filter(p=>p.cert&&!p.enc).length};};
+function resumoR(l){
+  const s={tot:0,abe:0,atr:0};
+  l.forEach(r=>{s.tot+=r.n;if(r.status!=='ENCERRADA')s.abe+=r.n;if(r.status==='ATRASADO')s.atr+=r.n;});
+  return s;
+}
+function contar(lista,chave,peso){
+  const m=new Map();
+  lista.forEach(i=>m.set(i[chave]||'Não informado',(m.get(i[chave]||'Não informado')||0)+(peso?i[peso]:1)));
+  return [...m.entries()].sort((a,b)=>b[1]-a[1]);
+}
+const kpi=(rot,val,sub)=>'<div class="kpi"><small>'+rot+'</small><strong>'+val+'</strong><span>'+sub+'</span></div>';
+function barrasH(itens,disc,fim){
+  if(!itens.length)return '<div class="vazio">Nada a mostrar.</div>';
+  const n=fim||7, max=itens[0][1];
+  return '<div class="barras '+disc.toLowerCase()+'">'+itens.slice(0,n).map(([k,v])=>'<div class="hbar" data-dica="'+esc(k)+': '+fmt(v)+'"><span class="rot">'+esc(k)+'</span><span class="trilho"><i style="width:'+(v/max*100).toFixed(1)+'%"></i></span><b>'+fmt(v)+'</b></div>').join('')+'</div>'
+    +(itens.length>n?'<div class="nota">+ '+(itens.length-n)+' outros</div>':'');
+}
+
+function cartaoDisc(d){
+  const p=resumoP(PEND.filter(x=>x.disc===d)), r=resumoR(RNC.filter(x=>discRnc(x)===d));
+  return '<section class="disc '+d.toLowerCase()+'"><h2>'+NOME[d]+'</h2><p>'+(d==='SUP'?'SOMAFEL: trilhos, dormentes, lastro e soldas':'Demais empresas: terraplenagem, drenagem, bueiros e obras de arte')+'</p><div class="frentes">'
+    +'<div class="frente"><small>Pendências</small><strong>'+pct(p.enc,p.tot)+'</strong><span>'+fmt(p.enc)+' de '+fmt(p.tot)+' encerradas · '+fmt(p.abe)+' em aberto</span></div>'
+    +'<div class="frente"><small>RNCs</small><strong>'+pct(r.tot-r.abe,r.tot)+'</strong><span>'+fmt(r.tot-r.abe)+' de '+fmt(r.tot)+' encerradas · '+fmt(r.abe)+' em aberto</span></div>'
+    +'</div></section>';
+}
+
+function colunaPend(d){
+  const l=PEND.filter(x=>x.disc===d), p=resumoP(l), ab=l.filter(x=>!x.enc);
+  return '<div class="card"><h4 class="'+d.toLowerCase()+'">'+(d==='SUP'?'SUP':'Infra')+'</h4><div class="kpis">'
+    +kpi('Total',fmt(p.tot),'Pendências')+kpi('Encerradas',fmt(p.enc),pct(p.enc,p.tot))+kpi('Em aberto',fmt(p.abe),'A tratar')+kpi('Certificáveis',fmt(p.cert),'Em aberto')+'</div>'
+    +'<h5>Em aberto por tipo de protocolo</h5>'+barrasH(contar(ab,'tipo'),d)
+    +'<h5>Em aberto por pacote</h5>'+barrasH(contar(ab,'pac'),d)
+    +(d==='INFRA'?'<h5>Em aberto por empresa</h5>'+barrasH(contar(ab,'emp'),d):'')+'</div>';
+}
+function colunaRnc(d){
+  const l=RNC.filter(x=>discRnc(x)===d), r=resumoR(l), ab=l.filter(x=>x.status!=='ENCERRADA');
+  return '<div class="card"><h4 class="'+d.toLowerCase()+'">'+(d==='SUP'?'SUP':'Infra')+'</h4><div class="kpis">'
+    +kpi('Total',fmt(r.tot),'RNCs')+kpi('Encerradas',fmt(r.tot-r.abe),pct(r.tot-r.abe,r.tot))+kpi('Em aberto',fmt(r.abe),'A tratar')+kpi('Atrasadas',fmt(r.atr),'Prazo vencido')+'</div>'
+    +'<h5>Em aberto por empresa</h5>'+barrasH(contar(ab,'empresa','n'),d,6)
+    +'<h5>Em aberto por etapa</h5>'+barrasH(contar(ab,'etapa','n'),d,5)
+    +'<h5>Principais classificações em aberto</h5>'+barrasH(contar(ab,'classif','n'),d,5)+'</div>';
+}
+function render(){
+  const fora=RNC.filter(r=>r.pacote==='Superestrutura'&&r.empresa!=='SOMAFEL').reduce((s,r)=>s+r.n,0);
+  document.getElementById('main').innerHTML='<div class="grid2">'+cartaoDisc('SUP')+cartaoDisc('INFRA')+'</div>'
+    +'<h3 class="secao">Pendências <small>EAP · Pacotes 1, 2 e 3</small></h3><div class="grid2">'+colunaPend('SUP')+colunaPend('INFRA')+'</div>'
+    +'<h3 class="secao">RNCs <small>Base Reg · Regional 1 · referência '+esc(META.rncRef)+'</small></h3><div class="grid2">'+colunaRnc('SUP')+colunaRnc('INFRA')+'</div>'
+    +'<div class="nota">OIA + VALE. SUP conta só as RNCs da SOMAFEL. Outras '+fmt(fora)+' RNCs do pacote Superestrutura são de outras empresas (como CONPREM e VALE) e estão em Infra.</div>';
+}
+
+const dica=document.getElementById('dica');
+document.addEventListener('mousemove',e=>{
+  const t=e.target.closest&&e.target.closest('[data-dica]');
+  if(!t){dica.style.display='none';return;}
+  dica.textContent=t.dataset.dica;dica.style.display='block';
+  dica.style.left=Math.min(e.clientX+14,innerWidth-296)+'px';dica.style.top=(e.clientY+14)+'px';
+});
+
+(async function iniciar(){
+  document.getElementById('logoFico').src='data:image/png;base64,'+LOGO_FICO;
+  try{
+    const t='?t='+Date.now(), op={cache:'no-store'};
+    const [rX,rR,rM]=await Promise.all([fetch(CONFIG.XLSX_URL+t),fetch(CONFIG.RNC_URL+t,op),fetch(CONFIG.MANUAL_URL+t).catch(()=>null)]);
+    const ruim=[rX,rR].find(r=>!r.ok);
+    if(ruim)throw new Error('HTTP '+ruim.status+' em '+ruim.url);
+    montarPendencias(XLSX.read(await rX.arrayBuffer(),{type:'array',sheets:['Banco de Dados']}));
+    const j=await rR.json();
+    RNC=j.linhas.map(l=>Object.fromEntries(j.campos.map((c,i)=>[c,l[i]])));
+    META.rncRef=j.dataRef;
+    document.getElementById('refRnc').textContent=j.dataRef;
+    if(rM&&rM.ok)document.getElementById('refEap').textContent=String((await rM.json()).meta.DATA_REFERENCIA||'').trim();
+    render();
+  }catch(e){
+    console.error(e);
+    document.getElementById('main').innerHTML='<div class="aviso">Não consegui carregar as bases: '+esc(e.message)+'</div>';
+  }
+})();
+</script>
+</body>
+</html>
