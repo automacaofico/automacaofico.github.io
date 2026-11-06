@@ -1,0 +1,87 @@
+{
+ "dataRef": "06/11/2026",
+ "fonte": "BI Novas Ferrovias - Data Book (Detalhamento BK)",
+ "criterio": "Códigos FE, primeiro pacote citado 1, 2 ou 3",
+ "disc": {
+  "SUP": {
+   "tot": 47,
+   "apr": 28,
+   "rep": 11,
+   "ana": 2,
+   "con": 4,
+   "nao": 2,
+   "pendentes": [
+    [
+     "CONPREM",
+     6
+    ],
+    [
+     "CONSORCIO SOMAFEL",
+     3
+    ],
+    [
+     "CONDUTEC SOLUCOES EM FIXACAO",
+     2
+    ],
+    [
+     "PANDROL INDÚSTRIA E SOLUÇÕES FERROVIÁRIAS LTDA.",
+     2
+    ],
+    [
+     "CHINA RAILWAY (PANGANG)",
+     1
+    ],
+    [
+     "BRR EQUIPAMENTOS",
+     1
+    ],
+    [
+     "BR RAILPARTS",
+     1
+    ],
+    [
+     "PEDREIRA BELA VISTA UNIÃO",
+     1
+    ],
+    [
+     "AMW SERVIÇOS LTDA",
+     1
+    ],
+    [
+     "PEDREIRA ITAPACI LTDA",
+     1
+    ]
+   ]
+  },
+  "INFRA": {
+   "tot": 39,
+   "apr": 30,
+   "rep": 6,
+   "ana": 1,
+   "con": 1,
+   "nao": 1,
+   "pendentes": [
+    [
+     "CONSTRUTORA APIA SA",
+     4
+    ],
+    [
+     "CIVIL MASTER",
+     2
+    ],
+    [
+     "CONSTRUTORA ATERPA SA",
+     1
+    ],
+    [
+     "EMPA S/A SERVIÇOS DE ENGENHARIA",
+     1
+    ],
+    [
+     "GSA SERVICE EIRELI",
+     1
+    ]
+   ]
+  }
+ }
+}

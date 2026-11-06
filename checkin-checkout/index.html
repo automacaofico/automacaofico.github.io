@@ -303,6 +303,7 @@
   #checkinout .cio-kicker{font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--cinza-txt);margin-bottom:6px}
   #checkinout .cio-titulo{font-size:23px;font-weight:800;color:#4D4D4D;padding-bottom:8px;border-bottom:2px solid #1F3864;margin-bottom:16px}
   #checkinout .cio-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:18px}
+  #checkinout .cio-kpis.seis{grid-template-columns:repeat(6,1fr)}
   #checkinout .cio-kpi{border-radius:3px;overflow:hidden;text-align:center;box-shadow:0 1px 3px rgba(31,56,100,.12)}
   #checkinout .cio-kpi .h{background:#4B6A82;color:#fff;font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:9px 6px}
   #checkinout .cio-kpi .v{background:#DDE6F0;color:#4B6A82;font-size:24px;font-weight:800;padding:12px 6px;font-variant-numeric:tabular-nums}
@@ -318,8 +319,8 @@
   #checkinout .cio-am{position:absolute;right:12px;top:0;bottom:0;display:flex;align-items:center;writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:10.5px;font-weight:700;letter-spacing:.3px;color:#1F3864}
   #checkinout .cio-secao{font-size:16px;font-weight:800;color:var(--navy);margin:22px 0 12px}
   #checkinout .cio-nota{margin-top:10px;font-size:11px;color:var(--cinza-txt);line-height:1.5}
-  @media (max-width:1100px){ #checkinout .cio-grid{grid-template-columns:1fr} #checkinout .cio-kpis{grid-template-columns:repeat(2,1fr)} }
-  @media print{ #checkinout .cio-grid{grid-template-columns:1.55fr 1fr !important} #checkinout .cio-kpis{grid-template-columns:repeat(5,1fr) !important} #checkinout .cio-box,#checkinout .cio-pontos{break-inside:avoid} #checkinout .cio-titulo{font-size:19px} #checkinout .cio-kpi .v{font-size:20px} }
+  @media (max-width:1100px){ #checkinout .cio-grid{grid-template-columns:1fr} #checkinout .cio-kpis,#checkinout .cio-kpis.seis{grid-template-columns:repeat(2,1fr)} }
+  @media print{ #checkinout .cio-grid{grid-template-columns:1.55fr 1fr !important} #checkinout .cio-kpis{grid-template-columns:repeat(5,1fr) !important} #checkinout .cio-kpis.seis{grid-template-columns:repeat(6,1fr) !important} #checkinout .cio-box,#checkinout .cio-pontos{break-inside:avoid} #checkinout .cio-titulo{font-size:19px} #checkinout .cio-kpi .v{font-size:20px} }
   /* ============ PRINT ============ */
   @media print{
     @page{size:landscape;margin:8mm}
@@ -516,6 +517,8 @@ const CIO_ABAS=[
   {id:'p3',nome:'PCT 3',grupo:'PCT 3',titulo:'Pacote 3 – curva de avanço com previsto x realizado'},
   {id:'super',nome:'Superestrutura (Somafel)',grupo:'SUPER',titulo:'Superestrutura (Somafel) – curva de avanço com previsto x realizado'}
 ];
+// Prazo final de cada pacote, informado pela gestão (só mês/ano: vale o último dia do mês). Para mudar, edite aqui.
+const CIO_PRAZO={'PCT 1':{txt:'mar/27',data:'31/03/2027'},'PCT 2':{txt:'jan/27',data:'31/01/2027'},'PCT 3':{txt:'fev/27',data:'28/02/2027'}};
 const cioEhSuper=r=>esc(r['Empresa']).trim().toUpperCase()==='SOMAFEL';
 const cioGrupo=r=>cioEhSuper(r)?'SUPER':(CIO_PAC[normPacote(r['Pacote'])]||null);
 const cioBaixada=r=>esc(r['Status_Pendencia']).trim().toUpperCase()==='ENCERRADO';
@@ -550,8 +553,10 @@ function cioCalc(aba){
   const ini=Math.min(prazos[0]||hoje,encs[0]||hoje);
   const d0=cioDt(ini); const ini1=Math.round(Date.UTC(d0.getUTCFullYear(),d0.getUTCMonth(),1)/86400000)+25569;
   const maxPrazo=prazos[prazos.length-1]||hoje;
-  const limite=Math.max(maxPrazo,fim||0,hoje)+7;
-  const datas=new Set([hoje]); if(fim)datas.add(fim);
+  const pz=CIO_PRAZO[aba.grupo];
+  const prazo=pz?{txt:pz.txt,serial:cioSerial(pz.data),dias:fim?fim-cioSerial(pz.data):null}:null;
+  const limite=Math.max(maxPrazo,fim||0,hoje,prazo?prazo.serial:0)+7;
+  const datas=new Set([hoje]); if(fim)datas.add(fim); if(prazo)datas.add(prazo.serial);
   for(let d=ini1;d<=limite;d+=7)datas.add(d);
   const eixo=[...datas].sort((a,b)=>a-b);
   const previsto=eixo.map(d=>prazos.filter(p=>p<=d).length+(d>=maxPrazo?semPrazo:0));
@@ -569,7 +574,7 @@ function cioCalc(aba){
     if(cioBaixada(r))e.exec++; else if(cert(r)==='CERTIFICAÇÃO')e.certRest++; else if(cert(r)==='NÃO CERTIFICAÇÃO')e.ncertRest++;
   });
   const empresas=Object.values(porEmpresa).map(e=>Object.assign(e,{rest:e.total-e.exec,pct:e.total?Math.round(e.exec/e.total*100):0})).sort((a,b)=>b.total-a.total||a.key.localeCompare(b.key));
-  return {empresas,total,baixados:baix.length,saldo:total-baix.length,avanco:total?baix.length/total*100:0,fimTxt,hoje,fim,eixo,previsto,realizado,projecao,semPrazo,semDataEnc,maxPrazo,porGrupo};
+  return {empresas,total,baixados:baix.length,saldo:total-baix.length,avanco:total?baix.length/total*100:0,fimTxt,hoje,fim,prazo,eixo,previsto,realizado,projecao,semPrazo,semDataEnc,maxPrazo,porGrupo};
 }
 function cioNota(aba,c){
   const ehCons=!aba.grupo;
@@ -581,8 +586,10 @@ function cioNota(aba,c){
     ?'<b>SUPER</b> = pendências da empresa SOMAFEL (superestrutura), que ficam fora de PCT 1 e PCT 3 nos gráficos por pacote. A linha tracejada projeta o fechamento até '+(c.fimTxt||'—')+' (data da aba Tendência do Painel de Pendências).'
     :(aba.grupo==='SUPER'?'Aba da empresa SOMAFEL (superestrutura): essas pendências não entram em PCT 1 e PCT 3. ':'')
       +'A tendência de fechamento usa o ritmo de encerramentos das últimas 4 semanas (dias úteis, seg–sáb)'+(c.fimTxt?'':'; sem encerramentos nesse período, não há projeção')+'.';
+  if(c.prazo)nota+=' A linha vermelha marca o prazo final do pacote ('+c.prazo.txt+', considerado o último dia do mês); ela não altera o Planejado, que segue a Data_Prazo de cada pendência.';
   return nota;
 }
+const cioDifPrazo=c=>c.prazo.dias==null?'—':(c.prazo.dias>0?'+':'')+c.prazo.dias.toLocaleString('pt-BR')+' dias';
 const CIO_NOMES={GSA:'GRUPO GSA SERVICE'};
 const cioNomeEmp=k=>CIO_NOMES[k]||k;
 const cioSemAcento=s=>String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -615,9 +622,10 @@ function cioCardsEmpresaHtml(aba,c){
   const nota=cioNota(aba,c);
   return '<div class="cio"><div class="cio-kicker">Check in / Check out · '+escHtml(aba.nome)+' · posição em '+cioDMY(c.hoje)+'</div>'
     +'<h2 class="cio-titulo">'+escHtml(aba.titulo)+'</h2>'
-    +'<div class="cio-kpis">'
+    +'<div class="cio-kpis'+(c.prazo?' seis':'')+'">'
     +kpi('Total pendências',n(c.total))+kpi('Baixados',n(c.baixados))+kpi('Avanço',Math.round(c.avanco)+'%','verde')
     +kpi('Saldo',n(c.saldo))+kpi('Tendência de fechamento',c.fimTxt||'—','roxo')
+    +(c.prazo?kpi('Tendência x prazo ('+c.prazo.txt+')','<span style="color:'+(c.prazo.dias>0?'#C0305E':'#5E8B1E')+'">'+cioDifPrazo(c)+'</span>'):'')
     +'</div>'
     +'<div class="cio-grid">'
     +'<div class="cio-box"><div id="cio_curva_'+aba.id+'" style="height:380px"></div></div>'
@@ -633,6 +641,8 @@ function cioDesenhar(aba,c){
     const rotulos=(arr,passo,extra,min,corte)=>arr.map((v,i)=>v==null?null:{value:v,label:{show:(((i%passo===0)&&v>=min)&&i<(corte==null?1e9:corte))||extra.includes(i)}});
     const iHoje=c.eixo.indexOf(c.hoje), iFim=c.fim?c.eixo.indexOf(c.fim):-1;
     const maxV=Math.max(...c.previsto,c.total);
+    const iPrazo=c.prazo?c.eixo.indexOf(c.prazo.serial):-1;
+    const marcoPrazo=iPrazo<0?{}:{markLine:{silent:true,symbol:'none',animation:false,lineStyle:{color:'#C0305E',type:'solid',width:2},label:{position:'end',align:'right',distance:3,fontSize:11,fontWeight:'bold',color:'#C0305E',formatter:'Prazo final '+c.prazo.txt},data:[{xAxis:iPrazo}]}};
     const minRot=Math.max(1,Math.round(maxV*0.01));
     ch.setOption({
       color:['#1F7A7F','#8DC63F','#8DC63F'],
@@ -642,7 +652,7 @@ function cioDesenhar(aba,c){
       xAxis:{type:'category',data:x,axisLabel:{rotate:60,fontSize:10,color:'#5A6A7E',interval:3}},
       yAxis:{type:'value',axisLabel:{fontSize:10,color:'#5A6A7E'},splitLine:{lineStyle:{color:'#E1E6EE'}}},
       series:[
-        {name:'Planejado (baseline)',type:'line',smooth:false,symbolSize:5,lineStyle:{width:3},label:{position:'top',fontSize:10,color:'#1F7A7F',formatter:p=>Math.round(p.value).toLocaleString('pt-BR')},data:rotulos(c.previsto,6,[],minRot,c.eixo.length-4)},
+        {name:'Planejado (baseline)',type:'line',smooth:false,symbolSize:5,lineStyle:{width:3},label:{position:'top',fontSize:10,color:'#1F7A7F',formatter:p=>Math.round(p.value).toLocaleString('pt-BR')},data:rotulos(c.previsto,6,[],minRot,c.eixo.length-4),...marcoPrazo},
         {name:'Realizado',type:'line',smooth:false,symbolSize:5,lineStyle:{width:3},label:{position:'bottom',fontSize:10,color:'#5E8B1E',formatter:p=>Math.round(p.value).toLocaleString('pt-BR')},data:rotulos(c.realizado,6,[iHoje],Math.max(minRot,Math.round(maxV*0.05)))},
         {name:'Projeção até o fechamento',type:'line',connectNulls:true,symbol:'circle',symbolSize:6,lineStyle:{width:3,type:'dashed'},label:{position:'top',fontSize:10,color:'#5E8B1E',formatter:p=>Math.round(p.value).toLocaleString('pt-BR')},data:c.projecao.map((v,i)=>v==null?null:{value:v,label:{show:i===iFim}})}
       ]
@@ -704,21 +714,24 @@ function cioMontarSlide(pptx,aba,c,soCurva){
   s.addText(aba.titulo,{x:0.4,y:0.5,w:12.5,h:0.55,fontFace:'Calibri',fontSize:22,bold:true,color:NAVY,fit:'shrink'});
   // cartões
   const kpis=[['Total pendências',n(c.total),NAVY],['Baixados',n(c.baixados),NAVY],['Avanço',Math.round(c.avanco)+'%','5E8B1E'],['Saldo',n(c.saldo),NAVY],['Tendência de fechamento',c.fimTxt||'—',ROXO]];
-  const kw=2.38, kg=0.15;
+  if(c.prazo)kpis.push(['Tendência x prazo ('+c.prazo.txt+')',cioDifPrazo(c),c.prazo.dias>0?'C0305E':'5E8B1E']);
+  const kw=c.prazo?1.98:2.38, kg=c.prazo?0.12:0.15;
   kpis.forEach((k,i)=>{
     const x=0.4+i*(kw+kg);
     s.addShape(pptx.ShapeType.roundRect,{x,y:1.15,w:kw,h:0.85,fill:{color:'F3F6FA'},line:{color:'D5DDE8',width:0.75},rectRadius:0.08});
-    s.addText(k[0],{x,y:1.19,w:kw,h:0.3,align:'center',fontFace:'Calibri',fontSize:10.5,bold:true,color:CINZA});
+    s.addText(k[0],{x,y:1.19,w:kw,h:0.3,align:'center',fontFace:'Calibri',fontSize:c.prazo?9.5:10.5,bold:true,color:CINZA});
     s.addText(k[1],{x,y:1.45,w:kw,h:0.5,align:'center',fontFace:'Calibri',fontSize:22,bold:true,color:k[2]});
   });
   // curva S (linhas nativas)
   const x=c.eixo.map(cioDM);
+  const cx=0.3, cy=2.15, cw=soCurva?12.7:8.2, chh=4.3, areaGraf={x:0.07,y:0.11,w:0.91,h:0.7};
   s.addChart(pptx.charts.LINE,[
     {name:'Planejado (baseline)',labels:x,values:c.previsto},
     {name:'Realizado',labels:x,values:c.realizado},
     {name:'Projeção até o fechamento',labels:x,values:c.projecao}
   ],{
-    x:0.3,y:2.15,w:soCurva?12.7:8.2,h:4.3,
+    x:cx,y:cy,w:cw,h:chh,
+    ...(c.prazo?{layout:areaGraf,plotArea:{layout:areaGraf}}:{}),
     chartColors:[TEAL,VERDE,ROXO],lineSize:3,lineDataSymbolSize:3,
     showLegend:true,legendPos:'t',legendFontSize:11,legendColor:'4D4D4D',
     catAxisLabelFontSize:9,catAxisLabelColor:CINZA,catAxisLabelRotate:-60,catAxisLabelFrequency:3,
@@ -727,6 +740,12 @@ function cioMontarSlide(pptx,aba,c,soCurva){
     displayBlanksAs:'span',
     valAxisMajorUnit:Math.max(...c.previsto,c.total)<=10?1:undefined
   });
+  // marco do prazo final: linha sobre o gráfico, na posição exata da data (área do gráfico fixada em areaGraf)
+  if(c.prazo){
+    const iP=c.eixo.indexOf(c.prazo.serial), mx=cx+cw*(areaGraf.x+areaGraf.w*(iP+0.5)/c.eixo.length), my=cy+chh*areaGraf.y;
+    s.addShape(pptx.ShapeType.line,{x:mx,y:my,w:0,h:chh*areaGraf.h,line:{color:'C0305E',width:2}});
+    s.addText('Prazo final '+c.prazo.txt,{x:mx-1.45,y:my,w:1.4,h:0.25,align:'right',fontFace:'Calibri',fontSize:10,bold:true,color:'C0305E'});
+  }
   // barras (nativas)
   if(!soCurva){
   const ehCons=!aba.grupo;
