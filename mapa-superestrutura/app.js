@@ -50,7 +50,7 @@
     mapReady: false,
     selectedId: 'grade',
     packageId: '',
-    basemap: 'street',
+    basemap: 'satellite',
     activityQuery: '',
     activityFilter: 'all',
     sourceMode: 'online',
@@ -401,13 +401,15 @@
           street: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap' },
           dark: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 16, attribution: 'Esri, HERE, Garmin, © OpenStreetMap' },
           darkLabels: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 16 },
-          satellite: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 17, attribution: 'Esri' }
+          satellite: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 17, attribution: 'Imagens: Esri, Maxar, Earthstar Geographics' },
+          satelliteLabels: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 17 }
         },
         layers: [
           { id: 'street', type: 'raster', source: 'street' },
           { id: 'dark', type: 'raster', source: 'dark', layout: { visibility: document.documentElement.dataset.theme === 'dark' ? 'visible' : 'none' } },
           { id: 'dark-labels', type: 'raster', source: 'darkLabels', layout: { visibility: document.documentElement.dataset.theme === 'dark' ? 'visible' : 'none' } },
-          { id: 'satellite', type: 'raster', source: 'satellite', layout: { visibility: 'none' } }
+          { id: 'satellite', type: 'raster', source: 'satellite', layout: { visibility: 'none' } },
+          { id: 'satellite-labels', type: 'raster', source: 'satelliteLabels', layout: { visibility: 'none' } }
         ]
       },
       bounds,
@@ -687,6 +689,7 @@
     state.map.setLayoutProperty('dark', 'visibility', name === 'street' && darkTheme ? 'visible' : 'none');
     state.map.setLayoutProperty('dark-labels', 'visibility', name === 'street' && darkTheme ? 'visible' : 'none');
     state.map.setLayoutProperty('satellite', 'visibility', name === 'satellite' ? 'visible' : 'none');
+    state.map.setLayoutProperty('satellite-labels', 'visibility', name === 'satellite' ? 'visible' : 'none');
     document.querySelectorAll('[data-basemap]').forEach(button => {
       const active = button.dataset.basemap === name;
       button.classList.toggle('active', active);
