@@ -16,12 +16,13 @@
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/vendor/maplibre/maplibre-gl.css">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="premium.css">
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
       <div class="brand-block">
-        <img src="assets/brand/fico-logo-color.png" alt="FICO" class="brand-logo">
+        <span class="brand-logo-wrap" id="brandLogo"><img src="assets/brand/fico-logo-color.png" alt="FICO" class="brand-logo"></span>
         <span class="brand-rule" aria-hidden="true"></span>
         <div>
           <p>Ferrovia de Integração Centro-Oeste</p>
@@ -76,6 +77,8 @@
           Replay da obra
         </button>
         <button id="fitButton" type="button" class="quiet-button">Enquadrar obra</button>
+        <button id="tiltButton" type="button" class="quiet-button" aria-pressed="false">Vista 3D</button>
+        <button id="flyButton" type="button" class="fly-trigger"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12l18-8-6 8 6 8z"/></svg>Voo pela via</button>
         <button id="refreshButton" type="button" class="quiet-button">Atualizar dados</button>
       </section>
 
@@ -122,6 +125,10 @@
             <div><p>CAMADAS OPERACIONAIS</p><h3 id="activityTitle">Atividades</h3></div>
             <span id="activityCount">0</span>
           </div>
+          <div class="activity-tools">
+            <label class="search-field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg><input id="activitySearch" type="search" placeholder="Buscar atividade" autocomplete="off" aria-label="Buscar atividade"></label>
+            <div class="chip-row" id="activityChips" role="group" aria-label="Filtrar atividades"><button type="button" class="chip active" data-filter="all">Todas</button><button type="button" class="chip" data-filter="active">Em execução</button><button type="button" class="chip" data-filter="unplanned">Não previstas</button></div>
+          </div>
           <div id="activityList" class="activity-list"></div>
         </aside>
 
@@ -131,6 +138,11 @@
           <div class="map-legend" aria-label="Legenda">
             <span><i class="line actual"></i>Realizado</span>
             <span><i class="dot"></i>Frente atual</span>
+          </div>
+          <div id="flyHud" class="fly-hud" hidden>
+            <div class="fly-info"><span id="flyPackage">Pacote 01</span><strong id="flyKm">KM 0,000</strong></div>
+            <div class="fly-bar"><i id="flyBar"></i></div>
+            <button id="flyStop" type="button">Encerrar voo</button>
           </div>
           <div class="map-readout"><span id="cursorPackage">Obra completa</span><strong id="cursorKm">Passe sobre traçado</strong></div>
         </section>
@@ -172,8 +184,10 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie_light.min.js"></script>
   <script src="assets/vendor/maplibre/maplibre-gl.js"></script>
   <script src="assets/vendor/sheetjs/xlsx.full.min.js"></script>
   <script src="app.js"></script>
+  <script src="premium.js"></script>
 </body>
 </html>

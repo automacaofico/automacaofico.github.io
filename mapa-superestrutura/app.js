@@ -51,6 +51,8 @@
     selectedId: 'grade',
     packageId: '',
     basemap: 'street',
+    activityQuery: '',
+    activityFilter: 'all',
     sourceMode: 'online',
     replay: { active: false, playing: false, progress: 0, speed: 1, history: null, frame: null, startedAt: 0, startedProgress: 0, lastMapUpdate: 0 }
   };
@@ -274,6 +276,7 @@
     renderActivities();
     renderDetails();
     renderTable();
+    document.dispatchEvent(new Event('fico-render'));
   }
 
   function renderMetrics() {
@@ -294,13 +297,14 @@
   }
 
   function renderActivities() {
-    el('activityCount').textContent = state.activities.length;
-    el('activityList').innerHTML = state.activities.map(activity => `
+    const visible = state.activities.filter(activity => (!state.activityQuery || norm(activity.name).includes(state.activityQuery)) && (state.activityFilter === 'all' || (state.activityFilter === 'active' && hasProgress(activity)) || (state.activityFilter === 'unplanned' && activity.unplanned)));
+    el('activityCount').textContent = visible.length;
+    el('activityList').innerHTML = (visible.length ? visible : []).map(activity => `
       <button class="activity-card ${activity.id === state.selectedId ? 'active' : ''}" data-activity="${activity.id}" style="--activity-color:${activity.color}">
         <span class="name">${activity.name}${activity.unplanned ? ' <b class="np" title="Atividade não prevista no planejamento">!</b>' : ''}</span>
         <span class="meta"><span>${activity.material ? (activity.materialConsumed > 0 ? `${Math.round(activity.materialConsumed).toLocaleString('pt-BR')} de ${Math.round(activity.materialTotal).toLocaleString('pt-BR')} pç` : '—') : station(activity.actualEnd)}</span><b>${percent(scoped(activity).progress)}</b></span>
         <span class="mini-progress"><i style="width:${Math.min(100, scoped(activity).progress)}%"></i></span>
-      </button>`).join('');
+      </button>`).join('') || '<p class="empty-list">Nenhuma atividade encontrada.</p>';
     document.querySelectorAll('[data-activity]').forEach(button => button.addEventListener('click', () => selectActivity(button.dataset.activity)));
   }
 
@@ -408,6 +412,8 @@
       },
       bounds,
       fitBoundsOptions: { padding: 48 },
+      pitch: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 58,
+      bearing: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : -24,
       maxZoom: 17
     });
     state.map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
@@ -419,6 +425,8 @@
       updateMapData();
       renderReplay();
       el('mapStatus').classList.add('hidden');
+      state.map.fitBounds(bounds, { padding: window.innerWidth < 700 ? 35 : 70, pitch: 0, bearing: 0, duration: matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 4200, easing: t => 1 - Math.pow(1 - t, 3) });
+      document.dispatchEvent(new CustomEvent('fico-map-ready'));
     });
     state.map.on('mousemove', event => updateCursorReadout(event.lngLat));
     state.map.on('mouseleave', () => {
@@ -428,7 +436,7 @@
   }
 
   function addOperationalLayers() {
-    const packages = collection(PACKAGES.map(item => lineFeature(item.start, Math.min(item.end, state.axis[state.axis.length - 1].station_m), item)));
+    const packages = collection(PACKAGES.map((item, index) => lineFeature(item.start, Math.min(item.end, state.axis[state.axis.length - 1].station_m), { ...item, idx: index + 1 })));
     state.map.addSource('packages', { type: 'geojson', data: packages });
     state.map.addLayer({ id: 'axis-casing', type: 'line', source: 'packages', paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 5, 14, 11], 'line-opacity': .88 } });
     state.map.addLayer({ id: 'package-lines', type: 'line', source: 'packages', paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 7, 2.5, 14, 6], 'line-opacity': .82 } });
@@ -656,12 +664,12 @@
     el('cursorKm').textContent = station(nearest.station_m);
   }
 
-  function fitCurrent() {
+  function fitCurrent(extra = {}) {
     if (!state.map || !state.axis.length) return;
     const range = PACKAGES.find(item => item.id === state.packageId) || { start: state.axis[0].station_m, end: state.axis[state.axis.length - 1].station_m };
     const bounds = new maplibregl.LngLatBounds();
     sliceCoordinates(range.start, Math.min(range.end, state.axis[state.axis.length - 1].station_m)).forEach(coordinate => bounds.extend(coordinate));
-    state.map.fitBounds(bounds, { padding: window.innerWidth < 700 ? 35 : 70, duration: 900 });
+    state.map.fitBounds(bounds, { padding: window.innerWidth < 700 ? 35 : 70, duration: 900, ...extra });
   }
 
   function zoomFront() {
@@ -716,7 +724,7 @@
     document.querySelectorAll('[data-basemap]').forEach(button => button.addEventListener('click', () => setBasemap(button.dataset.basemap)));
     el('themeToggle').addEventListener('click', toggleTheme);
     el('showFronts').addEventListener('change', updateMapData);
-    el('fitButton').addEventListener('click', fitCurrent);
+    el('fitButton').addEventListener('click', () => fitCurrent());
     el('refreshButton').addEventListener('click', () => loadWorkbook());
     el('zoomFrontButton').addEventListener('click', zoomFront);
     el('replayButton').addEventListener('click', () => state.replay.active ? closeReplay() : openReplay());
@@ -742,5 +750,6 @@
     }
   }
 
+  window.__mapaApp = { state, PACKAGES, OBRA, norm, pointAtStation, packageAt, station, km, percent, hasProgress, scoped, selectActivity, renderActivities, fitCurrent, stopReplay, closeReplay, toast };
   start();
 })();
