@@ -107,6 +107,70 @@
   footer{margin-top:24px;font-size:11.5px;color:var(--cinza-txt);text-align:center;line-height:1.6}
   #carregando{padding:60px;text-align:center;color:var(--cinza-txt)}
 
+
+  /* ===== ANIMAÇÕES ===== */
+  .abas{position:relative}
+  .trilho-aba{position:absolute;bottom:-2px;height:3px;left:0;width:0;background:var(--laranja);border-radius:3px 3px 0 0;pointer-events:none}
+  .abas.pronta button.ativo{border-bottom-color:transparent}
+  .seg{position:relative}
+  .seg button{position:relative;z-index:1}
+  .pilula{position:absolute;top:3px;bottom:3px;left:0;width:0;background:var(--navy);border-radius:9px;pointer-events:none}
+  .seg.com-pilula button.ativo{background:none;color:#fff}
+  :where(button,select,input,a):focus-visible{outline:2px solid var(--laranja);outline-offset:2px}
+
+  @media (prefers-reduced-motion:no-preference){
+    @keyframes sobe{from{opacity:0;transform:translateY(14px)}}
+    @keyframes desce{from{opacity:0;transform:translateY(-18px)}}
+    @keyframes pop{from{opacity:0;transform:scale(.55)}}
+    @keyframes cresce{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+    @keyframes linha{from{opacity:0;transform:translateX(-10px)}}
+    @keyframes barra-topo{from{clip-path:inset(0 0 100% 0)}to{clip-path:inset(0 0 0 0)}}
+    @keyframes brilho{from{transform:translateX(-130%) skewX(-18deg)}to{transform:translateX(330%) skewX(-18deg)}}
+    @keyframes gira{to{transform:rotate(360deg)}}
+    @keyframes respira{50%{opacity:.45}}
+
+    header.topo{animation:desce .7s cubic-bezier(.2,.8,.2,1) backwards}
+    header.topo::before{animation:barra-topo .7s .25s cubic-bezier(.2,.8,.2,1) backwards}
+    header.topo::after{content:"";position:absolute;top:0;bottom:0;left:0;width:34%;pointer-events:none;
+      background:linear-gradient(90deg,transparent,rgba(255,255,255,.14),transparent);animation:brilho 1.5s .8s ease-out backwards}
+    .topo-logo{animation:pop .6s .2s cubic-bezier(.2,.8,.2,1) backwards}
+    header.topo h1,header.topo p,.topo-dir{animation:sobe .6s .3s cubic-bezier(.2,.8,.2,1) backwards}
+    header.topo p{animation-delay:.38s} .topo-dir{animation-delay:.46s}
+    .abas,.filtros{animation:sobe .55s .35s cubic-bezier(.2,.8,.2,1) backwards}
+    .filtros{animation-delay:.42s}
+
+    .trilho-aba,.pilula{transition:left .38s cubic-bezier(.2,.8,.2,1),width .38s cubic-bezier(.2,.8,.2,1)}
+    .abas button,.seg button{transition:color .25s}
+    .btn,select,input.busca{transition:border-color .2s,box-shadow .2s,transform .2s}
+    .btn:hover{border-color:var(--laranja);transform:translateY(-1px)}
+    .btn:active{transform:translateY(0)}
+    select:hover,input.busca:focus{border-color:var(--azul);box-shadow:0 0 0 3px rgba(53,120,188,.15)}
+
+    /* conteúdo: entrada em sequência a cada nova visão */
+    #main[data-anim="total"] > :not(.kpis){animation:sobe .55s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(var(--i,0) * 70ms + .05s)}
+    .kpi{animation:sobe .55s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(var(--k,0) * 55ms + .05s);transition:transform .2s,box-shadow .2s}
+    .kpi:hover{transform:translateY(-3px);box-shadow:0 10px 22px rgba(20,42,76,.14)}
+    .card{transition:box-shadow .25s}
+    .card:hover{box-shadow:0 8px 22px rgba(20,42,76,.12)}
+    .empresa-hero .lg{animation:pop .6s .15s cubic-bezier(.2,.8,.2,1) backwards}
+    .empresa-hero h2,.empresa-hero p{animation:sobe .55s .22s cubic-bezier(.2,.8,.2,1) backwards}
+
+    /* barras crescem da esquerda para a direita */
+    .barra i,.hbar .trilho i{animation:cresce .85s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(var(--b,0) * 38ms + .3s)}
+    /* mapa de calor: células acendem em onda (diagonal) */
+    table.matriz td:not(.rot):not(.soma){animation:pop .5s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(var(--d,0) * 26ms + .25s);transition:transform .15s,box-shadow .15s}
+    table.matriz td.cel:hover,table.matriz td[data-dica]:hover{transform:scale(1.12);box-shadow:0 4px 12px rgba(20,42,76,.3);position:relative;z-index:2}
+    /* linhas das tabelas */
+    tbody tr[style*="--r"]{animation:linha .45s cubic-bezier(.2,.8,.2,1) backwards;animation-delay:calc(var(--r,0) * 26ms + .25s)}
+    tr.clicavel td{transition:background-color .18s}
+    tr.clicavel:hover td:first-child{box-shadow:inset 4px 0 0 var(--laranja)}
+
+    #carregando{animation:respira 1.6s ease-in-out infinite}
+    #carregando::before{content:"";display:block;width:34px;height:34px;margin:0 auto 14px;border:3px solid var(--cinza-borda);border-top-color:var(--laranja);border-radius:50%;animation:gira .8s linear infinite}
+    #dica{animation:sobe .18s ease-out}
+  }
+  @media print{ *,*::before,*::after{animation:none !important;transition:none !important} .trilho-aba,.pilula{display:none} .seg.com-pilula button.ativo{background:var(--navy);color:#fff} }
+
   @media print{
     @page{size:landscape;margin:8mm}
     html,body{background:#fff}
@@ -142,6 +206,7 @@
   <nav class="abas" id="abas">
     <button type="button" data-v="painel">Por empresa</button>
     <button type="button" data-v="comparacao">Empresa x Executante</button>
+    <i class="trilho-aba" id="trilhoAba"></i>
   </nav>
 
   <div class="filtros">
@@ -383,6 +448,61 @@ function preencherSelect(){
   if(![...s.options].some(o=>o.value===estado.sel))estado.sel='';
   s.value=estado.sel;
 }
+
+/* ===== ANIMAÇÕES ===== */
+const REDUZ=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+function posicionar(cont,ind,btn,larg){
+  if(!btn||!btn.offsetWidth)return;
+  const c=cont.getBoundingClientRect(),b=btn.getBoundingClientRect();
+  ind.style.left=(b.left-c.left)+'px';ind.style.width=(larg||b.width)+'px';
+}
+function indicadores(){
+  const nav=document.getElementById('abas'),tr=document.getElementById('trilhoAba');
+  const a=nav.querySelector('button.ativo');
+  if(a&&a.offsetWidth){
+    if(!nav.classList.contains('pronta')){tr.style.transition='none';}
+    posicionar(nav,tr,a);
+    if(!nav.classList.contains('pronta')){void tr.offsetWidth;tr.style.transition='';nav.classList.add('pronta');}
+  }
+  document.querySelectorAll('.seg').forEach(seg=>{
+    let p=seg.querySelector('.pilula');if(!p){p=document.createElement('i');p.className='pilula';seg.prepend(p);}
+    const b=seg.querySelector('button.ativo');if(!b||!b.offsetWidth)return;
+    const primeira=!seg.classList.contains('com-pilula');
+    if(primeira)p.style.transition='none';
+    posicionar(seg,p,b);
+    if(primeira){void p.offsetWidth;p.style.transition='';seg.classList.add('com-pilula');}
+  });
+}
+function contarNumero(el){
+  const txt=el.textContent.trim();
+  if(!/^[\d.]+$/.test(txt))return;
+  const alvo=parseInt(txt.replace(/\./g,''),10);if(!(alvo>0))return;
+  let t0=null;el.textContent='0';
+  (function passo(t){
+    if(t0===null)t0=t;
+    const k=Math.min(1,Math.max(0,(t-t0-150)/900)),e=1-Math.pow(1-k,3);
+    el.textContent=k<1?fmt(Math.round(alvo*e)):txt;
+    if(k<1)requestAnimationFrame(passo);
+  })(performance.now());
+}
+function animar(modo){
+  const main=document.getElementById('main');
+  indicadores();
+  main.dataset.anim=modo||'total';
+  if(REDUZ)return;
+  [...main.children].forEach((el,i)=>el.style.setProperty('--i',i));
+  main.querySelectorAll('.kpi').forEach((el,i)=>el.style.setProperty('--k',i));
+  main.querySelectorAll('.barra i,.hbar .trilho i').forEach(el=>{
+    const pai=el.closest('.barra,.hbar'),all=[...main.querySelectorAll('.barra,.hbar')],idx=Math.min(all.indexOf(pai),24);
+    el.style.setProperty('--b',idx<0?0:idx);
+  });
+  main.querySelectorAll('table.matriz tbody tr').forEach((tr,ri)=>[...tr.children].forEach((td,ci)=>td.style.setProperty('--d',ri+ci)));
+  main.querySelectorAll('table:not(.matriz) tbody tr').forEach((tr,i)=>{if(i<22)tr.style.setProperty('--r',i);});
+  main.querySelectorAll('.kpi strong').forEach(contarNumero);
+}
+window.addEventListener('resize',indicadores);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(indicadores);
+
 function marcarSeg(id,val){document.querySelectorAll('#'+id+' button').forEach(b=>b.classList.toggle('ativo',b.dataset.v===val));}
 function salvarUrl(){
   const q=new URLSearchParams();
@@ -392,13 +512,14 @@ function salvarUrl(){
   if(estado.rnc!=='todas')q.set('rnc',estado.rnc);
   history.replaceState(null,'',location.pathname+(q.toString()?'?'+q:''));
 }
-function render(){
+function render(modo){
   const comp=estado.aba==='comparacao';
   document.querySelectorAll('#abas button').forEach(b=>b.classList.toggle('ativo',b.dataset.v===estado.aba));
   document.querySelectorAll('.so-painel').forEach(e=>{e.hidden=comp;});
   preencherSelect();marcarSeg('segModo',estado.modo);marcarSeg('segRnc',estado.rnc);
   document.getElementById('main').innerHTML=comp?comparacao():estado.sel?detalhe(estado.sel):visaoGeral();
   salvarUrl();
+  animar(modo);
 }
 
 document.addEventListener('click',ev=>{
@@ -407,7 +528,7 @@ document.addEventListener('click',ev=>{
   const b=ev.target.closest('#segModo button');
   if(b){estado.modo=b.dataset.v;estado.sel='';estado.busca='';return render();}
   const c=ev.target.closest('#segRnc button');
-  if(c){estado.rnc=c.dataset.v;return render();}
+  if(c){estado.rnc=c.dataset.v;return render('leve');}
   const t=ev.target.closest('[data-ir]');
   if(t&&(t.classList.contains('clicavel')||t.classList.contains('cel'))){
     if(t.classList.contains('cel'))estado.modo='empresa';
