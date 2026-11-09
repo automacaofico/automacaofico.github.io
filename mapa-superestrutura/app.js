@@ -4,7 +4,8 @@
   const PATHS = {
     axis: 'assets/data/fico-axis-full.json',
     replay: 'assets/data/replay-history.json',
-    workbook: 'https://raw.githubusercontent.com/automacaofico/super/main/Modelo%20Acompanhamento%20Super%20-%20FINAL.xlsx'
+    // Primeiro o próprio github.io (mesma origem, funciona onde o raw.githubusercontent.com é bloqueado); depois o raw como reserva.
+    workbook: ['../super/Modelo%20Acompanhamento%20Super%20-%20FINAL.xlsx', 'https://raw.githubusercontent.com/automacaofico/super/main/Modelo%20Acompanhamento%20Super%20-%20FINAL.xlsx']
   };
 
   const PACKAGES = [
@@ -21,7 +22,6 @@
   // Mesmas atividades, ordem e cores do painel Super. Sem "previsto": a planilha só traz o realizado, em trechos.
   const DEFINITIONS = [
     { id: 'release', name: 'Liberação de plataforma', excel: 'liberacao de plataforma', start: 0, color: '#1a7a3a', segmented: true },
-    { id: 'prelast', name: 'Pré-lastro em plataforma', excel: 'pre lastro', start: 0, color: '#005a8a' },
     { id: 'grade', name: 'Montagem de grade', excel: 'montagem de grade', start: 0, color: '#1a5fa8' },
     { id: 'brita1', name: '1ª Descarga de brita', excel: '1a descarga de brita', start: 0, color: '#b87800' },
     { id: 'socaria1', name: 'Socaria — 1º levante', excel: 'socaria 1o levante', start: 0, color: '#c04a00' },
@@ -31,9 +31,10 @@
     { id: 'socaria4', name: 'Socaria — 4º levante', excel: 'socaria 4o levante', start: 0, color: '#1178a0' },
     { id: 'brita3', name: '3ª Descarga de brita', excel: '3a descarga de brita', start: 0, color: '#665500' },
     { id: 'socaria5', name: 'Socaria — 5º levante', excel: 'socaria 5o levante', start: 0, color: '#7b6a00' },
-    { id: 'brita4', name: '4ª Descarga de brita', excel: '4o descarga de brita', start: 0, color: '#883366' },
-    { id: 'socaria6', name: 'Socaria — 6º levante', excel: 'socaria 6o levante', start: 0, color: '#3a7050' },
-    { id: 'brita5', name: '5ª Descarga de brita', excel: '5o descarga de brita', start: 0, color: '#4a6b8a' },
+    { id: 'brita4', name: '4º Descarga de brita', excel: '4o descarga de brita', start: 0, color: '#883366', unplanned: true },
+    { id: 'socaria6', name: 'Socaria — 6º levante', excel: 'socaria 6o levante', start: 0, color: '#3a7050', unplanned: true },
+    { id: 'brita5', name: '5º Descarga de brita', excel: '5o descarga de brita', start: 0, color: '#4a6b8a', unplanned: true },
+    { id: 'brita6', name: '6º Descarga de brita', excel: '6o descarga de brita', start: 0, color: '#6a5a9a', unplanned: true },
     { id: 'weld', name: 'Solda aluminotérmica', excel: 'solda aluminotermica', start: 0, color: '#b55a00', material: true },
     { id: 'relief', name: 'Alívio de tensão', excel: 'alivio de tensao', start: 0, color: '#2a8a50' }
   ];
@@ -139,7 +140,8 @@
     const dateRow = findRow(rows, cells => cells.some(cell => cell.startsWith('data do levantamento')));
     let dataDate = null;
     if (dateRow >= 0) {
-      const raw = rows[dateRow].find((value, index) => index > 0 && value !== null && value !== '');
+      const labelIndex = rows[dateRow].findIndex(cell => norm(cell).startsWith('data do levantamento'));
+      const raw = rows[dateRow].find((value, index) => index > labelIndex && (value instanceof Date || typeof value === 'number' || (typeof value === 'string' && /\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}|\d{4}-\d{2}-\d{2}/.test(value))));
       dataDate = parseDate(raw);
     }
 
@@ -213,10 +215,19 @@
   async function loadWorkbook(source = PATHS.workbook, mode = 'online') {
     setSource('loading');
     try {
-      const buffer = source instanceof ArrayBuffer ? source : await fetch(source, { cache: 'no-store' }).then(response => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.arrayBuffer();
-      });
+      let buffer = source instanceof ArrayBuffer ? source : null;
+      if (!buffer) {
+        let lastError = null;
+        for (const url of [].concat(source)) {
+          try {
+            const response = await fetch(url, { cache: 'no-store' });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            buffer = await response.arrayBuffer();
+            break;
+          } catch (error) { lastError = error; }
+        }
+        if (!buffer) throw lastError || new Error('planilha indisponível');
+      }
       const parsed = parseWorkbook(buffer);
       state.date = parsed.date;
       state.activities = parsed.activities;
@@ -286,7 +297,7 @@
     el('activityCount').textContent = state.activities.length;
     el('activityList').innerHTML = state.activities.map(activity => `
       <button class="activity-card ${activity.id === state.selectedId ? 'active' : ''}" data-activity="${activity.id}" style="--activity-color:${activity.color}">
-        <span class="name">${activity.name}</span>
+        <span class="name">${activity.name}${activity.unplanned ? ' <b class="np" title="Atividade não prevista no planejamento">!</b>' : ''}</span>
         <span class="meta"><span>${activity.material ? (activity.materialConsumed > 0 ? `${Math.round(activity.materialConsumed).toLocaleString('pt-BR')} de ${Math.round(activity.materialTotal).toLocaleString('pt-BR')} pç` : '—') : station(activity.actualEnd)}</span><b>${percent(scoped(activity).progress)}</b></span>
         <span class="mini-progress"><i style="width:${Math.min(100, scoped(activity).progress)}%"></i></span>
       </button>`).join('');
@@ -298,7 +309,7 @@
     if (!activity) return;
     const metrics = scoped(activity);
     const currentPackage = packageAt(activity.actualEnd);
-    el('detailName').textContent = activity.name;
+    el('detailName').textContent = activity.name + (activity.unplanned ? ' (não prevista)' : '');
     el('detailStatus').textContent = hasProgress(activity) ? 'Em execução' : 'Não iniciada';
     el('detailProgressBar').style.width = `${Math.min(100, metrics.progress)}%`;
     el('detailProgressBar').style.background = activity.color;
@@ -320,7 +331,7 @@
     el('activityTableBody').innerHTML = state.activities.map(activity => {
       const metrics = scoped(activity);
       return `<tr data-table-activity="${activity.id}" class="${activity.id === state.selectedId ? 'active' : ''}" style="--row-color:${activity.color}">
-        <td><span class="table-activity"><i></i>${activity.name}</span></td>
+        <td><span class="table-activity"><i></i>${activity.name}${activity.unplanned ? ' <b class="np" title="Atividade não prevista no planejamento">!</b>' : ''}</span></td>
         <td>${activity.actualLength > 0 ? station(activity.start) : '—'}</td><td>${activity.actualLength > 0 ? station(activity.actualEnd) : '—'}</td><td>${quantity(metrics.length, metrics.unit)}</td>
         <td>${percent(metrics.progress)}</td><td>${activity.material ? '—' : activity.intervals.length}</td>
         <td>${activity.actualLength > 0 ? packageAt(activity.actualEnd).name : '—'}</td></tr>`;
@@ -384,12 +395,14 @@
         version: 8,
         sources: {
           street: { type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], tileSize: 256, attribution: '© OpenStreetMap' },
-          dark: { type: 'raster', tiles: ['https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'], tileSize: 256, attribution: '© OpenStreetMap © CARTO' },
+          dark: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 16, attribution: 'Esri, HERE, Garmin, © OpenStreetMap' },
+          darkLabels: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 16 },
           satellite: { type: 'raster', tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize: 256, maxzoom: 17, attribution: 'Esri' }
         },
         layers: [
           { id: 'street', type: 'raster', source: 'street' },
           { id: 'dark', type: 'raster', source: 'dark', layout: { visibility: document.documentElement.dataset.theme === 'dark' ? 'visible' : 'none' } },
+          { id: 'dark-labels', type: 'raster', source: 'darkLabels', layout: { visibility: document.documentElement.dataset.theme === 'dark' ? 'visible' : 'none' } },
           { id: 'satellite', type: 'raster', source: 'satellite', layout: { visibility: 'none' } }
         ]
       },
@@ -664,6 +677,7 @@
     const darkTheme = document.documentElement.dataset.theme === 'dark';
     state.map.setLayoutProperty('street', 'visibility', name === 'street' && !darkTheme ? 'visible' : 'none');
     state.map.setLayoutProperty('dark', 'visibility', name === 'street' && darkTheme ? 'visible' : 'none');
+    state.map.setLayoutProperty('dark-labels', 'visibility', name === 'street' && darkTheme ? 'visible' : 'none');
     state.map.setLayoutProperty('satellite', 'visibility', name === 'satellite' ? 'visible' : 'none');
     document.querySelectorAll('[data-basemap]').forEach(button => {
       const active = button.dataset.basemap === name;

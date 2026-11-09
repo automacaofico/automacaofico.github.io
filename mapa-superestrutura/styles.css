@@ -401,3 +401,6 @@ td:first-child { color: var(--ink); font-weight: 700; }
 [data-theme="dark"] .front-popup strong { color: white; }
 [data-theme="dark"] .work-tooltip > strong { color: white; }
 [data-theme="dark"] .work-tooltip-head span { color: #63bfd8; }
+
+/* atividade não prevista no planejamento */
+.np{display:inline-grid;place-items:center;width:15px;height:15px;margin-left:6px;border-radius:50%;background:#f59e0b;color:#fff;font:700 10px/1 "DM Sans",sans-serif;vertical-align:1px}
