@@ -505,7 +505,8 @@ window.addEventListener('beforeprint',()=>Object.values(charts).forEach(c=>c&&c.
 // ============================================================
 // Check in / Check out — curva S das pendências (previsto × realizado), no padrão da
 // apresentação A&M. Escopo: Pacotes 1/2/3 (mesmo do Painel). Abas: Consolidado, PCT 1, PCT 2, PCT 3 e
-// Superestrutura (pendências da empresa SOMAFEL, que ficam fora de PCT 1/3). Calculado direto da base EAP:
+// Superestrutura (recorte da empresa SOMAFEL). Os pacotes seguem a coluna Pacote da EAP, inclusive para a
+// SOMAFEL, então essas pendências aparecem no seu pacote e também no recorte. Calculado direto da base EAP:
 //  · Previsto  = acumulado de pendências por Data_Prazo (as sem Data_Prazo válida entram na data do último prazo)
 //  · Realizado = acumulado por Data_Encerramento (encerradas sem data entram na data de referência)
 //  · Projeção  = ritmo das últimas 4 semanas, em todas as abas (mesma conta do painel de Pendências)
@@ -519,7 +520,7 @@ const CIO_ABAS=[
   {id:'super',nome:'Superestrutura (Somafel)',grupo:'SUPER',titulo:'Superestrutura (Somafel) – curva de avanço com previsto x realizado'}
 ];
 const cioEhSuper=r=>esc(r['Empresa']).trim().toUpperCase()==='SOMAFEL';
-const cioGrupo=r=>cioEhSuper(r)?'SUPER':(CIO_PAC[normPacote(r['Pacote'])]||null);
+const cioNoGrupo=(r,g)=>g==='SUPER'?cioEhSuper(r):CIO_PAC[normPacote(r['Pacote'])]===g;
 const cioBaixada=r=>esc(r['Status_Pendencia']).trim().toUpperCase()==='ENCERRADO';
 function cioSerial(v){
   if(v==null||v==='')return null;
@@ -541,7 +542,7 @@ function cioTendencia(encs,saldo,hoje){
 }
 function cioCalc(aba){
   const base=(ultimasLinhasBanco||[]).filter(r=>CIO_PAC[normPacote(r['Pacote'])]);
-  const rows=aba.grupo?base.filter(r=>cioGrupo(r)===aba.grupo):base;
+  const rows=aba.grupo?base.filter(r=>cioNoGrupo(r,aba.grupo)):base;
   const total=rows.length, baix=rows.filter(cioBaixada);
   const prazos=rows.map(r=>cioSerial(r['Data_Prazo'])).filter(Boolean).sort((a,b)=>a-b);
   const encs=baix.map(r=>cioSerial(r['Data_Encerramento'])).filter(Boolean).sort((a,b)=>a-b);
@@ -567,7 +568,7 @@ function cioCalc(aba){
   const stat=(sel)=>{const b=sel.filter(cioBaixada).length;return {n:sel.length,b,pct:sel.length?b/sel.length*100:0};};
   const cert=r=>esc(r['Certificação ?']).trim().toUpperCase();
   const grupos=aba.grupo?[aba.grupo]:['PCT 1','PCT 2','PCT 3','SUPER'];
-  const porGrupo=grupos.map(g=>{const s=base.filter(r=>cioGrupo(r)===g);return {g,cert:stat(s.filter(r=>cert(r)==='CERTIFICAÇÃO')),ncert:stat(s.filter(r=>cert(r)==='NÃO CERTIFICAÇÃO'))};});
+  const porGrupo=grupos.map(g=>{const s=base.filter(r=>cioNoGrupo(r,g));return {g,cert:stat(s.filter(r=>cert(r)==='CERTIFICAÇÃO')),ncert:stat(s.filter(r=>cert(r)==='NÃO CERTIFICAÇÃO'))};});
   const porEmpresa={};
   rows.forEach(r=>{
     const k=esc(r['Empresa']).trim().toUpperCase()||'SEM EMPRESA';
@@ -585,8 +586,8 @@ function cioNota(aba,c){
     +'. <b>Realizado</b> = encerramentos acumulados por Data_Encerramento'
     +(c.semDataEnc?' ('+c.semDataEnc+' encerrada(s) sem data entram na data de referência)':'')+'. ';
   nota+=ehCons
-    ?'<b>SUPER</b> = pendências da empresa SOMAFEL (superestrutura), que ficam fora de PCT 1 e PCT 3 nos gráficos por pacote. A linha tracejada projeta o fechamento até '+(c.fimTxt||'—')+', no ritmo de encerramentos das últimas 4 semanas (dias úteis, seg–sáb).'
-    :(aba.grupo==='SUPER'?'Aba da empresa SOMAFEL (superestrutura): essas pendências não entram em PCT 1 e PCT 3. ':'')
+    ?'Os pacotes seguem a coluna Pacote da EAP, incluindo a SOMAFEL. <b>SUPER</b> = recorte das pendências da empresa SOMAFEL (superestrutura), que também estão contadas nos pacotes. A linha tracejada projeta o fechamento até '+(c.fimTxt||'—')+', no ritmo de encerramentos das últimas 4 semanas (dias úteis, seg–sáb).'
+    :(aba.grupo==='SUPER'?'Aba da empresa SOMAFEL (superestrutura): recorte de pendências que também estão contadas em PCT 1, PCT 2 e PCT 3, conforme a coluna Pacote da EAP. ':'')
       +'A tendência de fechamento usa o ritmo de encerramentos das últimas 4 semanas (dias úteis, seg–sáb)'+(c.fimTxt?'':'; sem encerramentos nesse período, não há projeção')+'.';
   if(c.marcos.length)nota+=' '+(c.prazo?'A linha vermelha marca o prazo final do pacote ('+c.prazo.txt+', considerado o último dia do mês); ela não altera':'As linhas vermelhas marcam o prazo final de cada pacote ('+c.marcos.map(m=>m.rot).join(', ')+', considerado o último dia do mês); elas não alteram')+' o Planejado, que segue a Data_Prazo de cada pendência.';
   return nota;
