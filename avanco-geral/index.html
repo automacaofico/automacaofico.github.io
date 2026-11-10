@@ -602,11 +602,11 @@
       nota = 'Mesmos números do indicador geral acima, separados por pacote.';
     } else if (v === 'empresa') {
       empresasCard().forEach(function (e) {
-        html += cartao(e, fmtInt(state.pendTot[e]) + ' pendências nos Pacotes 1 a 3', valoresGrupo('empresa', e), e === 'SOMAFEL' ? 'Físico de SUP' : 'Físico de Infra',
-          '../empresas/?e=' + encodeURIComponent(e), { fisico: 'sem físico para esta empresa' });
+        html += cartao(e, fmtInt(state.pendTot[e]) + ' pendências como executante nos Pacotes 1 a 3', valoresGrupo('empresa', e), e === 'SOMAFEL' ? 'Físico de SUP' : 'Físico de Infra',
+          '../empresas/?v=executante&e=' + encodeURIComponent(e), { fisico: 'sem físico para esta empresa' });
       });
       var p6 = state.dados.fisicoP6;
-      nota = 'Empresas da EAP nos Pacotes 1 a 3 (coluna Empresa; ATERPA R somada à ATERPA). Físico: cronograma Primavera' + (p6 && p6.dataRef ? ' (data ' + p6.dataRef + ')' : '') +
+      nota = 'Pendências por executante: coluna Executante da EAP nos Pacotes 1 a 3 (em branco = a própria Empresa; ATERPA R somada à ATERPA). As RNCs e os databooks seguem a contratada, porque essas bases não informam o executante. Físico: cronograma Primavera' + (p6 && p6.dataRef ? ' (data ' + p6.dataRef + ')' : '') +
         ' para EMPA (Infra P1), ATERPA (Infra P2), ÁPIA (Infra P3) e SOMAFEL (SUP P1 a P3); GSA e Civil Master, que o cronograma não separa, usam o “Label do avanço” do painel Infra' + (state.fis && state.fis.ref ? ' (ref. ' + state.fis.ref + ')' : '') +
         '. RNCs da OIA: Base Reg' + (state.rncRef ? ' de ' + state.rncRef : '') + ', todas as frentes da empresa. Databooks: BI Data Book' + (state.bk ? ' de ' + state.bk.dataRef : '') + ', pelo fornecedor. Empresas que só aparecem nas RNCs ou nos databooks estão no Painel por Empresa.';
     } else {
@@ -821,7 +821,7 @@
       var pac = {}, emp = {}, disc = {}, tot = {};
       rows.forEach(function (r) {
         var p = firstPacote(r['Pacote']); if (p == null || PACOTES.indexOf(p) < 0) return;
-        var eEmp = canonEmp(r['Empresa']), eExe = canonEmp(r['Executante']), e = eEmp || eExe || 'SEM EMPRESA';
+        var eEmp = canonEmp(r['Empresa']), eExe = canonEmp(r['Executante']), e = eExe || eEmp || 'SEM EMPRESA'; // por executante; Executante em branco = a própria Empresa
         tot[e] = (tot[e] || 0) + 1;
         if (String(r['Certificação ?']).trim().toUpperCase() !== 'CERTIFICAÇÃO') return;
         var st = String(r['Status_Pendencia']).trim().toUpperCase(); if (!st) return;
