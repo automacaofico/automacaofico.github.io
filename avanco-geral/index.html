@@ -804,6 +804,73 @@
       painel(sp, 'Pacote ' + p, vals, geral(vals));
       pontosPainel(sp, todos.filter(function (o) { return o.pac === p; }));
     });
+
+    // cartão genérico (abas por empresa e SUP x Infra), com os mesmos pesos e exclusões da tela
+    var CURTO = { fisico: 'Físico', pend: 'Pendências cert.', rnc: 'RNCs da OIA', bk: 'Databooks' };
+    function cartaoPpt(s, x, y, w, h, o) {
+      var excl = o.excl || [], comps = COMP.filter(function (c) { return excl.indexOf(c.id) < 0; });
+      var somaP = comps.reduce(function (a, c) { return a + PESOS[c.id]; }, 0), PES = {};
+      comps.forEach(function (c) { PES[c.id] = PESOS[c.id] / somaP; });
+      var soma = 0, ok = 0, falta = [];
+      comps.forEach(function (c) { var v = o.vals[c.id]; if (v) { soma += PES[c.id] * v.v; ok += PES[c.id]; } else falta.push(o.compacto ? CURTO[c.id].replace(' cert.', '') : (c.id === 'fisico' ? o.nomeFis : c.nome)); });
+      var gv = ok > 0 ? soma : null, k = o.compacto, ix = x + (k ? 0.14 : 0.32), iw = w - (k ? 0.28 : 0.64);
+      s.addShape(P.ShapeType.rect, { x: x, y: y, w: w, h: h, fill: { color: 'FFFFFF' }, line: { color: LINE, width: 0.75 } });
+      s.addShape(P.ShapeType.rect, { x: x, y: y, w: w, h: 0.05, fill: { color: o.cor || '3578BC' }, line: { color: o.cor || '3578BC', width: 0 } });
+      var ry, rh;
+      if (k) {
+        s.addText(o.titulo, { x: ix, y: y + 0.1, w: iw, h: 0.3, fontFace: BF, fontSize: 11.5, bold: true, color: CARD_INK, margin: 0, valign: 'middle' });
+        s.addText(gv == null ? '—' : pp(gv) + '%', { x: ix, y: y + 0.4, w: iw, h: 0.42, fontFace: HF, fontSize: 21, bold: true, color: CARD_INK, margin: 0, valign: 'middle' });
+        if (o.sub) s.addText(o.sub, { x: ix, y: y + 0.84, w: iw, h: 0.2, fontFace: BF, fontSize: 8, color: MID, margin: 0 });
+        bar(s, ix, y + 1.08, iw, 0.08, gv || 0, '3578BC');
+        ry = y + 1.3; rh = 0.38;
+      } else {
+        s.addText(o.titulo, { x: ix, y: y + 0.22, w: iw - 2.3, h: 0.45, fontFace: BF, fontSize: 18, bold: true, color: CARD_INK, margin: 0, valign: 'middle' });
+        s.addText(gv == null ? '—' : pp(gv) + '%', { x: x + w - 2.6, y: y + 0.15, w: 2.28, h: 0.6, align: 'right', fontFace: HF, fontSize: 30, bold: true, color: CARD_INK, margin: 0, valign: 'middle' });
+        if (o.sub) s.addText(o.sub, { x: ix, y: y + 0.72, w: iw, h: 0.25, fontFace: BF, fontSize: 10.5, color: MID, margin: 0 });
+        bar(s, ix, y + 1.08, iw, 0.13, gv || 0, '3578BC');
+        ry = y + 1.5; rh = 1.0;
+      }
+      comps.forEach(function (c, i) {
+        var v = o.vals[c.id], yy = ry + i * rh, cor = HX[c.id], nm = k ? CURTO[c.id] : (c.id === 'fisico' ? o.nomeFis : c.nome);
+        s.addShape(P.ShapeType.rect, { x: ix, y: yy + (k ? 0.05 : 0.08), w: k ? 0.09 : 0.14, h: k ? 0.09 : 0.14, fill: { color: cor }, line: { color: cor, width: 0 } });
+        s.addText([{ text: nm + ' ', options: { color: CARD_INK } }, { text: '(' + Math.round(PES[c.id] * 100) + '%)', options: { color: SOFT } }],
+          { x: ix + (k ? 0.15 : 0.26), y: yy - 0.02, w: iw - (k ? 0.75 : 1.9), h: k ? 0.22 : 0.3, fontFace: BF, fontSize: k ? 8.5 : 13, margin: 0, valign: 'middle' });
+        s.addText(v ? pp(v.v) + '%' : '—', { x: ix + iw - (k ? 0.6 : 1.4), y: yy - 0.02, w: k ? 0.6 : 1.4, h: k ? 0.22 : 0.32, align: 'right', fontFace: BF, fontSize: k ? 9.5 : 15, bold: true, color: CARD_INK, margin: 0, valign: 'middle' });
+        bar(s, ix, yy + (k ? 0.24 : 0.38), iw, k ? 0.06 : 0.09, v ? v.v : 0, cor);
+        if (!k) s.addText(v ? (v.det || '') : ((o.semDados && o.semDados[c.id]) || 'sem dados'), { x: ix, y: yy + 0.52, w: iw, h: 0.4, fontFace: BF, fontSize: 9.5, color: SOFT, margin: 0, valign: 'top' });
+      });
+      var notas = [];
+      if (excl.length) notas.push(excl.map(function (id) { return id === 'fisico' ? 'Físico' : 'Databooks'; }).join(' e ') + ' não se aplicam; pesos reescalados.');
+      if (falta.length) notas.push('Parcial · faltam ' + falta.join(', ') + '.');
+      if (notas.length) s.addText(notas.join(' '), { x: ix, y: y + h - (k ? 0.36 : 0.42), w: iw, h: k ? 0.32 : 0.3, fontFace: BF, fontSize: k ? 7.5 : 10, italic: true, color: 'A8620F', margin: 0, valign: 'bottom' });
+    }
+    function nota(s, txt) {
+      s.addText(txt, { x: 0.4, y: 6.82, w: 12.53, h: 0.26, fontFace: BF, fontSize: 9, italic: true, color: MID, margin: 0, valign: 'top' });
+    }
+
+    // 5) SUP x Infra
+    var s5 = slide('Avanço para certificação – SUP x Infra');
+    ['SUP', 'INFRA'].forEach(function (d, i) {
+      cartaoPpt(s5, 0.4 + i * 6.42, 0.8, 6.11, 5.9, {
+        titulo: NOME_DISC[d], sub: d === 'SUP' ? 'SOMAFEL: trilhos, dormentes, lastro e soldas' : 'Demais empresas: terraplenagem, drenagem, bueiros e obras de arte',
+        vals: valoresGrupo('disc', d), nomeFis: d === 'SUP' ? 'Físico de SUP' : 'Físico de Infra', cor: d === 'SUP' ? '6B46A8' : '3578BC'
+      });
+    });
+    nota(s5, 'Pacotes 1 a 3. Nas pendências e RNCs, SUP é a SOMAFEL; nos databooks, SUP inclui fornecedores de materiais de via. Físico: cronograma Primavera, ponderado pelas Budgeted Units.');
+
+    // 6) por empresa (até 10 por slide, em 2 linhas de 5)
+    var emps = empresasCard(), porSlide = 10;
+    for (var ini = 0; ini < emps.length; ini += porSlide) {
+      var lote = emps.slice(ini, ini + porSlide), se = slide('Avanço para certificação – Por empresa' + (emps.length > porSlide ? ' (' + (ini / porSlide + 1) + ')' : ''));
+      var cw = 2.38, gx = 0.15, ch = 2.95, gy = 0.12;
+      lote.forEach(function (e, i) {
+        cartaoPpt(se, 0.4 + (i % 5) * (cw + gx), 0.72 + Math.floor(i / 5) * (ch + gy), cw, ch, {
+          titulo: e, sub: fmtInt(state.pendTot[e]) + ' pendências como executante', vals: valoresGrupo('empresa', e),
+          nomeFis: e === 'SOMAFEL' ? 'Físico de SUP' : 'Físico de Infra', excl: e === 'VALE' ? ['fisico', 'bk'] : null, compacto: true
+        });
+      });
+      nota(se, 'Pendências pela coluna Executante da EAP (Pacotes 1 a 3). RNCs e databooks pela contratada. Físico: painel Infra; SOMAFEL pelo SUP do cronograma Primavera.');
+    }
     return P;
   }
 
