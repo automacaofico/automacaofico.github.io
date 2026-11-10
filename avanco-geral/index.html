@@ -234,6 +234,7 @@
       <p class="hint" style="margin:0">As <b>Pendências certificáveis</b> são lidas sozinhas da base diária. Envie aqui os 3 arquivos padrões: o sistema lê o arquivo no seu navegador, mostra o resultado e só publica quando você clicar em “Publicar”.</p>
       <div class="drops">
         <label class="drop" data-k="fisico"><span class="t">Físico de planejamento</span><span class="w">Peso 10% · “Pacote a Pacote”.xlsx</span><span class="f" data-f>Clique ou arraste o arquivo</span><span class="res" data-r></span><input type="file" accept=".xlsx,.xlsm"></label>
+        <label class="drop" data-k="fisicoP6"><span class="t">Físico Infra x SUP (Primavera)</span><span class="w">Abas Por empresa e SUP x Infra · “Avanço Infra e Superp Capex”.xlsx</span><span class="f" data-f>Clique ou arraste o arquivo</span><span class="res" data-r></span><input type="file" accept=".xlsx,.xlsm"></label>
         <label class="drop" data-k="rnc"><span class="t">RNC (só identificadas pela OIA)</span><span class="w">Peso 40% · “Base_Reg. 1 e 2”.xlsx</span><span class="f" data-f>Clique ou arraste o arquivo</span><span class="res" data-r></span><input type="file" accept=".xlsx,.xlsm"></label>
         <label class="drop" data-k="databooks"><span class="t">Databooks BKs</span><span class="w">Peso 40% · “BK_FICO_Lote01…”.xlsx</span><span class="f" data-f>Clique ou arraste o arquivo</span><span class="res" data-r></span><input type="file" accept=".xlsx,.xlsm"></label>
       </div>
@@ -269,7 +270,7 @@
     { id: 'bk', nome: 'Databooks BKs', cor: 'var(--c-bk)' }
   ];
   var PACOTES = [1, 2, 3];
-  var NOMES = { fisico: 'Físico', rnc: 'RNC (OIA)', databooks: 'Databooks' };
+  var NOMES = { fisico: 'Físico', fisicoP6: 'Físico Infra x SUP (Primavera)', rnc: 'RNC (OIA)', databooks: 'Databooks' };
 
   var state = { dados: {}, pend: null, pendEmp: null, pendDisc: null, pendTot: null, pendRef: '', pendErro: '', pending: {}, previewOnly: false, loading: true,
     vis: 'pacote', rncEmp: null, rncDisc: null, rncRef: '', bk: null, fis: null, extErro: [] };
@@ -425,10 +426,64 @@
     });
   }
 
-  var PARSERS = { fisico: parseFisico, rnc: parseRnc, databooks: parseDatabooks };
+  // Planilha mensal do cronograma Primavera P6 (“Avanço Infra e Superp Capex …”): linhas Infraestrutura / Superestrutura,
+  // com os pacotes abaixo de cada uma; colunas Budgeted Units (peso) e Actual Units (realizado).
+  function parseFisicoP6(file) {
+    return readWB(file).then(function (wb) {
+      var melhor = null;
+      wb.SheetNames.forEach(function (nome) {
+        if (melhor) return;
+        var V = rowsOf(wb.Sheets[nome], true), F = rowsOf(wb.Sheets[nome], false), hdr = -1, cN = -1, cB = -1, cA = -1;
+        for (var r = 0; r < Math.min(V.length, 30) && hdr < 0; r++) {
+          for (var c = 0; c < V[r].length; c++) {
+            var t = norm(V[r][c]);
+            if (t === 'activity id') cN = c;
+            if (t === 'budgeted units') cB = c;
+            if (t === 'actual units') cA = c;
+          }
+          if (cB >= 0 && cA >= 0) hdr = r; else { cN = -1; cB = -1; cA = -1; }
+        }
+        if (hdr < 0) return;
+        if (cN < 0) cN = 0;
+        var ref = '', mes = '';
+        for (var r0 = 0; r0 < hdr; r0++) F[r0].forEach(function (v) {
+          var m = String(v).match(/DD\s*(\d{1,2})\/([a-zç]{3})\/(\d{2,4})/i); if (m && !ref) ref = m[1].padStart(2, '0') + '/' + m[2].toLowerCase() + '/' + m[3];
+          var m2 = String(v).match(/-\s*([a-zç]{3}\/\d{2,4})/i); if (m2 && !mes) mes = m2[1].toLowerCase();
+        });
+        var grupo = null, out = { infra: {}, sup: {} };
+        for (var r1 = hdr + 1; r1 < V.length; r1++) {
+          var nm = norm(V[r1][cN]);
+          if (nm === 'infraestrutura') { grupo = 'infra'; continue; }
+          if (nm === 'superestrutura') { grupo = 'sup'; continue; }
+          if (nm === 'comum') { grupo = null; continue; }
+          var mp = nm.match(/^pacote\s*0*(\d+)/);
+          if (!grupo || !mp) continue;
+          var b = Number(V[r1][cB]), a = Number(V[r1][cA]);
+          if (b > 0 && !isNaN(a)) out[grupo][parseInt(mp[1], 10)] = { peso: b, real: a };
+        }
+        if (Object.keys(out.infra).length && Object.keys(out.sup).length) melhor = { arquivo: file.name, aba: nome, dataRef: ref, mes: mes, infra: out.infra, sup: out.sup };
+      });
+      if (!melhor) throw new Error('Não encontrei as colunas Budgeted Units / Actual Units com os pacotes de Infraestrutura e Superestrutura.');
+      return melhor;
+    });
+  }
+  // físico ponderado pelas Budgeted Units de um conjunto de pacotes
+  function fisP6(grupo, pacs) {
+    var f = state.dados.fisicoP6; if (!f || !f[grupo]) return null;
+    var a = 0, b = 0; pacs.forEach(function (p) { var x = f[grupo][p]; if (x) { a += x.real; b += x.peso; } });
+    return b > 0 ? { v: a / b, n: a, d: b } : null;
+  }
+  var PARSERS = { fisico: parseFisico, fisicoP6: parseFisicoP6, rnc: parseRnc, databooks: parseDatabooks };
 
   function resumoUpload(k, d) {
     var linhas = [];
+    if (k === 'fisicoP6') {
+      PACOTES.forEach(function (p) {
+        var i = d.infra[p], u = d.sup[p];
+        linhas.push('Pacote ' + p + ': Infra ' + (i ? fmtPct(i.real / i.peso) : '—') + ' · SUP ' + (u ? fmtPct(u.real / u.peso) : '—'));
+      });
+      return '✓ ' + (d.mes ? 'Físico ' + d.mes : 'Físico Primavera') + (d.dataRef ? ' · data ' + d.dataRef : '') + ' · aba ' + d.aba + '\n' + linhas.join('\n');
+    }
     PACOTES.forEach(function (p) {
       var o = d.pacotes[p]; if (!o) { linhas.push('Pacote ' + p + ': sem dados'); return; }
       if (k === 'fisico') linhas.push('Pacote ' + p + ': real ' + fmtPct(o.real / o.peso) + ' · previsto ' + fmtPct(o.previsto / o.peso));
@@ -459,11 +514,17 @@
   }
   function valoresGrupo(tipo, k) {
     var out = {}, pe, r, b;
+    var P6 = state.dados.fisicoP6, refP6 = P6 ? 'cronograma Primavera' + (P6.dataRef ? ', data ' + P6.dataRef : '') : '';
     if (tipo === 'empresa') {
-      out.fisico = state.fis ? fisicoDe(state.fis.frentes.filter(function (f) { return f.emp === k; })) : null;
+      var mapa = { EMPA: ['infra', [1]], ATERPA: ['infra', [2]], 'ÁPIA': ['infra', [3]], SOMAFEL: ['sup', [1, 2, 3]] }[k];
+      var fp = mapa && fisP6(mapa[0], mapa[1]);
+      out.fisico = fp ? { v: fp.v, det: (mapa[0] === 'sup' ? 'SUP dos Pacotes 1 a 3' : 'Infra do Pacote ' + mapa[1][0]) + ' · ' + refP6, n: fp.n, d: fp.d }
+        : (state.fis ? fisicoDe(state.fis.frentes.filter(function (f) { return f.emp === k; })) : null);
       pe = state.pendEmp && state.pendEmp[k]; r = state.rncEmp && state.rncEmp[k]; b = state.bk && state.bk.emp && state.bk.emp[k];
     } else {
-      out.fisico = k === 'INFRA' && state.fis ? fisicoDe(state.fis.frentes) : null;
+      var fd = fisP6(k === 'SUP' ? 'sup' : 'infra', PACOTES);
+      out.fisico = fd ? { v: fd.v, det: fmtInt(Math.round(fd.n)) + ' de ' + fmtInt(Math.round(fd.d)) + ' unidades, Pacotes 1 a 3 · ' + refP6, n: fd.n, d: fd.d }
+        : (k === 'INFRA' && state.fis ? fisicoDe(state.fis.frentes) : null);
       pe = state.pendDisc && state.pendDisc[k]; r = state.rncDisc && state.rncDisc[k]; b = state.bk && state.bk.disc && state.bk.disc[k];
       if (b) b = { tot: b.tot, apr: b.apr };
     }
@@ -542,16 +603,18 @@
     } else if (v === 'empresa') {
       empresasCard().forEach(function (e) {
         html += cartao(e, fmtInt(state.pendTot[e]) + ' pendências nos Pacotes 1 a 3', valoresGrupo('empresa', e), e === 'SOMAFEL' ? 'Físico de SUP' : 'Físico de Infra',
-          '../empresas/?e=' + encodeURIComponent(e), { fisico: e === 'SOMAFEL' ? 'físico de SUP entra depois' : 'sem físico no painel Infra' });
+          '../empresas/?e=' + encodeURIComponent(e), { fisico: 'sem físico para esta empresa' });
       });
-      nota = 'Empresas da EAP nos Pacotes 1 a 3 (coluna Empresa; ATERPA R somada à ATERPA). Físico: “Label do avanço” do painel Infra' + (state.fis && state.fis.ref ? ' (ref. ' + state.fis.ref + ')' : '') +
+      var p6 = state.dados.fisicoP6;
+      nota = 'Empresas da EAP nos Pacotes 1 a 3 (coluna Empresa; ATERPA R somada à ATERPA). Físico: cronograma Primavera' + (p6 && p6.dataRef ? ' (data ' + p6.dataRef + ')' : '') +
+        ' para EMPA (Infra P1), ATERPA (Infra P2), ÁPIA (Infra P3) e SOMAFEL (SUP P1 a P3); GSA e Civil Master, que o cronograma não separa, usam o “Label do avanço” do painel Infra' + (state.fis && state.fis.ref ? ' (ref. ' + state.fis.ref + ')' : '') +
         '. RNCs da OIA: Base Reg' + (state.rncRef ? ' de ' + state.rncRef : '') + ', todas as frentes da empresa. Databooks: BI Data Book' + (state.bk ? ' de ' + state.bk.dataRef : '') + ', pelo fornecedor. Empresas que só aparecem nas RNCs ou nos databooks estão no Painel por Empresa.';
     } else {
       ['SUP', 'INFRA'].forEach(function (d) {
         html += cartao(NOME_DISC[d], d === 'SUP' ? 'SOMAFEL: trilhos, dormentes, lastro e soldas' : 'Demais empresas: terraplenagem, drenagem, bueiros e obras de arte',
-          valoresGrupo('disc', d), d === 'SUP' ? 'Físico de SUP' : 'Físico de Infra', '../sup-infra/', { fisico: d === 'SUP' ? 'entra depois' : 'sem dados' });
+          valoresGrupo('disc', d), d === 'SUP' ? 'Físico de SUP' : 'Físico de Infra', '../sup-infra/', { fisico: 'sem dados' });
       });
-      nota = 'Mesma divisão do Painel SUP x Infra: nas pendências e RNCs, SUP é a SOMAFEL; nos databooks, SUP inclui fornecedores de materiais de via. O físico de SUP entra depois; até lá, o SUP mostra resultado parcial.';
+      nota = 'Mesma divisão do Painel SUP x Infra: nas pendências e RNCs, SUP é a SOMAFEL; nos databooks, SUP inclui fornecedores de materiais de via. Físico: cronograma Primavera, Infraestrutura e Superestrutura dos Pacotes 1 a 3, ponderado pelas Budgeted Units.';
     }
     if (state.extErro.length && v !== 'pacote' && !cr) nota += ' Não consegui ler agora: ' + state.extErro.join(', ') + '.';
     document.getElementById('pgrid').innerHTML = html;
@@ -567,6 +630,7 @@
     document.getElementById('srcTable').innerHTML =
       '<thead><tr><th>Componente</th><th>Peso</th><th>Arquivo / origem</th><th>Referência</th><th>Atualizado em</th><th></th></tr></thead><tbody>' +
       lin('Físico de planejamento', '10%', d.fisico && esc(d.fisico.arquivo), d.fisico && ('mês ' + esc(d.fisico.mes)), d.fisico && fmtWhen(d.fisico.atualizadoEm), !!d.fisico) +
+      lin('Físico Infra x SUP (Primavera) · abas empresa e SUP x Infra', '10%', d.fisicoP6 && esc(d.fisicoP6.arquivo), d.fisicoP6 && ('data ' + esc(d.fisicoP6.dataRef)), d.fisicoP6 && fmtWhen(d.fisicoP6.atualizadoEm), !!d.fisicoP6) +
       lin('Pendências certificáveis', '10%', 'Base_Pendencias_FICO.xlsx (leitura diária)', state.pendRef && esc(state.pendRef), state.pendRef ? 'automático' : '', !!state.pend) +
       lin('RNC (identificadas pela OIA)', '40%', d.rnc && esc(d.rnc.arquivo), d.rnc && esc(d.rnc.dataRef), d.rnc && fmtWhen(d.rnc.atualizadoEm), !!d.rnc) +
       lin('Databooks BKs', '40%', d.databooks && esc(d.databooks.arquivo), '', d.databooks && fmtWhen(d.databooks.atualizadoEm), !!d.databooks) +
@@ -908,7 +972,7 @@
   });
 
   // exposto para testes
-  window.AG = { parseRnc: parseRnc, parseDatabooks: parseDatabooks, parseFisico: parseFisico, buildPptx: buildPptx, pontosTodos: pontosTodos, state: state, render: render };
+  window.AG = { parseRnc: parseRnc, parseDatabooks: parseDatabooks, parseFisico: parseFisico, parseFisicoP6: parseFisicoP6, buildPptx: buildPptx, pontosTodos: pontosTodos, state: state, render: render };
 
   function fim() {
     state.loading = false;
