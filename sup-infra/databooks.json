@@ -83,5 +83,136 @@
     ]
    ]
   }
- }
+ },
+ "emp": {
+  "CONDUTEC SOLUCOES EM FIXACAO": {
+   "tot": 11,
+   "apr": 9
+  },
+  "CONPREM": {
+   "tot": 7,
+   "apr": 1
+  },
+  "ÁPIA": {
+   "tot": 6,
+   "apr": 2
+  },
+  "HF SISTEMA DE FREIOS": {
+   "tot": 5,
+   "apr": 5
+  },
+  "BR RAILPARTS": {
+   "tot": 5,
+   "apr": 4
+  },
+  "ABS CONSTRUTORA E SERVICOS": {
+   "tot": 5,
+   "apr": 5
+  },
+  "SOMAFEL": {
+   "tot": 4,
+   "apr": 1
+  },
+  "CHINA RAILWAY (PANGANG)": {
+   "tot": 3,
+   "apr": 2
+  },
+  "GSA": {
+   "tot": 3,
+   "apr": 2
+  },
+  "ATERPA": {
+   "tot": 3,
+   "apr": 2
+  },
+  "EMPA": {
+   "tot": 3,
+   "apr": 2
+  },
+  "WIRKLICH PLASTICS": {
+   "tot": 2,
+   "apr": 2
+  },
+  "BRR EQUIPAMENTOS": {
+   "tot": 2,
+   "apr": 1
+  },
+  "CIVIL MASTER": {
+   "tot": 2,
+   "apr": 0
+  },
+  "TRATERRA CONSTRUCOES": {
+   "tot": 2,
+   "apr": 2
+  },
+  "CONSTRUTORA SANCHES TRIPOLONI LTDA": {
+   "tot": 2,
+   "apr": 2
+  },
+  "TUBOS TIGRE-ADS DO BRASIL LIMITADA": {
+   "tot": 2,
+   "apr": 2
+  },
+  "CODEME ENGENHARIA S/A": {
+   "tot": 2,
+   "apr": 2
+  },
+  "BRAZABE": {
+   "tot": 2,
+   "apr": 2
+  },
+  "SOLOTRAT CENTRO OESTE": {
+   "tot": 2,
+   "apr": 2
+  },
+  "PANDROL INDÚSTRIA E SOLUÇÕES FERROVIÁRIAS LTDA.": {
+   "tot": 2,
+   "apr": 0
+  },
+  "THERMIT DO BRASIL": {
+   "tot": 1,
+   "apr": 1
+  },
+  "PANDOLFI": {
+   "tot": 1,
+   "apr": 1
+  },
+  "PEDREIRA SILVEIRA E REGO (PEDREIRA URUAÇU)": {
+   "tot": 1,
+   "apr": 1
+  },
+  "MOLDI": {
+   "tot": 1,
+   "apr": 1
+  },
+  "FRANCISCON": {
+   "tot": 1,
+   "apr": 1
+  },
+  "BRAFER": {
+   "tot": 1,
+   "apr": 1
+  },
+  "CHENXIN HEAVY INDUSTRY": {
+   "tot": 1,
+   "apr": 1
+  },
+  "CORR PLASTIK": {
+   "tot": 1,
+   "apr": 1
+  },
+  "PEDREIRA BELA VISTA UNIÃO": {
+   "tot": 1,
+   "apr": 0
+  },
+  "AMW SERVIÇOS LTDA": {
+   "tot": 1,
+   "apr": 0
+  },
+  "PEDREIRA ITAPACI LTDA": {
+   "tot": 1,
+   "apr": 0
+  }
+ },
+ "criterioEmp": "Empresa = Fornecedor do BI (nomes das contratadas principais padronizados: ÁPIA, ATERPA, EMPA, GSA, CIVIL MASTER, SOMAFEL)"
 }

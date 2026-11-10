@@ -84,6 +84,12 @@
 
   /* pacotes */
   .pgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;}
+  .vistabs{display:flex;gap:6px;flex-wrap:wrap;margin:-2px 0 12px;}
+  .vistabs button{font:inherit;font-size:13px;font-weight:600;padding:7px 16px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink-soft);cursor:pointer;}
+  .vistabs button.on{background:var(--blue);border-color:var(--blue);color:#fff;}
+  .visnota{font-size:12.5px;color:var(--ink-soft);margin:0 0 16px;line-height:1.5;}
+  .pk .sub2{font-size:12px;color:var(--ink-soft);margin:-6px 0 0;}
+  .pk .lnk{font-size:12.5px;font-weight:600;margin-top:auto;}
   .pk{border-top:3px solid var(--blue);display:flex;flex-direction:column;gap:12px;}
   .pk header{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
   .pk h3{margin:0;font-size:17px;}
@@ -168,7 +174,7 @@
     <div class="band-text">
       <p class="kicker">Ferrovia de Integração Centro-Oeste</p>
       <h1 class="display">Avanço para certificação</h1>
-      <p>Regional 1 · Pacotes 1 a 3. Combina o avanço físico de planejamento, as pendências certificáveis, as RNCs identificadas pela OIA e os databooks em um único indicador.</p>
+      <p>Regional 1 · Pacotes 1 a 3. Combina o avanço físico, as pendências certificáveis, as RNCs identificadas pela OIA e os databooks em um único indicador, por pacote, por empresa e em SUP x Infra.</p>
     </div>
   </div>
 </div>
@@ -197,7 +203,13 @@
   <h2 class="sec">Pontos de atenção</h2>
   <section class="card" id="ptsBox"><div id="pts"></div></section>
 
-  <h2 class="sec">Avanço por pacote</h2>
+  <h2 class="sec" id="visTit">Avanço por pacote</h2>
+  <div class="vistabs" id="visTabs" role="tablist" aria-label="Visão do avanço">
+    <button type="button" role="tab" data-v="pacote" class="on">Por pacote</button>
+    <button type="button" role="tab" data-v="empresa">Por empresa</button>
+    <button type="button" role="tab" data-v="disc">SUP x Infra</button>
+  </div>
+  <p class="visnota" id="visNota"></p>
   <div class="pgrid" id="pgrid"></div>
 
   <h2 class="sec">Fontes dos dados</h2>
@@ -259,7 +271,13 @@
   var PACOTES = [1, 2, 3];
   var NOMES = { fisico: 'Físico', rnc: 'RNC (OIA)', databooks: 'Databooks' };
 
-  var state = { dados: {}, pend: null, pendRef: '', pendErro: '', pending: {}, previewOnly: false, loading: true };
+  var state = { dados: {}, pend: null, pendEmp: null, pendDisc: null, pendTot: null, pendRef: '', pendErro: '', pending: {}, previewOnly: false, loading: true,
+    vis: 'pacote', rncEmp: null, rncDisc: null, rncRef: '', bk: null, fis: null, extErro: [] };
+  var EXTRA_RAW = RAW + 'automacaofico/automacaofico.github.io/main/';
+  var UNIF_URL = RAW + 'automacaofico/base_fico_unificada/main/Base_FICO_Unificada.xlsx';
+  // nomes padronizados das empresas (mesma regra do Painel SUP x Infra: ATERPA R é o escopo remunerado da própria ATERPA)
+  function canonEmp(e) { var u = String(e == null ? '' : e).trim().toUpperCase(); return { APIA: 'ÁPIA', 'ATERPA R': 'ATERPA', 'GRUPO GSA SERVICE': 'GSA' }[u] || u; }
+  var NOME_DISC = { SUP: 'Superestrutura (SUP)', INFRA: 'Infraestrutura (Infra)' };
 
   // ---------- util ----------
   function fmtPct(x) { return x == null || isNaN(x) ? '—' : (x * 100).toFixed(1).replace('.', ',') + '%'; }
@@ -434,6 +452,30 @@
     out.bk = b ? { v: b.aprovados / b.total, det: b.aprovados + ' de ' + b.total + ' aprovados', n: b.aprovados, d: b.total } : null;
     return out;
   }
+  function fisicoDe(lista) {
+    if (!lista.length) return null;
+    var soma = lista.reduce(function (a, f) { return a + f.v; }, 0);
+    return { v: soma / lista.length, det: lista.length > 1 ? 'média simples de ' + lista.length + ' frentes: ' + lista.map(function (f) { return f.sig.trim() + ' ' + fmtPct(f.v); }).join(' · ') : 'painel Infra' + (state.fis.ref ? ', ref. ' + state.fis.ref : ''), n: soma, d: lista.length };
+  }
+  function valoresGrupo(tipo, k) {
+    var out = {}, pe, r, b;
+    if (tipo === 'empresa') {
+      out.fisico = state.fis ? fisicoDe(state.fis.frentes.filter(function (f) { return f.emp === k; })) : null;
+      pe = state.pendEmp && state.pendEmp[k]; r = state.rncEmp && state.rncEmp[k]; b = state.bk && state.bk.emp && state.bk.emp[k];
+    } else {
+      out.fisico = k === 'INFRA' && state.fis ? fisicoDe(state.fis.frentes) : null;
+      pe = state.pendDisc && state.pendDisc[k]; r = state.rncDisc && state.rncDisc[k]; b = state.bk && state.bk.disc && state.bk.disc[k];
+      if (b) b = { tot: b.tot, apr: b.apr };
+    }
+    out.pend = pe && pe.total ? { v: pe.enc / pe.total, det: fmtInt(pe.enc) + ' de ' + fmtInt(pe.total) + ' certificáveis encerradas', n: pe.enc, d: pe.total } : null;
+    out.rnc = r && r.total ? { v: r.fechadas / r.total, det: fmtInt(r.fechadas) + ' de ' + fmtInt(r.total) + ' encerradas', n: r.fechadas, d: r.total } : null;
+    out.bk = b && b.tot ? { v: b.apr / b.tot, det: b.apr + ' de ' + b.tot + ' aprovados', n: b.apr, d: b.tot } : null;
+    return out;
+  }
+  function empresasCard() {
+    var t = state.pendTot || {};
+    return Object.keys(t).filter(function (e) { return e !== 'SEM EMPRESA'; }).sort(function (a, b) { return t[b] - t[a]; });
+  }
   function consolidado() {
     var out = {};
     COMP.forEach(function (c) {
@@ -477,22 +519,45 @@
     else if (state.previewOnly) { warn.style.display = 'block'; warn.textContent = 'Visualização local: os arquivos escolhidos ainda não foram publicados.'; }
     else warn.style.display = 'none';
 
-    var html = '';
-    PACOTES.forEach(function (p) {
-      var vals = valoresPacote(p), gp = geral(vals);
-      html += '<article class="card pk"><header><h3>Pacote ' + p + '</h3><div class="big display num">' + fmtPct(gp.v) + '</div></header>' +
+    var cr = carr || (state.vis !== 'pacote' && !state.extPronto);
+    function cartao(titulo, sub, vals, nomeFis, link, semDados) {
+      var gp = geral(vals);
+      var h = '<article class="card pk"><header><h3>' + esc(titulo) + '</h3><div class="big display num">' + fmtPct(gp.v) + '</div></header>' +
+        (sub ? '<div class="sub2">' + esc(sub) + '</div>' : '') +
         '<div class="bar"><i style="width:' + ((gp.v || 0) * 100).toFixed(2) + '%;background:var(--blue)"></i></div>' +
-        (gp.parcial && !carr ? '<div class="hint" style="margin:-4px 0 0">Parcial · faltam ' + esc(gp.falta.join(', ')) + '</div>' : '') +
+        (gp.parcial && !cr ? '<div class="hint" style="margin:-4px 0 0">Parcial · faltam ' + esc(gp.falta.map(function (n) { return n === COMP[0].nome ? nomeFis : n; }).join(', ')) + '</div>' : '') +
         '<div class="rows">';
       COMP.forEach(function (c) {
-        var x = vals[c.id];
-        html += '<div class="row"><div class="top"><span><span class="dot" style="background:' + c.cor + '"></span>' + esc(c.nome) + ' <span class="na">(' + Math.round(PESOS[c.id] * 100) + '%)</span></span><b class="num">' + (x ? fmtPct(x.v) : '<span class="na">—</span>') + '</b></div>' +
+        var x = vals[c.id], nm = c.id === 'fisico' ? nomeFis : c.nome;
+        h += '<div class="row"><div class="top"><span><span class="dot" style="background:' + c.cor + '"></span>' + esc(nm) + ' <span class="na">(' + Math.round(PESOS[c.id] * 100) + '%)</span></span><b class="num">' + (x ? fmtPct(x.v) : '<span class="na">—</span>') + '</b></div>' +
           '<div class="bar"><i style="width:' + (x ? (Math.min(x.v, 1) * 100).toFixed(2) : 0) + '%;background:' + c.cor + '"></i></div>' +
-          '<div class="det"><span>' + (x ? esc(x.det) : (carr ? 'carregando…' : 'sem dados')) + '</span></div></div>';
+          '<div class="det"><span>' + (x ? esc(x.det) : (cr ? 'carregando…' : ((semDados && semDados[c.id]) || 'sem dados'))) + '</span></div></div>';
       });
-      html += '</div></article>';
-    });
+      return h + '</div>' + (link ? '<a class="lnk" href="' + link + '">Ver detalhe →</a>' : '') + '</article>';
+    }
+    var html = '', v = state.vis, nota = '';
+    if (v === 'pacote') {
+      PACOTES.forEach(function (p) { html += cartao('Pacote ' + p, '', valoresPacote(p), COMP[0].nome); });
+      nota = 'Mesmos números do indicador geral acima, separados por pacote.';
+    } else if (v === 'empresa') {
+      empresasCard().forEach(function (e) {
+        html += cartao(e, fmtInt(state.pendTot[e]) + ' pendências nos Pacotes 1 a 3', valoresGrupo('empresa', e), e === 'SOMAFEL' ? 'Físico de SUP' : 'Físico de Infra',
+          '../empresas/?e=' + encodeURIComponent(e), { fisico: e === 'SOMAFEL' ? 'físico de SUP entra depois' : 'sem físico no painel Infra' });
+      });
+      nota = 'Empresas da EAP nos Pacotes 1 a 3 (coluna Empresa; ATERPA R somada à ATERPA). Físico: “Label do avanço” do painel Infra' + (state.fis && state.fis.ref ? ' (ref. ' + state.fis.ref + ')' : '') +
+        '. RNCs da OIA: Base Reg' + (state.rncRef ? ' de ' + state.rncRef : '') + ', todas as frentes da empresa. Databooks: BI Data Book' + (state.bk ? ' de ' + state.bk.dataRef : '') + ', pelo fornecedor. Empresas que só aparecem nas RNCs ou nos databooks estão no Painel por Empresa.';
+    } else {
+      ['SUP', 'INFRA'].forEach(function (d) {
+        html += cartao(NOME_DISC[d], d === 'SUP' ? 'SOMAFEL: trilhos, dormentes, lastro e soldas' : 'Demais empresas: terraplenagem, drenagem, bueiros e obras de arte',
+          valoresGrupo('disc', d), d === 'SUP' ? 'Físico de SUP' : 'Físico de Infra', '../sup-infra/', { fisico: d === 'SUP' ? 'entra depois' : 'sem dados' });
+      });
+      nota = 'Mesma divisão do Painel SUP x Infra: nas pendências e RNCs, SUP é a SOMAFEL; nos databooks, SUP inclui fornecedores de materiais de via. O físico de SUP entra depois; até lá, o SUP mostra resultado parcial.';
+    }
+    if (state.extErro.length && v !== 'pacote' && !cr) nota += ' Não consegui ler agora: ' + state.extErro.join(', ') + '.';
     document.getElementById('pgrid').innerHTML = html;
+    document.getElementById('visNota').textContent = nota;
+    document.getElementById('visTit').textContent = { pacote: 'Avanço por pacote', empresa: 'Avanço por empresa', disc: 'Avanço SUP x Infra' }[v];
+    document.querySelectorAll('#visTabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === v); b.setAttribute('aria-selected', b.dataset.v === v ? 'true' : 'false'); });
     renderPontos();
 
     var d = state.dados;
@@ -689,16 +754,72 @@
       var ws = wb.Sheets['Banco de Dados'];
       if (!ws) throw new Error('aba “Banco de Dados” não encontrada');
       var rows = XLSX.utils.sheet_to_json(ws, { range: 1, defval: '' });
-      var pac = {};
+      var pac = {}, emp = {}, disc = {}, tot = {};
       rows.forEach(function (r) {
         var p = firstPacote(r['Pacote']); if (p == null || PACOTES.indexOf(p) < 0) return;
+        var eEmp = canonEmp(r['Empresa']), eExe = canonEmp(r['Executante']), e = eEmp || eExe || 'SEM EMPRESA';
+        tot[e] = (tot[e] || 0) + 1;
         if (String(r['Certificação ?']).trim().toUpperCase() !== 'CERTIFICAÇÃO') return;
         var st = String(r['Status_Pendencia']).trim().toUpperCase(); if (!st) return;
-        var o = pac[p] || (pac[p] = { total: 0, enc: 0 });
-        o.total++; if (st === 'ENCERRADO') o.enc++;
+        var d = (eEmp === 'SOMAFEL' || eExe === 'SOMAFEL') ? 'SUP' : 'INFRA', fech = st === 'ENCERRADO';
+        [[pac, p], [emp, e], [disc, d]].forEach(function (a) { var o = a[0][a[1]] || (a[0][a[1]] = { total: 0, enc: 0 }); o.total++; if (fech) o.enc++; });
       });
-      state.pend = pac;
+      state.pend = pac; state.pendEmp = emp; state.pendDisc = disc; state.pendTot = tot;
     }).catch(function (e) { state.pendErro = e.message; }).then(function () { return manual; });
+  }
+
+  // RNCs (Base Reg já usada nos painéis Por Empresa e SUP x Infra): só as identificadas pela OIA, todas as frentes
+  function carregarRncEmpresa() {
+    return getJson([EXTRA_RAW + 'empresas/rnc.json', '../empresas/rnc.json']).then(function (j) {
+      if (!j || !j.linhas) throw new Error('rnc.json');
+      var emp = {}, disc = {};
+      j.linhas.forEach(function (l) {
+        var x = {}; j.campos.forEach(function (c, i) { x[c] = l[i]; });
+        if (x.idPor !== 'OIA') return;
+        var e = canonEmp(x.empresa), d = e === 'SOMAFEL' ? 'SUP' : 'INFRA', n = Number(x.n) || 0, f = x.status === 'ENCERRADA' ? n : 0;
+        [[emp, e], [disc, d]].forEach(function (a) { var o = a[0][a[1]] || (a[0][a[1]] = { total: 0, fechadas: 0 }); o.total += n; o.fechadas += f; });
+      });
+      state.rncEmp = emp; state.rncDisc = disc; state.rncRef = j.dataRef || '';
+    }).catch(function () { state.extErro.push('RNCs por empresa'); });
+  }
+  function carregarBkEmpresa() {
+    return getJson([EXTRA_RAW + 'sup-infra/databooks.json', '../sup-infra/databooks.json']).then(function (j) {
+      if (!j || !j.disc) throw new Error('databooks.json');
+      state.bk = j;
+    }).catch(function () { state.extErro.push('databooks por empresa'); });
+  }
+  // Físico de Infra: aba Cabeçalho da Base_FICO_Unificada (a mesma do painel Infra), linha “Label do avanço”.
+  // SOMAFEL (SUP) fica de fora por enquanto: o físico de SUP entra depois.
+  function pctLabel(v) {
+    if (v === '' || v == null) return null;
+    if (typeof v === 'number') return v > 1.5 ? v / 100 : v;
+    var n = parseFloat(String(v).replace('%', '').replace(/\./g, '').replace(',', '.'));
+    if (isNaN(n)) return null;
+    return /%/.test(String(v)) || n > 1.5 ? n / 100 : n;
+  }
+  function carregarFisicoInfra() {
+    return fetch(UNIF_URL + '?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.arrayBuffer(); }).then(function (buf) {
+      var wb = XLSX.read(buf, { type: 'array' });
+      var nome = wb.SheetNames.filter(function (n) { return norm(n).indexOf('cabecalho') >= 0; })[0];
+      if (!nome) throw new Error('aba Cabeçalho');
+      var rows = rowsOf(wb.Sheets[nome], true), rSig = null, rLab = null, ref = '';
+      rows.forEach(function (r) {
+        var k = norm(r[0]);
+        if (k === 'sigla') rSig = r;
+        if (k.indexOf('label do avanco') === 0) rLab = r;
+        if (k.indexOf('referencia geral') === 0 && typeof r[1] === 'number') { var dt = new Date(Math.round((r[1] - 25569) * 864e5)); ref = String(dt.getUTCDate()).padStart(2, '0') + '/' + String(dt.getUTCMonth() + 1).padStart(2, '0') + '/' + dt.getUTCFullYear(); }
+      });
+      if (!rSig || !rLab) throw new Error('linhas Sigla / Label do avanço');
+      var frentes = [];
+      for (var c = 1; c < rSig.length; c++) {
+        var sig = String(rSig[c] || '').trim(); if (!sig) continue;
+        var u = norm(sig).toUpperCase(), v = pctLabel(rLab[c]);
+        var e = u.indexOf('CIVIL MASTER') >= 0 ? 'CIVIL MASTER' : u.indexOf('APIA') >= 0 ? 'ÁPIA' : u.indexOf('SOMAFEL') >= 0 ? 'SOMAFEL' : u.indexOf('GSA') >= 0 ? 'GSA' : canonEmp(sig);
+        if (e === 'SOMAFEL' || v == null) continue;
+        frentes.push({ emp: e, sig: sig, v: v });
+      }
+      state.fis = { ref: ref, frentes: frentes };
+    }).catch(function () { state.extErro.push('físico de Infra'); });
   }
 
   // ---------- upload ----------
@@ -794,7 +915,16 @@
     btnPpt.disabled = typeof PptxGenJS === 'undefined';
     render();
   }
+  try { var qv = new URLSearchParams(location.search).get('visao'); if (qv === 'empresa' || qv === 'disc' || qv === 'pacote') state.vis = qv; } catch (e) {}
+  document.querySelectorAll('#visTabs button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.vis = b.dataset.v; render();
+      try { var u = new URL(location.href); if (state.vis === 'pacote') u.searchParams.delete('visao'); else u.searchParams.set('visao', state.vis); history.replaceState(null, '', u); } catch (e) {}
+    });
+  });
   Promise.all([carregarDados(), carregarPendencias()]).then(fim, fim);
+  // fontes das visões por empresa e SUP x Infra: carregam em paralelo, sem atrasar a visão por pacote
+  Promise.all([carregarRncEmpresa(), carregarBkEmpresa(), carregarFisicoInfra()]).then(function () { state.extPronto = true; if (!state.loading) render(); });
   render();
 })();
 </script>
