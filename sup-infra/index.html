@@ -115,7 +115,7 @@
   <footer>
     SUP nas pendências: Empresa ou Executante SOMAFEL. Infra: todo o restante dos Pacotes 1, 2 e 3 (e 1A, 1B, 1C). Executante em branco = própria Empresa.<br>
     RNCs: Regional 1, contagens agregadas da Base Reg, identificadas pela OIA e pela VALE. SUP conta só as RNCs da SOMAFEL.<br>
-    Databooks: BI Data Book, códigos FE com primeiro pacote 1, 2 ou 3. SUP: código Y ou RL, SOMAFEL, trilhos, dormentes e superestrutura. Infra: o restante. Avanço = aprovados.
+    Databooks: planilha Gerencial de databooks (BK_FICO_Lote01_Gerencial), primeiro pacote citado 1, 2 ou 3. SUP e Infra pela coluna Disciplina da planilha. Avanço = aprovados.
   </footer>
 </div>
 <div id="dica"></div>
@@ -197,9 +197,9 @@ function colunaRnc(d){
     +'<h5>Principais classificações em aberto</h5>'+barrasH(contar(ab,'classif','n'),d,5)+'</div>';
 }
 function colunaBk(d){
-  const b=BK.disc[d], st=[['Reprovado',b.rep],['BK em construção',b.con],['Não entregue',b.nao],['Em análise',b.ana]].filter(x=>x[1]>0).sort((x,y)=>y[1]-x[1]);
+  const b=BK.disc[d], st=b.situacoes;
   return '<div class="card"><h4 class="'+d.toLowerCase()+'">'+(d==='SUP'?'SUP':'Infra')+'</h4><div class="kpis">'
-    +kpi('Total',fmt(b.tot),'Databooks')+kpi('Aprovados',fmt(b.apr),pct(b.apr,b.tot))+kpi('Sem aprovação',fmt(b.tot-b.apr),'A tratar')+kpi('Reprovados',fmt(b.rep),pct(b.rep,b.tot))+'</div>'
+    +kpi('Total',fmt(b.tot),'Databooks')+kpi('Aprovados',fmt(b.apr),pct(b.apr,b.tot))+kpi('Sem aprovação',fmt(b.tot-b.apr),'A tratar')+kpi('Em tratamento',fmt(b.tra),pct(b.tra,b.tot))+'</div>'
     +'<h5>Sem aprovação por situação</h5>'+barrasH(st,d)
     +'<h5>Sem aprovação por fornecedor</h5>'+barrasH(b.pendentes,d,6)+'</div>';
 }
@@ -209,8 +209,8 @@ function render(){
     +'<h3 class="secao">Pendências <small>EAP · Pacotes 1, 2 e 3</small></h3><div class="grid2">'+colunaPend('SUP')+colunaPend('INFRA')+'</div>'
     +'<h3 class="secao">RNCs <small>Base Reg · Regional 1 · referência '+esc(META.rncRef)+'</small></h3><div class="grid2">'+colunaRnc('SUP')+colunaRnc('INFRA')+'</div>'
     +'<div class="nota">OIA + VALE. SUP conta só as RNCs da SOMAFEL. Outras '+fmt(fora)+' RNCs do pacote Superestrutura são de outras empresas (como CONPREM e VALE) e estão em Infra.</div>'
-    +(BK?'<h3 class="secao">Databooks <small>BI Data Book · FICO · Pacotes 1, 2 e 3 · referência '+esc(BK.dataRef)+'</small></h3><div class="grid2">'+colunaBk('SUP')+colunaBk('INFRA')+'</div>'
-      +'<div class="nota">Divisão SUP x Infra feita por regra, porque o BI não tem essa coluna: aqui, SUP inclui também fornecedores de materiais de via (como trilhos, dormentes e fixações), enquanto nas pendências e RNCs SUP é só a SOMAFEL. Databooks de vários pacotes entram uma vez só.</div>':'');
+    +(BK?'<h3 class="secao">Databooks <small>Planilha Gerencial de databooks · Pacotes 1, 2 e 3 · referência '+esc(BK.dataRef)+'</small></h3><div class="grid2">'+colunaBk('SUP')+colunaBk('INFRA')+'</div>'
+      +'<div class="nota">Divisão SUP x Infra pela coluna Disciplina da planilha: em Superestrutura entram também os fornecedores de materiais de via (como trilhos, dormentes e fixações), enquanto nas pendências e RNCs SUP é só a SOMAFEL. Databooks de vários pacotes entram uma vez só, no primeiro pacote citado.</div>':'');
 }
 
 // ---------- exportar PPT (mesmo padrão visual do painel Avanço para certificação) ----------
@@ -303,11 +303,11 @@ function buildPptx(){
 
   // 4) databooks
   if(BK){
-    const s4=slide('Databooks · BI Data Book · FICO · Pacotes 1, 2 e 3 · referência '+BK.dataRef,'Divisão por regra, porque o BI não tem essa coluna: aqui, SUP inclui fornecedores de materiais de via; nas pendências e RNCs, SUP é só a SOMAFEL.');
+    const s4=slide('Databooks · Planilha Gerencial · Pacotes 1, 2 e 3 · referência '+BK.dataRef,'Divisão pela coluna Disciplina da planilha: SUP inclui fornecedores de materiais de via; nas pendências e RNCs, SUP é só a SOMAFEL.');
     ['SUP','INFRA'].forEach(d=>{
-      const b=BK.disc[d], st=[['Reprovado',b.rep],['BK em construção',b.con],['Não entregue',b.nao],['Em análise',b.ana]].filter(x=>x[1]>0).sort((x,y)=>y[1]-x[1]);
+      const b=BK.disc[d], st=b.situacoes;
       moldura(s4,d,0.85,5.75);
-      kpis(s4,d,[['Total',fmt(b.tot),'Databooks'],['Aprovados',fmt(b.apr),pct(b.apr,b.tot)],['Sem aprovação',fmt(b.tot-b.apr),'A tratar'],['Reprovados',fmt(b.rep),pct(b.rep,b.tot)]]);
+      kpis(s4,d,[['Total',fmt(b.tot),'Databooks'],['Aprovados',fmt(b.apr),pct(b.apr,b.tot)],['Sem aprovação',fmt(b.tot-b.apr),'A tratar'],['Em tratamento',fmt(b.tra),pct(b.tra,b.tot)]]);
       duas(s4,d,['Sem aprovação por situação',st,4],['Sem aprovação por fornecedor',b.pendentes,6]);
     });
   }

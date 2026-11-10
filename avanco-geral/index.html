@@ -139,7 +139,14 @@
   .msg{font-size:13px;padding:10px 12px;border-radius:10px;display:none;white-space:pre-line;}
   .msg.show{display:block;} .msg.ok{background:var(--good-bg);color:var(--good);} .msg.err{background:var(--bad-bg);color:var(--bad);} .msg.busy{background:var(--warn-bg);color:var(--warn);}
 
-  .toolbar{display:flex;justify-content:flex-end;margin-bottom:14px;}
+  .toolbar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+  .toolbar .datas{margin:0;flex:1 1 420px;} .toolbar .b{margin-left:auto;}
+  .datas{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:0 0 14px;font-size:12.5px;color:var(--ink-mid);}
+  .datas .rot{font-weight:700;color:var(--ink);margin-right:2px;}
+  .datas .ch{display:inline-flex;gap:5px;align-items:baseline;padding:3px 10px;border-radius:999px;border:1px solid var(--line);background:var(--paper);}
+  .datas .ch b{font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;} .datas .ch small{font-size:11px;}
+  .datas .ch.velho{background:var(--warn-bg);border-color:transparent;color:var(--warn);} .datas .ch.velho b{color:var(--warn);}
+  .datas .leg{font-size:11.5px;color:var(--ink-soft);}
   .pts{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;}
   .pts li{display:flex;gap:12px;align-items:flex-start;font-size:14px;color:var(--ink);line-height:1.45;}
   .pts li i{flex:0 0 5px;align-self:stretch;border-radius:3px;background:var(--orange);}
@@ -181,7 +188,7 @@
 
 <div class="wrap">
 
-  <div class="toolbar"><button type="button" class="b sec" id="btnPpt" disabled>⬇ Exportar PPT</button></div>
+  <div class="toolbar"><div class="datas" id="datasTopo" aria-live="polite"></div><button type="button" class="b sec" id="btnPpt" disabled>⬇ Exportar PPT</button></div>
 
   <section class="card hero" id="hero" aria-live="polite">
     <div class="gauge">
@@ -210,6 +217,7 @@
     <button type="button" role="tab" data-v="disc">SUP x Infra</button>
   </div>
   <p class="visnota" id="visNota"></p>
+  <div class="datas" id="datasVis" style="display:none"></div>
   <div class="pgrid" id="pgrid"></div>
 
   <h2 class="sec">Fontes dos dados</h2>
@@ -290,6 +298,46 @@
     var p = function (n) { return String(n).padStart(2, '0'); };
     return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' às ' + p(d.getHours()) + ':' + p(d.getMinutes());
   }
+  // ---------- datas de referência das fontes ----------
+  var MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'], DIAS_VELHO = 7;
+  // "10/11/2026", "01/nov/26" ou "set/26" (mês sem dia = último dia do mês) em Date
+  function refData(s) {
+    s = String(s || '').trim().toLowerCase(); if (!s) return null;
+    var m, ano = function (a) { return +(a.length === 2 ? '20' + a : a); };
+    if ((m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/))) return new Date(ano(m[3]), m[2] - 1, +m[1]);
+    if ((m = s.match(/^(\d{1,2})\/([a-z]{3})\/(\d{2,4})/)) && MESES.indexOf(m[2]) >= 0) return new Date(ano(m[3]), MESES.indexOf(m[2]), +m[1]);
+    if ((m = s.match(/^([a-z]{3})\/(\d{2,4})/)) && MESES.indexOf(m[1]) >= 0) return new Date(ano(m[2]), MESES.indexOf(m[1]) + 1, 0);
+    return null;
+  }
+  function fmtDia(iso) { var d = iso ? new Date(iso) : null; if (!d || isNaN(d)) return ''; var p = function (n) { return String(n).padStart(2, '0'); }; return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear(); }
+  // fontes de cada visão: a visão por pacote (e o avanço geral) lê dados.json; empresa e SUP x Infra leem as bases dos outros painéis
+  function datasFontes(v) {
+    var d = state.dados || {}, P6 = d.fisicoP6, ok = !state.loading, ext = !!state.extPronto;
+    var out = [{ nome: 'Pendências (EAP)', ref: state.pendRef, ok: ok }];
+    if (v === 'pacote') {
+      out.push({ nome: 'RNCs', ref: d.rnc && d.rnc.dataRef, ok: ok });
+      out.push({ nome: 'Databooks', ref: d.databooks && (d.databooks.dataRef || fmtDia(d.databooks.atualizadoEm)), obs: d.databooks && !d.databooks.dataRef ? 'data em que o arquivo foi carregado' : '', ok: ok });
+      out.push({ nome: 'Físico', ref: d.fisico && d.fisico.mes, ok: ok });
+    } else {
+      out.push({ nome: 'RNCs', ref: state.rncRef, ok: ext });
+      out.push({ nome: 'Databooks', ref: state.bk && state.bk.dataRef, ok: ext });
+      if (v === 'empresa') out.push({ nome: 'Físico Infra', ref: state.fis && state.fis.ref, ok: ext });
+      out.push({ nome: v === 'empresa' ? 'Físico SOMAFEL' : 'Físico', ref: P6 && P6.dataRef, ok: ok });
+    }
+    return out;
+  }
+  function idadeDias(ref) { var dt = refData(ref); return dt ? Math.floor((Date.now() - dt) / 864e5) : null; }
+  function datasHtml(rot, lista) {
+    var velhos = 0;
+    var h = '<span class="rot">' + esc(rot) + '</span>' + lista.map(function (o) {
+      var a = idadeDias(o.ref), velho = a != null && a > DIAS_VELHO; if (velho) velhos++;
+      var tit = o.ref ? (a == null ? '' : a <= 0 ? 'hoje' : 'há ' + a + (a === 1 ? ' dia' : ' dias')) + (o.obs ? ' · ' + o.obs : '') : 'sem data';
+      return '<span class="ch' + (velho ? ' velho' : '') + '" title="' + esc(tit) + '">' + esc(o.nome) + ' <b>' + esc(o.ref || (o.ok ? '—' : '…')) + '</b>' + (velho ? '<small>há ' + a + ' dias</small>' : '') + '</span>';
+    }).join('');
+    if (velhos) h += '<span class="leg">em laranja: dado com mais de ' + DIAS_VELHO + ' dias</span>';
+    return h;
+  }
+  function datasTexto(v) { return datasFontes(v).map(function (o) { return o.nome + ' ' + (o.ref || '—'); }).join(' · '); }
   function norm(s) { return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase(); }
   // needWord: só aceita texto que cite "Pacote" (evita ler "Lote 1 - Superestrutura" como Pacote 1)
   function firstPacote(txt, needWord) {
@@ -618,7 +666,7 @@
       var p6 = state.dados.fisicoP6;
       nota = 'Pendências por executante: coluna Executante da EAP nos Pacotes 1 a 3 (em branco = a própria Empresa; ATERPA R somada à ATERPA). As RNCs e os databooks seguem a contratada, porque essas bases não informam o executante. Físico: cronograma Primavera' + (p6 && p6.dataRef ? ' (data ' + p6.dataRef + ')' : '') +
         ' para a SOMAFEL (SUP dos Pacotes 1 a 3); as demais empresas usam o “Label do avanço” da planilha do painel Infra' + (state.fis && state.fis.ref ? ' (ref. ' + state.fis.ref + ')' : '') +
-        '. RNCs da OIA: Base Reg' + (state.rncRef ? ' de ' + state.rncRef : '') + ', todas as frentes da empresa. Databooks: BI Data Book' + (state.bk ? ' de ' + state.bk.dataRef : '') + ', pelo fornecedor. Empresas que só aparecem nas RNCs ou nos databooks estão no Painel por Empresa.';
+        '. RNCs da OIA: Base Reg' + (state.rncRef ? ' de ' + state.rncRef : '') + ', todas as frentes da empresa. Databooks: planilha Gerencial' + (state.bk ? ' de ' + state.bk.dataRef : '') + ', pela contratada. Empresas que só aparecem nas RNCs ou nos databooks estão no Painel por Empresa.';
     } else {
       ['SUP', 'INFRA'].forEach(function (d) {
         html += cartao(NOME_DISC[d], d === 'SUP' ? 'SOMAFEL: trilhos, dormentes, lastro e soldas' : 'Demais empresas: terraplenagem, drenagem, bueiros e obras de arte',
@@ -629,6 +677,9 @@
     if (state.extErro.length && v !== 'pacote' && !cr) nota += ' Não consegui ler agora: ' + state.extErro.join(', ') + '.';
     document.getElementById('pgrid').innerHTML = html;
     document.getElementById('visNota').textContent = nota;
+    document.getElementById('datasTopo').innerHTML = datasHtml('Datas dos dados · avanço geral e por pacote:', datasFontes('pacote'));
+    var dv = document.getElementById('datasVis'); dv.style.display = v === 'pacote' ? 'none' : '';
+    dv.innerHTML = v === 'pacote' ? '' : datasHtml('Datas dos dados desta visão:', datasFontes(v));
     document.getElementById('visTit').textContent = { pacote: 'Avanço por pacote', empresa: 'Avanço por empresa', disc: 'Avanço SUP x Infra' }[v];
     document.querySelectorAll('#visTabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.v === v); b.setAttribute('aria-selected', b.dataset.v === v ? 'true' : 'false'); });
     renderPontos();
@@ -643,7 +694,7 @@
       lin('Físico Infra x SUP (Primavera) · abas empresa e SUP x Infra', '10%', d.fisicoP6 && esc(d.fisicoP6.arquivo), d.fisicoP6 && ('data ' + esc(d.fisicoP6.dataRef)), d.fisicoP6 && fmtWhen(d.fisicoP6.atualizadoEm), !!d.fisicoP6) +
       lin('Pendências certificáveis', '10%', 'Base_Pendencias_FICO.xlsx (leitura diária)', state.pendRef && esc(state.pendRef), state.pendRef ? 'automático' : '', !!state.pend) +
       lin('RNC (identificadas pela OIA)', '40%', d.rnc && esc(d.rnc.arquivo), d.rnc && esc(d.rnc.dataRef), d.rnc && fmtWhen(d.rnc.atualizadoEm), !!d.rnc) +
-      lin('Databooks BKs', '40%', d.databooks && esc(d.databooks.arquivo), '', d.databooks && fmtWhen(d.databooks.atualizadoEm), !!d.databooks) +
+      lin('Databooks BKs', '40%', d.databooks && esc(d.databooks.arquivo), d.databooks && esc(d.databooks.dataRef || ''), d.databooks && fmtWhen(d.databooks.atualizadoEm), !!d.databooks) +
       '</tbody>';
   }
 
@@ -714,11 +765,11 @@
     var dstr = p2(now.getDate()) + '/' + p2(now.getMonth() + 1) + '/' + now.getFullYear();
     var todos = pontosTodos();
 
-    function slide(titulo) {
+    function slide(titulo, vis) {
       var s = P.addSlide(); s.background = { color: 'FFFFFF' };
       s.addText(titulo, { x: 0.35, y: 0.1, w: 12.6, h: 0.36, fontFace: HF, fontSize: 18, bold: true, color: INK, margin: 0, valign: 'middle' });
       s.addShape(P.ShapeType.rect, { x: 0, y: 0.5, w: W, h: 0.025, fill: { color: CY }, line: { color: CY, width: 0 } });
-      s.addText('Ferrovia de Integração Centro-Oeste · Regional 1 · gerado em ' + dstr, { x: 0.35, y: 7.1, w: 9, h: 0.25, fontFace: BF, fontSize: 9, color: SOFT, margin: 0 });
+      s.addText('Ferrovia de Integração Centro-Oeste · Regional 1 · gerado em ' + dstr + ' · Datas dos dados: ' + datasTexto(vis || 'pacote'), { x: 0.35, y: 7.1, w: 12.6, h: 0.25, fontFace: BF, fontSize: 9, color: SOFT, margin: 0 });
       return s;
     }
     function bar(s, x, y, w, h, v, cor) {
@@ -849,7 +900,7 @@
     }
 
     // 5) SUP x Infra
-    var s5 = slide('Avanço para certificação – SUP x Infra');
+    var s5 = slide('Avanço para certificação – SUP x Infra', 'disc');
     ['SUP', 'INFRA'].forEach(function (d, i) {
       cartaoPpt(s5, 0.4 + i * 6.42, 0.8, 6.11, 5.9, {
         titulo: NOME_DISC[d], sub: d === 'SUP' ? 'SOMAFEL: trilhos, dormentes, lastro e soldas' : 'Demais empresas: terraplenagem, drenagem, bueiros e obras de arte',
@@ -861,7 +912,7 @@
     // 6) por empresa (até 10 por slide, em 2 linhas de 5)
     var emps = empresasCard(), porSlide = 10;
     for (var ini = 0; ini < emps.length; ini += porSlide) {
-      var lote = emps.slice(ini, ini + porSlide), se = slide('Avanço para certificação – Por empresa' + (emps.length > porSlide ? ' (' + (ini / porSlide + 1) + ')' : ''));
+      var lote = emps.slice(ini, ini + porSlide), se = slide('Avanço para certificação – Por empresa' + (emps.length > porSlide ? ' (' + (ini / porSlide + 1) + ')' : ''), 'empresa');
       var cw = 2.38, gx = 0.15, ch = 2.95, gy = 0.12;
       lote.forEach(function (e, i) {
         cartaoPpt(se, 0.4 + (i % 5) * (cw + gx), 0.72 + Math.floor(i / 5) * (ch + gy), cw, ch, {

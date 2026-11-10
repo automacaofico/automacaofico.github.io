@@ -1,68 +1,95 @@
 {
- "dataRef": "06/11/2026",
- "fonte": "BI Novas Ferrovias - Data Book (Detalhamento BK)",
- "criterio": "Códigos FE, primeiro pacote citado 1, 2 ou 3",
+ "dataRef": "03/11/2026",
+ "fonte": "Planilha BK_FICO_Lote01_Gerencial_2026 - apoio (Base_Lote 1, Base_Lote 2)",
+ "criterio": "Primeiro pacote citado 1, 2 ou 3",
+ "criterioDisc": "Coluna Disciplina da planilha: Superestrutura = SUP, Infraestrutura = Infra",
  "disc": {
   "SUP": {
-   "tot": 47,
-   "apr": 28,
-   "rep": 11,
-   "ana": 2,
-   "con": 4,
-   "nao": 2,
-   "pendentes": [
+   "tot": 43,
+   "apr": 27,
+   "tra": 5,
+   "situacoes": [
     [
-     "CONPREM",
-     6
+     "Em análise",
+     7
     ],
     [
-     "CONSORCIO SOMAFEL",
+     "Em tratamento",
+     5
+    ],
+    [
+     "Em desenvolvimento",
+     4
+    ]
+   ],
+   "pendentes": [
+    [
+     "SOMAFEL",
      3
     ],
     [
-     "CONDUTEC SOLUCOES EM FIXACAO",
+     "CONPREM",
      2
     ],
     [
-     "PANDROL INDÚSTRIA E SOLUÇÕES FERROVIÁRIAS LTDA.",
+     "BR RAILPARTS",
      2
     ],
     [
-     "CHINA RAILWAY (PANGANG)",
-     1
+     "PANDROL",
+     2
     ],
     [
      "BRR EQUIPAMENTOS",
      1
     ],
     [
-     "BR RAILPARTS",
+     "PEDREIRA BELA VISTA",
      1
     ],
     [
-     "PEDREIRA BELA VISTA UNIÃO",
+     "PEDREIRA ITAPACI",
      1
     ],
     [
-     "AMW SERVIÇOS LTDA",
+     "CONDUTEC",
      1
     ],
     [
-     "PEDREIRA ITAPACI LTDA",
+     "AMW",
+     1
+    ],
+    [
+     "VIA FÉRREA",
+     1
+    ],
+    [
+     "GSA",
      1
     ]
    ]
   },
   "INFRA": {
-   "tot": 39,
-   "apr": 30,
-   "rep": 6,
-   "ana": 1,
-   "con": 1,
-   "nao": 1,
+   "tot": 41,
+   "apr": 31,
+   "tra": 6,
+   "situacoes": [
+    [
+     "Em tratamento",
+     6
+    ],
+    [
+     "Em desenvolvimento",
+     3
+    ],
+    [
+     "Em análise",
+     1
+    ]
+   ],
    "pendentes": [
     [
-     "CONSTRUTORA APIA SA",
+     "ÁPIA",
      4
     ],
     [
@@ -70,42 +97,42 @@
      2
     ],
     [
-     "CONSTRUTORA ATERPA SA",
+     "ATERPA",
      1
     ],
     [
-     "EMPA S/A SERVIÇOS DE ENGENHARIA",
+     "EMPA",
      1
     ],
     [
-     "GSA SERVICE EIRELI",
+     "GSA",
+     1
+    ],
+    [
+     "DR",
      1
     ]
    ]
   }
  },
  "emp": {
-  "CONDUTEC SOLUCOES EM FIXACAO": {
-   "tot": 11,
+  "CONDUTEC": {
+   "tot": 10,
    "apr": 9
-  },
-  "CONPREM": {
-   "tot": 7,
-   "apr": 1
   },
   "ÁPIA": {
    "tot": 6,
    "apr": 2
   },
-  "HF SISTEMA DE FREIOS": {
+  "ABS | Pré moldados": {
    "tot": 5,
    "apr": 5
   },
   "BR RAILPARTS": {
    "tot": 5,
-   "apr": 4
+   "apr": 3
   },
-  "ABS CONSTRUTORA E SERVICOS": {
+  "H F SISTEMAS FREIO": {
    "tot": 5,
    "apr": 5
   },
@@ -113,12 +140,8 @@
    "tot": 4,
    "apr": 1
   },
-  "CHINA RAILWAY (PANGANG)": {
-   "tot": 3,
-   "apr": 2
-  },
   "GSA": {
-   "tot": 3,
+   "tot": 4,
    "apr": 2
   },
   "ATERPA": {
@@ -129,7 +152,11 @@
    "tot": 3,
    "apr": 2
   },
-  "WIRKLICH PLASTICS": {
+  "CONPREM": {
+   "tot": 3,
+   "apr": 1
+  },
+  "BRAZABE": {
    "tot": 2,
    "apr": 2
   },
@@ -137,57 +164,45 @@
    "tot": 2,
    "apr": 1
   },
+  "CODEME": {
+   "tot": 2,
+   "apr": 2
+  },
+  "CHINA RAILWAY": {
+   "tot": 2,
+   "apr": 2
+  },
+  "CORRPLASTIK": {
+   "tot": 2,
+   "apr": 2
+  },
+  "SANCHES": {
+   "tot": 2,
+   "apr": 2
+  },
+  "SOLOTRAT": {
+   "tot": 2,
+   "apr": 2
+  },
+  "TRATERRA": {
+   "tot": 2,
+   "apr": 2
+  },
+  "TUBOS TIGRE": {
+   "tot": 2,
+   "apr": 2
+  },
+  "WIRKLICH PLASTICS": {
+   "tot": 2,
+   "apr": 2
+  },
   "CIVIL MASTER": {
    "tot": 2,
    "apr": 0
   },
-  "TRATERRA CONSTRUCOES": {
-   "tot": 2,
-   "apr": 2
-  },
-  "CONSTRUTORA SANCHES TRIPOLONI LTDA": {
-   "tot": 2,
-   "apr": 2
-  },
-  "TUBOS TIGRE-ADS DO BRASIL LIMITADA": {
-   "tot": 2,
-   "apr": 2
-  },
-  "CODEME ENGENHARIA S/A": {
-   "tot": 2,
-   "apr": 2
-  },
-  "BRAZABE": {
-   "tot": 2,
-   "apr": 2
-  },
-  "SOLOTRAT CENTRO OESTE": {
-   "tot": 2,
-   "apr": 2
-  },
-  "PANDROL INDÚSTRIA E SOLUÇÕES FERROVIÁRIAS LTDA.": {
+  "PANDROL": {
    "tot": 2,
    "apr": 0
-  },
-  "THERMIT DO BRASIL": {
-   "tot": 1,
-   "apr": 1
-  },
-  "PANDOLFI": {
-   "tot": 1,
-   "apr": 1
-  },
-  "PEDREIRA SILVEIRA E REGO (PEDREIRA URUAÇU)": {
-   "tot": 1,
-   "apr": 1
-  },
-  "MOLDI": {
-   "tot": 1,
-   "apr": 1
-  },
-  "FRANCISCON": {
-   "tot": 1,
-   "apr": 1
   },
   "BRAFER": {
    "tot": 1,
@@ -197,22 +212,46 @@
    "tot": 1,
    "apr": 1
   },
-  "CORR PLASTIK": {
+  "FRANCISCON": {
    "tot": 1,
    "apr": 1
   },
-  "PEDREIRA BELA VISTA UNIÃO": {
+  "MOLDI": {
+   "tot": 1,
+   "apr": 1
+  },
+  "PEDREIRA SILVEIRA E REGO (PEDREIRA URUAÇU)": {
+   "tot": 1,
+   "apr": 1
+  },
+  "THERMIT DO BRASIL": {
+   "tot": 1,
+   "apr": 1
+  },
+  "PANDOLFI MADEIRAS": {
+   "tot": 1,
+   "apr": 1
+  },
+  "PEDREIRA BELA VISTA": {
    "tot": 1,
    "apr": 0
   },
-  "AMW SERVIÇOS LTDA": {
+  "PEDREIRA ITAPACI": {
    "tot": 1,
    "apr": 0
   },
-  "PEDREIRA ITAPACI LTDA": {
+  "AMW": {
+   "tot": 1,
+   "apr": 0
+  },
+  "VIA FÉRREA": {
+   "tot": 1,
+   "apr": 0
+  },
+  "DR": {
    "tot": 1,
    "apr": 0
   }
  },
- "criterioEmp": "Empresa = Fornecedor do BI (nomes das contratadas principais padronizados: ÁPIA, ATERPA, EMPA, GSA, CIVIL MASTER, SOMAFEL)"
+ "criterioEmp": "Empresa = Contratada da planilha (nomes padronizados: ÁPIA, ATERPA, EMPA, GSA, CIVIL MASTER, SOMAFEL, CONPREM)"
 }
