@@ -516,7 +516,7 @@
     var out = {}, pe, r, b;
     var P6 = state.dados.fisicoP6, refP6 = P6 ? 'cronograma Primavera' + (P6.dataRef ? ', data ' + P6.dataRef : '') : '';
     if (tipo === 'empresa') {
-      var mapa = { EMPA: ['infra', [1]], ATERPA: ['infra', [2]], 'ÁPIA': ['infra', [3]], SOMAFEL: ['sup', [1, 2, 3]] }[k];
+      var mapa = { SOMAFEL: ['sup', [1, 2, 3]] }[k]; // demais empresas: “Label do avanço” da planilha do painel Infra
       var fp = mapa && fisP6(mapa[0], mapa[1]);
       out.fisico = fp ? { v: fp.v, det: (mapa[0] === 'sup' ? 'SUP dos Pacotes 1 a 3' : 'Infra do Pacote ' + mapa[1][0]) + ' · ' + refP6, n: fp.n, d: fp.d }
         : (state.fis ? fisicoDe(state.fis.frentes.filter(function (f) { return f.emp === k; })) : null);
@@ -607,7 +607,7 @@
       });
       var p6 = state.dados.fisicoP6;
       nota = 'Pendências por executante: coluna Executante da EAP nos Pacotes 1 a 3 (em branco = a própria Empresa; ATERPA R somada à ATERPA). As RNCs e os databooks seguem a contratada, porque essas bases não informam o executante. Físico: cronograma Primavera' + (p6 && p6.dataRef ? ' (data ' + p6.dataRef + ')' : '') +
-        ' para EMPA (Infra P1), ATERPA (Infra P2), ÁPIA (Infra P3) e SOMAFEL (SUP P1 a P3); GSA e Civil Master, que o cronograma não separa, usam o “Label do avanço” do painel Infra' + (state.fis && state.fis.ref ? ' (ref. ' + state.fis.ref + ')' : '') +
+        ' para a SOMAFEL (SUP dos Pacotes 1 a 3); as demais empresas usam o “Label do avanço” da planilha do painel Infra' + (state.fis && state.fis.ref ? ' (ref. ' + state.fis.ref + ')' : '') +
         '. RNCs da OIA: Base Reg' + (state.rncRef ? ' de ' + state.rncRef : '') + ', todas as frentes da empresa. Databooks: BI Data Book' + (state.bk ? ' de ' + state.bk.dataRef : '') + ', pelo fornecedor. Empresas que só aparecem nas RNCs ou nos databooks estão no Painel por Empresa.';
     } else {
       ['SUP', 'INFRA'].forEach(function (d) {
