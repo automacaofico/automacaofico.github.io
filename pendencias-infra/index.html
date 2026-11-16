@@ -312,7 +312,7 @@ function renderKpis(c){
   const concl = c.validada + c.pendente_validacao + c.outro;
   const k = [
     {t:'Total de pendências', v:c.total, s: PAC ? shortPac(PAC) : 'Pacotes 01 a 03', cv:'--blue'},
-    {t:'Não concluídas', v:c.nao_concluida, s:`${pct(c.nao_concluida, c.total).toLocaleString('pt-BR')}% do total`, cv:'--k-nc'},
+    {t:'Concluídas', v:concl, s:`${pct(concl, c.total).toLocaleString('pt-BR')}% do total`, cv:'--navy'},
     {t:'Validadas INFRA', v:c.validada, s:`${pct(c.validada, c.total).toLocaleString('pt-BR')}% do total`, cv:'--k-va'},
     {t:'Pendente validação INFRA', v:c.pendente_validacao, s:`Concluídas aguardando validação · de ${fmt(concl)} concluídas`, cv:'--k-pv'},
   ];
