@@ -7,6 +7,8 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 10 10%22><rect width=%2210%22 height=%2210%22 rx=%222%22 fill=%22%233578bc%22/></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js" defer></script>
+<script src="exportar-ppt.js" defer></script>
 <style>
   :root{
     --navy-deep:#10203a; --navy:#1f4e79; --blue:#3578bc; --blue-soft:#6fa1d8;
@@ -153,6 +155,21 @@
   #tip b{display:block;margin-bottom:2px;}
   .err{background:var(--warn-bg);color:var(--warn);padding:14px 16px;border-radius:10px;margin-top:18px;}
 
+  .toprow{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;}
+  dialog#dlgPpt{border:1px solid var(--line);border-radius:14px;padding:0;max-width:560px;width:calc(100% - 32px);background:var(--paper);color:var(--ink);box-shadow:var(--shadow);}
+  dialog#dlgPpt::backdrop{background:rgba(10,20,36,.55);}
+  #fPpt{padding:22px;display:flex;flex-direction:column;gap:10px;}
+  #fPpt h3{margin:0;font-size:18px;}
+  #fPpt .sub{margin:0;font-size:13px;color:var(--ink-mid);}
+  .fld{display:flex;flex-direction:column;gap:5px;font-size:13px;font-weight:600;color:var(--ink);}
+  .fld span{font-weight:400;color:var(--ink-soft);font-size:12px;}
+  .fld input{font:inherit;font-size:13px;font-weight:400;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--paper);color:var(--ink);}
+  .two-in{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .hint{margin:0;font-size:12px;color:var(--ink-soft);}
+  .status{margin:4px 0 0;font-size:13px;color:var(--ink-mid);min-height:1.4em;}
+  .status.ok{color:var(--good);} .status.erro{color:var(--warn);}
+  .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:6px;}
+  .btn:disabled{opacity:.55;cursor:progress;}
   footer{border-top:1px solid var(--line);margin-top:20px;padding:22px 28px 30px;text-align:center;font-size:12px;color:var(--ink-soft);}
 
   @media (max-width:900px){ .kpis{grid-template-columns:repeat(2,1fr);} .pgrid{grid-template-columns:1fr;} .two{grid-template-columns:1fr;} }
@@ -176,7 +193,28 @@
 </div>
 
 <main class="wrap">
-  <div class="pills" role="group" aria-label="Filtrar por pacote" id="pills"><span class="lbl">Pacote</span></div>
+  <div class="toprow">
+    <div class="pills" role="group" aria-label="Filtrar por pacote" id="pills"><span class="lbl">Pacote</span></div>
+    <button type="button" class="btn" id="bPpt" aria-haspopup="dialog">⬇ Exportar PPT</button>
+  </div>
+
+  <dialog id="dlgPpt" aria-labelledby="dlgPptT">
+    <form method="dialog" id="fPpt">
+      <h3 id="dlgPptT">Exportar apresentação da reunião INFRA</h3>
+      <p class="sub">Gera o PowerPoint com Capa, Sumário, Fluxo, Avanço das pendências validadas e as pendências <b>concluídas aguardando validação da INFRA</b> por pacote, com as fotos. O arquivo é montado aqui no seu navegador — nada é enviado para a internet.</p>
+      <label class="fld">1. Pasta <b>Consolidado</b> <span>Atualização › Consolidado (contém <i>Fotos</i> e <i>Modelo PPT</i>)</span>
+        <input type="file" id="pPasta" webkitdirectory directory multiple>
+      </label>
+      <p class="hint" id="pInfo">Sem a pasta, o PPT sai sem fotos e sem as imagens de capa/fluxo. O navegador pode perguntar se deseja “carregar” os arquivos: eles são apenas lidos no seu computador.</p>
+      <div class="two-in">
+        <label class="fld">2. Antigas <span>opcional</span><input type="number" id="pAnt" min="0" inputmode="numeric" placeholder="ex.: 342"></label>
+        <label class="fld">Novas <span>opcional</span><input type="number" id="pNov" min="0" inputmode="numeric" placeholder="ex.: 10"></label>
+      </div>
+      <p class="hint">Antigas e Novas preenchem o “Total Pendências INFRA S.A”; o “Avanço” é validadas ÷ antigas. Em branco, saem como “—” para você preencher no PowerPoint.</p>
+      <p class="status" id="pStatus" role="status" aria-live="polite"></p>
+      <div class="acts"><button type="button" class="btn ghost" id="pCancel">Cancelar</button><button type="submit" class="btn" id="pGo">Gerar PPT</button></div>
+    </form>
+  </dialog>
 
   <section class="kpis" id="kpis" aria-live="polite"></section>
 
@@ -394,6 +432,29 @@ function renderAll(){
   const arr = itensFiltro(), c = contar(arr);
   renderKpis(c); renderGeral(c); renderPacotes(); renderBarras(arr); renderLista();
 }
+
+/* exportar PPT */
+(() => {
+  const dlg = $('#dlgPpt'), st = $('#pStatus'), go = $('#pGo');
+  const setSt = (t, cls = '') => { st.textContent = t; st.className = 'status ' + cls; };
+  $('#bPpt').onclick = () => { if (!DATA) return; setSt(''); dlg.showModal(); };
+  $('#pCancel').onclick = () => dlg.close();
+  $('#pPasta').onchange = e => {
+    const fs = [...e.target.files], fotos = fs.filter(f => /\/Fotos\//i.test('/' + f.webkitRelativePath)).length, mod = fs.filter(f => /\/Modelo PPT\//i.test('/' + f.webkitRelativePath)).length;
+    $('#pInfo').textContent = fs.length ? `${fotos} fotos e ${mod} imagens do modelo encontradas.` + (!fotos ? ' Atenção: não achei a subpasta “Fotos” — confira se escolheu a pasta Consolidado.' : '') : 'Nenhuma pasta selecionada.';
+  };
+  $('#fPpt').onsubmit = async e => {
+    e.preventDefault();
+    const num = id => { const v = $(id).value.trim(); return v === '' ? null : Math.max(0, parseInt(v, 10)); };
+    go.disabled = true; setSt('Preparando…');
+    try {
+      const arquivos = [...$('#pPasta').files].map(f => ({ path: f.webkitRelativePath, file: f }));
+      const r = await window.exportarPptInfra({ dados: DATA, arquivos, antigas: num('#pAnt'), novas: num('#pNov'), progresso: t => setSt(t) });
+      setSt(`Pronto: ${r.arquivo} baixado — ${r.itens} pendências aguardando validação, ${r.fotos} fotos.` + (r.semFoto.length ? ` Sem foto: ${r.semFoto.join(', ')}.` : ''), 'ok');
+    } catch (err) { console.error(err); setSt('Não foi possível gerar o PPT: ' + err.message, 'erro'); }
+    finally { go.disabled = false; }
+  };
+})();
 
 fetch('dados.json?t=' + Date.now(), {cache: 'no-store'}).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(d => {
   DATA = d;
