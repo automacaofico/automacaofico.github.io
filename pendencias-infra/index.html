@@ -210,7 +210,12 @@
         <label class="fld">2. Antigas <span>opcional</span><input type="number" id="pAnt" min="0" inputmode="numeric" placeholder="ex.: 342"></label>
         <label class="fld">Novas <span>opcional</span><input type="number" id="pNov" min="0" inputmode="numeric" placeholder="ex.: 10"></label>
       </div>
-      <p class="hint">Antigas e Novas preenchem o “Total Pendências INFRA S.A”; o “Avanço” é validadas ÷ antigas. Em branco, saem como “—” para você preencher no PowerPoint.</p>
+      <p class="hint">Antigas e Novas preenchem o “Total Pendências INFRA S.A”; o “Avanço” é validadas ÷ antigas. Novas também define as linhas do slide “Novas pendências”. Em branco, saem como “—” para você preencher no PowerPoint.</p>
+      <div class="two-in">
+        <label class="fld">3. Não conformes <span>quantidade (opcional)</span><input type="number" id="pNc" min="0" inputmode="numeric" placeholder="ex.: 1"></label>
+        <label class="fld">Retornos da reunião de <span>data da reunião anterior</span><input type="date" id="pData"></label>
+      </div>
+      <p class="hint">Os 3 últimos slides (não conformes, novas pendências e retornos/pontos de atenção/próximos passos) saem com a estrutura pronta para você completar.</p>
       <p class="status" id="pStatus" role="status" aria-live="polite"></p>
       <div class="acts"><button type="button" class="btn ghost" id="pCancel">Cancelar</button><button type="submit" class="btn" id="pGo">Gerar PPT</button></div>
     </form>
@@ -437,7 +442,11 @@ function renderAll(){
 (() => {
   const dlg = $('#dlgPpt'), st = $('#pStatus'), go = $('#pGo');
   const setSt = (t, cls = '') => { st.textContent = t; st.className = 'status ' + cls; };
-  $('#bPpt').onclick = () => { if (!DATA) return; setSt(''); dlg.showModal(); };
+  $('#bPpt').onclick = () => {
+    if (!DATA) return; setSt('');
+    if (!$('#pData').value && window.reuniaoAnteriorPadrao) { const d = window.reuniaoAnteriorPadrao(); $('#pData').value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+    dlg.showModal();
+  };
   $('#pCancel').onclick = () => dlg.close();
   $('#pPasta').onchange = e => {
     const fs = [...e.target.files], fotos = fs.filter(f => /\/Fotos\//i.test('/' + f.webkitRelativePath)).length, mod = fs.filter(f => /\/Modelo PPT\//i.test('/' + f.webkitRelativePath)).length;
@@ -449,7 +458,8 @@ function renderAll(){
     go.disabled = true; setSt('Preparando…');
     try {
       const arquivos = [...$('#pPasta').files].map(f => ({ path: f.webkitRelativePath, file: f }));
-      const r = await window.exportarPptInfra({ dados: DATA, arquivos, antigas: num('#pAnt'), novas: num('#pNov'), progresso: t => setSt(t) });
+      const dv = $('#pData').value; const dataRetornos = dv ? new Date(dv + 'T12:00:00') : null;
+      const r = await window.exportarPptInfra({ dados: DATA, arquivos, antigas: num('#pAnt'), novas: num('#pNov'), naoConformes: num('#pNc'), dataRetornos, progresso: t => setSt(t) });
       setSt(`Pronto: ${r.arquivo} baixado — ${r.itens} pendências aguardando validação, ${r.fotos} fotos.` + (r.semFoto.length ? ` Sem foto: ${r.semFoto.join(', ')}.` : ''), 'ok');
     } catch (err) { console.error(err); setSt('Não foi possível gerar o PPT: ' + err.message, 'erro'); }
     finally { go.disabled = false; }

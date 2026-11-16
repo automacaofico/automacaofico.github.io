@@ -4,7 +4,8 @@
  * (Atualização › Consolidado, sincronizada pelo OneDrive), que contém:
  *   Fotos/<ID>_Pendencia.* e <ID>_Resolucao.*   → colunas "Registro fotográfico (INFRA)" e "(FICO)"
  *   Modelo PPT/capa.jpg, sumario.jpg, fluxo.jpg, logo-vale.png
- * Estrutura (igual à apresentação semanal): Capa · Sumário · Fluxo · Avanço · Pendências por pacote.
+ * Estrutura (igual à apresentação semanal): Capa · Sumário · Fluxo · Avanço · Pendências por pacote ·
+ * Pendência não conforme · Novas pendências · Retornos/Pontos de atenção/Próximos passos (estes 3 para preencher).
  */
 (function () {
   const W = 26.667, H = 15;                     // mesmo tamanho de slide do modelo (24384000 x 13716000 EMU)
@@ -163,8 +164,55 @@
     }
   }
 
+  /* ---------- slides finais (conteúdo manual: estrutura pronta para preencher) ---------- */
+  const COLW_M = [5.2, 2.8, 10, 5.9];
+  function tabelaManual(pres, s, y, linhas, alturaMax, aprovacao) {
+    const borda = { type: 'solid', pt: 0.75, color: '7F7F7F' };
+    const cab = ['KM', 'Aprovação', 'DESCRIÇÃO', 'REGISTRO FOTOGRÁFICO'].map(t => ({ text: t, options: {
+      fill: { color: VERDE }, color: 'FFFFFF', bold: true, fontSize: 18, align: 'center', valign: 'middle', fontFace: FONTE, border: borda } }));
+    const rh = Math.min(linhas === 1 ? 4.38 : 1.11, alturaMax / linhas);
+    const corpo = Array.from({ length: linhas }, () => [
+      { text: '' },
+      aprovacao ? { text: aprovacao, options: { color: 'FF0000', bold: true } } : { text: '' },
+      { text: '' }, { text: '' },
+    ].map(c => ({ text: c.text, options: Object.assign({ fontFace: FONTE, fontSize: 18, color: '000000', align: 'center', valign: 'middle', border: borda, fill: { color: 'FFFFFF' } }, c.options) })));
+    s.addTable([cab, ...corpo], { x: 1.37, y, w: COLW_M.reduce((a, b) => a + b, 0), colW: COLW_M, rowH: [linhas === 1 ? 0.75 : 0.47, ...Array(linhas).fill(rh)], autoPage: false });
+  }
+  function naoConforme(pres, logo, qtd) {
+    const linhas = Math.max(1, qtd || 1);
+    for (let p = 0; p < Math.ceil(linhas / 10); p++) {
+      const n = Math.min(10, linhas - p * 10);
+      const s = pres.addSlide();
+      const tit = qtd ? `Pendência${qtd > 1 ? 's' : ''} não conforme${qtd > 1 ? 's' : ''} – ${qtd} pendência${qtd > 1 ? 's' : ''}` : 'Pendência não conforme';
+      moldura(pres, s, logo, tit);
+      tabelaManual(pres, s, n === 1 ? 4.33 : 1.83, n, 11.07, 'Não conforme');
+    }
+  }
+  function novasPendencias(pres, logo, qtd) {
+    const linhas = Math.max(1, qtd || 5);
+    const pags = Math.ceil(linhas / 10);
+    for (let p = 0; p < pags; p++) {
+      const n = Math.min(10, linhas - p * 10);
+      const s = pres.addSlide();
+      moldura(pres, s, logo, (qtd ? `Novas pendências – ${qtd} pendência${qtd > 1 ? 's' : ''} cadastrada${qtd > 1 ? 's' : ''}` : 'Novas pendências') + (pags > 1 ? ` (${p + 1}/${pags})` : ''));
+      tabelaManual(pres, s, 1.83, n, 11.07, '');
+    }
+  }
+  function retornos(pres, logo, dataReuniao) {
+    const s = pres.addSlide(); moldura(pres, s, logo, null);
+    const d = dataReuniao ? dataReuniao.toLocaleDateString('pt-BR') : '__/__/____';
+    const tit = (t, y) => s.addText(t, { x: 1.51, y, w: 22.89, h: 0.88, fontFace: FONTE, fontSize: 46, bold: true, color: VERDE, margin: 0, valign: 'middle', isTextBox: true });
+    const corpo = (y, h) => s.addText([{ text: ' ', options: { bullet: true } }], { x: 1.51, y, w: 22.89, h, fontFace: FONTE, fontSize: 30, color: '000000', valign: 'top', isTextBox: true });
+    tit(`Retornos da reunião de ${d}`, 0.41); corpo(1.31, 2.4);
+    tit('Pontos de atenção', 3.85); corpo(4.8, 7.6);
+    tit('Próximos passos', 12.55); corpo(13.45, 1.2);
+  }
+  // próxima sexta-feira (hoje, se for sexta) = data da reunião; os retornos são da reunião anterior
+  function proximaReuniao(base) { const d = new Date(base); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7)); return d; }
+  window.reuniaoAnteriorPadrao = () => { const d = proximaReuniao(new Date()); d.setDate(d.getDate() - 7); return d; };
+
   /* ---------- principal ---------- */
-  window.exportarPptInfra = async function ({ dados, arquivos, antigas, novas, progresso = () => {}, saida = 'download' }) {
+  window.exportarPptInfra = async function ({ dados, arquivos, antigas, novas, naoConformes, dataRetornos, progresso = () => {}, saida = 'download' }) {
     if (typeof PptxGenJS === 'undefined') throw new Error('Biblioteca de PowerPoint não carregou (verifique a conexão).');
     const { fotos: fotosArq, modelo } = indexar(arquivos);
     const pendentes = dados.itens.filter(i => i.cat === 'pendente_validacao')
@@ -195,13 +243,17 @@
     };
     n.concluidas = n.validadas + n.aguardando;
 
-    capa(pres, mod.capa, hoje);
+    capa(pres, mod.capa, proximaReuniao(hoje));
     imagemCheia(pres, mod.sumario, 'Sumário', 'Sumário:', ['Fluxo de Pendências INFRA', 'Avanço e evolução das pendências', 'Estratificação das pendências concluídas por pacote', 'Pendência não conforme e novas pendências', 'Retornos, pontos de atenção e próximos passos'], mod.logo);
     imagemCheia(pres, mod.fluxo, 'Fluxo de Pendências INFRA', 'Fluxo de Pendências INFRA', ['(Imagem do fluxo não encontrada: selecione a pasta Consolidado, que contém "Modelo PPT")'], mod.logo);
     avanco(pres, mod.logo, n, antigas, novas);
     dados.pacotes.forEach(p => pacoteSlides(pres, mod.logo, p, pendentes.filter(i => i.pacote === p.pacote), fotos));
+    naoConforme(pres, mod.logo, naoConformes);
+    novasPendencias(pres, mod.logo, novas);
+    retornos(pres, mod.logo, dataRetornos);
 
-    const nome = `Reunião INFRA ${String(hoje.getDate()).padStart(2, '0')}.${String(hoje.getMonth() + 1).padStart(2, '0')}.pptx`;
+    const reuniao = proximaReuniao(hoje);
+    const nome = `Reunião INFRA ${String(reuniao.getDate()).padStart(2, '0')}.${String(reuniao.getMonth() + 1).padStart(2, '0')}.pptx`;
     progresso('Gerando arquivo…');
     const resumo = { arquivo: nome, slides: pres.slides ? pres.slides.length : undefined, itens: pendentes.length, fotos: fotos.size, fotosFaltando: precisa.length - fotos.size,
       semFoto: pendentes.filter(i => !fotos.has(`${i.id}_PENDENCIA`) && !fotos.has(`${i.id}_RESOLUCAO`)).map(i => i.id), modelo: Object.keys(mod) };
