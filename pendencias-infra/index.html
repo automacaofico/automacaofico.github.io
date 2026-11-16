@@ -288,7 +288,7 @@ function bindTip(el, html){
 }
 
 function itensFiltro(){ return DATA.itens.filter(i => !PAC || i.pacote === PAC); }
-function contar(arr){ const c = {total: arr.length}; CATS.forEach(k => c[k.k] = 0); arr.forEach(i => c[i.cat]++); return c; }
+function contar(arr){ const c = {total: arr.length}; CATS.forEach(k => c[k.k] = 0); c.status_concluido = 0; arr.forEach(i => { c[i.cat]++; if (i.status === 'Concluído') c.status_concluido++; }); return c; }
 
 function stackHTML(el, c, small){
   el.innerHTML = ''; el.classList.toggle('sm', !!small);
@@ -309,7 +309,7 @@ function renderPills(){
 }
 
 function renderKpis(c){
-  const concl = c.validada + c.pendente_validacao + c.outro;
+  const concl = c.status_concluido;   // só Status = Concluído (itens validados com outro status, ex.: Monitoramento, ficam de fora)
   const k = [
     {t:'Total de pendências', v:c.total, s: PAC ? shortPac(PAC) : 'Pacotes 01 a 03', cv:'--blue'},
     {t:'Concluídas', v:concl, s:`${pct(concl, c.total).toLocaleString('pt-BR')}% do total`, cv:'--navy'},
