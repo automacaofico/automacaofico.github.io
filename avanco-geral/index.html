@@ -666,7 +666,7 @@
       var p6 = state.dados.fisicoP6;
       nota = 'Pendências por executante: coluna Executante da EAP nos Pacotes 1 a 3 (em branco = a própria Empresa; ATERPA R somada à ATERPA). As RNCs e os databooks seguem a contratada, porque essas bases não informam o executante. Físico: cronograma Primavera' + (p6 && p6.dataRef ? ' (data ' + p6.dataRef + ')' : '') +
         ' para a SOMAFEL (SUP dos Pacotes 1 a 3); as demais empresas usam o “Label do avanço” da planilha do painel Infra' + (state.fis && state.fis.ref ? ' (ref. ' + state.fis.ref + ')' : '') +
-        '. RNCs da OIA: Base Reg' + (state.rncRef ? ' de ' + state.rncRef : '') + ', todas as frentes da empresa. Databooks: planilha Gerencial' + (state.bk ? ' de ' + state.bk.dataRef : '') + ', pela contratada. Empresas que só aparecem nas RNCs ou nos databooks estão no Painel por Empresa.';
+        '. RNCs da OIA: Base Reg' + (state.rncRef ? ' de ' + state.rncRef : '') + ', todas as frentes da empresa. Databooks: BI de Databooks (FICO)' + (state.bk ? ' de ' + state.bk.dataRef : '') + ', pela contratada. Empresas que só aparecem nas RNCs ou nos databooks estão no Painel por Empresa.';
     } else {
       ['SUP', 'INFRA'].forEach(function (d) {
         html += cartao(NOME_DISC[d], d === 'SUP' ? 'SOMAFEL: trilhos, dormentes, lastro e soldas' : 'Demais empresas: terraplenagem, drenagem, bueiros e obras de arte',
