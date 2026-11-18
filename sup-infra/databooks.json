@@ -1,104 +1,108 @@
 {
- "dataRef": "17/11/2026",
- "fonte": "BI Novas Ferrovias - Data Book (filtro Projeto = FICO), export data.xlsx",
- "criterio": "Primeiro pacote citado 1, 2 ou 3",
- "criterioDisc": "Disciplina da planilha Gerencial de databooks, pelo número do contrato: Superestrutura = SUP, Infraestrutura = Infra",
+ "dataRef": "18/11/2026",
+ "fonte": "Planilha STATUS - BK, aba REG.01",
+ "criterio": "Filtro Pacote 01, 01A, 01B, 02 e 03 (1A e 1B somados ao Pacote 1); um databook em mais de um pacote conta em cada pacote",
+ "criterioDisc": "Coluna Disciplina da planilha STATUS - BK: Superestrutura = SUP, Infraestrutura = Infra",
  "disc": {
   "SUP": {
-   "tot": 47,
-   "apr": 28,
-   "tra": 12,
+   "tot": 80,
+   "apr": 45,
+   "tra": 22,
    "situacoes": [
     [
-     "Reprovado",
-     12
+     "Em tratamento",
+     22
     ],
     [
-     "BK Em Construção",
-     4
+     "Em desenvolvimento",
+     9
     ],
     [
-     "Não Entregue",
-     2
+     "Em análise Vale",
+     3
     ],
     [
-     "Em Análise",
+     "Em análise OIA",
      1
     ]
    ],
    "pendentes": [
     [
-     "CONPREM",
+     "PANDROL",
      6
+    ],
+    [
+     "CONPREM",
+     4
+    ],
+    [
+     "PEDREIRA BELA VISTA",
+     3
+    ],
+    [
+     "PEDREIRA ITAPACI",
+     3
+    ],
+    [
+     "BR RAILPARTS",
+     3
+    ],
+    [
+     "CONDUTEC",
+     3
+    ],
+    [
+     "AMW",
+     3
+    ],
+    [
+     "VIA FÉRREA",
+     3
+    ],
+    [
+     "GSA",
+     3
     ],
     [
      "SOMAFEL",
      3
     ],
     [
-     "CONDUTEC",
-     2
-    ],
-    [
-     "PANDROL",
-     2
-    ],
-    [
-     "CHINA RAILWAY",
-     1
-    ],
-    [
      "BRR EQUIPAMENTOS",
-     1
-    ],
-    [
-     "BR RAILPARTS",
-     1
-    ],
-    [
-     "PEDREIRA BELA VISTA",
-     1
-    ],
-    [
-     "AMW",
-     1
-    ],
-    [
-     "PEDREIRA ITAPACI",
      1
     ]
    ]
   },
   "INFRA": {
-   "tot": 39,
-   "apr": 30,
-   "tra": 6,
+   "tot": 59,
+   "apr": 44,
+   "tra": 8,
    "situacoes": [
     [
-     "Reprovado",
+     "Em tratamento",
+     8
+    ],
+    [
+     "Em desenvolvimento",
      6
     ],
     [
-     "BK Em Construção",
-     1
-    ],
-    [
-     "Em Análise",
-     1
-    ],
-    [
-     "Não Entregue",
+     "Em análise OIA",
      1
     ]
    ],
    "pendentes": [
     [
+     "CIVIL MASTER",
+     5
+    ],
+    [
      "ÁPIA",
      4
     ],
     [
-     "CIVIL MASTER",
-     2
+     "DR",
+     3
     ],
     [
      "ATERPA",
@@ -117,50 +121,90 @@
  },
  "emp": {
   "CONDUTEC": {
-   "tot": 11,
-   "apr": 9
+   "tot": 20,
+   "apr": 17
   },
-  "CONPREM": {
-   "tot": 7,
-   "apr": 1
+  "ABS | Pré moldados": {
+   "tot": 11,
+   "apr": 11
+  },
+  "BR RAILPARTS": {
+   "tot": 11,
+   "apr": 8
+  },
+  "H F SISTEMAS FREIO": {
+   "tot": 9,
+   "apr": 9
   },
   "ÁPIA": {
    "tot": 6,
    "apr": 2
   },
-  "H F SISTEMAS FREIO": {
+  "GSA": {
+   "tot": 6,
+   "apr": 2
+  },
+  "PANDROL": {
+   "tot": 6,
+   "apr": 0
+  },
+  "CORRPLASTIK": {
    "tot": 5,
    "apr": 5
   },
-  "BR RAILPARTS": {
+  "CIVIL MASTER": {
    "tot": 5,
-   "apr": 4
+   "apr": 0
   },
-  "ABS | Pré moldados": {
+  "CONPREM": {
    "tot": 5,
-   "apr": 5
+   "apr": 1
   },
   "SOMAFEL": {
    "tot": 4,
    "apr": 1
   },
-  "CHINA RAILWAY": {
+  "PEDREIRA BELA VISTA": {
    "tot": 3,
-   "apr": 2
+   "apr": 0
   },
-  "GSA": {
+  "PEDREIRA ITAPACI": {
    "tot": 3,
-   "apr": 2
+   "apr": 0
   },
   "ATERPA": {
    "tot": 3,
    "apr": 2
   },
+  "BRAZABE": {
+   "tot": 3,
+   "apr": 3
+  },
+  "CHINA RAILWAY": {
+   "tot": 3,
+   "apr": 3
+  },
   "EMPA": {
    "tot": 3,
    "apr": 2
   },
-  "WIRKLICH PLASTICS": {
+  "TUBOS TIGRE": {
+   "tot": 3,
+   "apr": 3
+  },
+  "AMW": {
+   "tot": 3,
+   "apr": 0
+  },
+  "VIA FÉRREA": {
+   "tot": 3,
+   "apr": 0
+  },
+  "DR": {
+   "tot": 3,
+   "apr": 0
+  },
+  "CHENXIN HEAVY INDUSTRY": {
    "tot": 2,
    "apr": 2
   },
@@ -168,11 +212,11 @@
    "tot": 2,
    "apr": 1
   },
-  "CIVIL MASTER": {
+  "CODEME": {
    "tot": 2,
-   "apr": 0
+   "apr": 2
   },
-  "TRATERRA": {
+  "MOLDI": {
    "tot": 2,
    "apr": 2
   },
@@ -180,25 +224,29 @@
    "tot": 2,
    "apr": 2
   },
-  "TUBOS TIGRE": {
-   "tot": 2,
-   "apr": 2
-  },
-  "CODEME": {
-   "tot": 2,
-   "apr": 2
-  },
-  "BRAZABE": {
-   "tot": 2,
-   "apr": 2
-  },
   "SOLOTRAT": {
    "tot": 2,
    "apr": 2
   },
-  "PANDROL": {
+  "TRATERRA": {
    "tot": 2,
-   "apr": 0
+   "apr": 2
+  },
+  "WIRKLICH PLASTICS": {
+   "tot": 2,
+   "apr": 2
+  },
+  "BRAFER": {
+   "tot": 1,
+   "apr": 1
+  },
+  "FRANCISCON": {
+   "tot": 1,
+   "apr": 1
+  },
+  "PEDREIRA URUAÇU": {
+   "tot": 1,
+   "apr": 1
   },
   "THERMIT DO BRASIL": {
    "tot": 1,
@@ -207,43 +255,7 @@
   "PANDOLFI MADEIRAS": {
    "tot": 1,
    "apr": 1
-  },
-  "PEDREIRA SILVEIRA E REGO (PEDREIRA URUAÇU)": {
-   "tot": 1,
-   "apr": 1
-  },
-  "MOLDI": {
-   "tot": 1,
-   "apr": 1
-  },
-  "FRANCISCON": {
-   "tot": 1,
-   "apr": 1
-  },
-  "BRAFER": {
-   "tot": 1,
-   "apr": 1
-  },
-  "CHENXIN HEAVY INDUSTRY": {
-   "tot": 1,
-   "apr": 1
-  },
-  "CORRPLASTIK": {
-   "tot": 1,
-   "apr": 1
-  },
-  "PEDREIRA BELA VISTA": {
-   "tot": 1,
-   "apr": 0
-  },
-  "AMW": {
-   "tot": 1,
-   "apr": 0
-  },
-  "PEDREIRA ITAPACI": {
-   "tot": 1,
-   "apr": 0
   }
  },
- "criterioEmp": "Empresa = Contratada da planilha Gerencial pelo número do contrato (nomes padronizados: ÁPIA, ATERPA, EMPA, GSA, CIVIL MASTER, SOMAFEL, CONPREM)"
+ "criterioEmp": "Empresa = coluna Empresa da planilha STATUS - BK (nomes padronizados: ÁPIA, ATERPA, EMPA, GSA, CIVIL MASTER, SOMAFEL, CONPREM)"
 }
