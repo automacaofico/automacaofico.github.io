@@ -74,8 +74,8 @@
    ]
   },
   "INFRA": {
-   "tot": 59,
-   "apr": 44,
+   "tot": 58,
+   "apr": 43,
    "tra": 8,
    "situacoes": [
     [
@@ -188,10 +188,6 @@
    "tot": 3,
    "apr": 2
   },
-  "TUBOS TIGRE": {
-   "tot": 3,
-   "apr": 3
-  },
   "AMW": {
    "tot": 3,
    "apr": 0
@@ -229,6 +225,10 @@
    "apr": 2
   },
   "TRATERRA": {
+   "tot": 2,
+   "apr": 2
+  },
+  "TUBOS TIGRE": {
    "tot": 2,
    "apr": 2
   },
