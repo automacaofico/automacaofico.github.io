@@ -124,6 +124,9 @@ window.FicoTransport = (() => {
     let timer;
     try {
       await Promise.race([ready, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Conexão indisponível. Verifique a internet e tente novamente.')), 60000); })]);
+    } catch (error) {
+      if (!peer) frame.src = endpoint + '?bridge=1&origin=' + encodeURIComponent(location.origin) + '&retry=' + Date.now();
+      throw error;
     } finally { clearTimeout(timer); }
     return new Promise((resolve, reject) => {
       const id = crypto.randomUUID();
@@ -137,6 +140,9 @@ window.FicoTransport = (() => {
   frame.hidden = true; frame.title = 'Conexão com o servidor FICO';
   frame.src = endpoint + '?bridge=1&origin=' + encodeURIComponent(location.origin);
   document.body.appendChild(frame);
+  window.addEventListener('online', () => {
+    if (!peer) frame.src = endpoint + '?bridge=1&origin=' + encodeURIComponent(location.origin) + '&retry=' + Date.now();
+  });
   return Object.freeze({ request });
 })();
 
