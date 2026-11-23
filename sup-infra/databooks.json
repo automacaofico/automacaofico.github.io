@@ -1,5 +1,5 @@
 {
- "dataRef": "18/11/2026",
+ "dataRef": "23/11/2026",
  "fonte": "Planilha STATUS - BK, aba REG.01",
  "criterio": "Filtro Pacote 01, 01A, 01B, 02 e 03 (1A e 1B somados ao Pacote 1); um databook em mais de um pacote conta em cada pacote",
  "criterioDisc": "Coluna Disciplina da planilha STATUS - BK: Superestrutura = SUP, Infraestrutura = Infra",
