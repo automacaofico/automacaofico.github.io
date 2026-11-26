@@ -634,29 +634,6 @@
     var c = state.dados && state.dados.databooks && state.dados.databooks.comum;
     return c && c.total > 0 ? c : null;
   }
-  function cartaoComum(c) {
-    var v = c.aprovados / c.total;
-    var cor = COMP.filter(function (x) { return x.id === 'bk'; })[0].cor;
-    var nomeG = function (g) { var p = g.split(','); return 'Pacotes ' + (p.length > 1 ? p.slice(0, -1).join(', ') + ' e ' + p[p.length - 1] : p[0]); };
-    var h = '<article class="card pk"><header><h3>Databooks comuns a mais de um pacote</h3><div class="big display num">' + fmtPct(v) + '</div></header>' +
-      '<div class="sub2">Mesmo databook (Nº BK) usado em mais de um pacote. Fica fora dos cartões de cada pacote e entra uma vez no avanço geral. ' + c.aprovados + ' de ' + c.total + ' aprovados.</div>' +
-      '<div class="bar"><i style="width:' + (v * 100).toFixed(2) + '%;background:var(--blue)"></i></div><div class="rows">';
-    var G = c.grupos || {};
-    Object.keys(G).forEach(function (g) {
-      var o = G[g], vg = o.aprovados / o.total;
-      h += '<div class="row"><div class="top"><span><span class="dot" style="background:' + cor + '"></span>' + esc(nomeG(g)) + '</span><b class="num">' + fmtPct(vg) + '</b></div>' +
-        '<div class="bar"><i style="width:' + (vg * 100).toFixed(2) + '%;background:' + cor + '"></i></div>' +
-        '<div class="det"><span>' + o.aprovados + ' de ' + o.total + ' aprovados</span></div></div>';
-    });
-    if ((c.itens || []).length) {
-      h += '<div class="row"><div class="top"><span><b>Pendentes (' + c.itens.length + ')</b></span></div>';
-      c.itens.forEach(function (it) {
-        h += '<div class="det"><span><b>' + esc(it.empresa) + '</b> · ' + esc(it.escopo) + ' · ' + esc(nomeG(it.pacotes)).replace('Pacotes ', 'P') + ' · ' + esc(it.status) + (it.tendencia ? ' · tendência ' + esc(it.tendencia) : '') + '</span></div>';
-      });
-      h += '</div>';
-    }
-    return h + '</div></article>';
-  }
   function consolidado() {
     var out = {};
     COMP.forEach(function (c) {
@@ -735,8 +712,7 @@
     if (v === 'pacote') {
       PACOTES.forEach(function (p) { html += cartao('Pacote ' + p, '', valoresPacote(p), COMP[0].nome); });
       var cmP = bkComum();
-      if (cmP) html += cartaoComum(cmP);
-      nota = 'Mesmos números do indicador geral acima, separados por pacote.' + (superSem() ? ' As RNCs de Superestrutura (Lote 1 e Arranque) foram distribuídas pelo km citado no título ou na descrição; ' + fmtInt(superSem().total) + ' sem km nem pacote (' + fmtInt(superSem().fechadas) + ' encerradas) entram só no consolidado.' : '') + (cmP ?' Nos databooks, cada pacote mostra só os seus exclusivos; os usados em mais de um pacote ficam no cartão de comuns e contam uma vez no avanço geral.' : '');
+      nota = 'Mesmos números do indicador geral acima, separados por pacote.' + (superSem() ? ' As RNCs de Superestrutura (Lote 1 e Arranque) foram distribuídas pelo km citado no título ou na descrição; ' + fmtInt(superSem().total) + ' sem km nem pacote (' + fmtInt(superSem().fechadas) + ' encerradas) entram só no consolidado.' : '') + (cmP ?' Nos databooks, cada pacote mostra só os seus exclusivos; os ' + cmP.total + ' usados em mais de um pacote (' + cmP.aprovados + ' aprovados) contam uma vez, só no avanço geral.' : '');
     } else if (v === 'empresa') {
       empresasCard().forEach(function (e) {
         html += cartao(e, fmtInt(state.pendTot[e]) + ' pendências como executante nos Pacotes 1 a 3', valoresGrupo('empresa', e), e === 'SOMAFEL' ? 'Físico de SUP' : 'Físico de Infra',
