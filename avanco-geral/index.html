@@ -596,7 +596,7 @@
     var rs = d.rnc && d.rnc.superPac && d.rnc.superPac[p];
     out.rnc = r ? { v: r.fechadas / r.total, det: fmtInt(r.fechadas) + ' de ' + fmtInt(r.total) + ' encerradas' + (rs ? ' · Superestrutura: ' + fmtInt(rs.fechadas) + ' de ' + fmtInt(rs.total) : ''), n: r.fechadas, d: r.total } : null;
     var b = d.databooks && d.databooks.pacotes && d.databooks.pacotes[p];
-    out.bk = b ? { v: b.aprovados / b.total, det: b.aprovados + ' de ' + b.total + ' aprovados' + (bkComum() ? ' · só os exclusivos do pacote' : ''), n: b.aprovados, d: b.total } : null;
+    out.bk = b ? { v: b.aprovados / b.total, det: b.aprovados + ' de ' + b.total + ' aprovados' + (b.comuns ? ' · ' + b.comuns + ' comuns a outros pacotes' : (bkComum() ? ' · só os exclusivos do pacote' : '')), n: b.aprovados, d: b.total } : null;
     return out;
   }
   function fisicoDe(lista) {
@@ -639,9 +639,13 @@
     COMP.forEach(function (c) {
       var n = 0, d = 0, ok = false;
       PACOTES.forEach(function (p) { var x = valoresPacote(p)[c.id]; if (x) { n += x.n; d += x.d; ok = true; } });
-      // databooks comuns aos Pacotes 1, 2 e 3 (uma linha só na STATUS - BK) entram uma vez no consolidado
-      var cm = c.id === 'bk' && bkComum();
-      if (cm && ok) { n += cm.aprovados; d += cm.total; }
+      // databooks: cada pacote inclui os comuns a outros pacotes; no consolidado cada databook (Nº BK) conta uma vez
+      var gb = c.id === 'bk' && state.dados.databooks && state.dados.databooks.geral;
+      if (gb && ok && gb.total > 0) { n = gb.aprovados; d = gb.total; }
+      else {
+        var cm = c.id === 'bk' && !(state.dados.databooks && state.dados.databooks.exclusivos) && bkComum();
+        if (cm && ok) { n += cm.aprovados; d += cm.total; }
+      }
       var sL = c.id === 'rnc' && superSem(); if (ok && sL) { n += sL.fechadas; d += sL.total; }
       out[c.id] = ok && d > 0 ? { v: n / d, n: n, d: d } : null;
     });
@@ -712,7 +716,7 @@
     if (v === 'pacote') {
       PACOTES.forEach(function (p) { html += cartao('Pacote ' + p, '', valoresPacote(p), COMP[0].nome); });
       var cmP = bkComum();
-      nota = 'Mesmos números do indicador geral acima, separados por pacote.' + (superSem() ? ' As RNCs de Superestrutura (Lote 1 e Arranque) foram distribuídas pelo km citado no título ou na descrição; ' + fmtInt(superSem().total) + ' sem km nem pacote (' + fmtInt(superSem().fechadas) + ' encerradas) entram só no consolidado.' : '') + (cmP ?' Nos databooks, cada pacote mostra só os seus exclusivos; os ' + cmP.total + ' usados em mais de um pacote (' + cmP.aprovados + ' aprovados) contam uma vez, só no avanço geral.' : '');
+      nota = 'Mesmos números do indicador geral acima, separados por pacote.' + (superSem() ? ' As RNCs de Superestrutura (Lote 1 e Arranque) foram distribuídas pelo km citado no título ou na descrição; ' + fmtInt(superSem().total) + ' sem km nem pacote (' + fmtInt(superSem().fechadas) + ' encerradas) entram só no consolidado.' : '') + (cmP ? ' Nos databooks, cada pacote inclui os ' + cmP.total + ' comuns a mais de um pacote em que aparecem; no avanço geral cada databook (Nº BK) conta uma vez, por isso a soma dos pacotes é maior que o total geral.' : '');
     } else if (v === 'empresa') {
       empresasCard().forEach(function (e) {
         html += cartao(e, fmtInt(state.pendTot[e]) + ' pendências como executante nos Pacotes 1 a 3', valoresGrupo('empresa', e), e === 'SOMAFEL' ? 'Físico de SUP' : 'Físico de Infra',
