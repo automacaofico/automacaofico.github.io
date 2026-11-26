@@ -1,71 +1,71 @@
 {
- "dataRef": "23/11/2026",
+ "dataRef": "26/11/2026",
  "fonte": "Planilha STATUS - BK, aba REG.01",
- "criterio": "Filtro Pacote 01, 01A, 01B, 02 e 03 (1A e 1B somados ao Pacote 1); um databook em mais de um pacote conta em cada pacote",
+ "criterio": "Filtro Pacote 01, 01A, 01B, 02, 03 e 01,2,3 (1A e 1B somados ao Pacote 1); cada databook conta uma vez, identificado pelo Nº BK (sem Nº BK: Empresa + Escopo + Contrato), mesmo que apareça em mais de um pacote",
  "criterioDisc": "Coluna Disciplina da planilha STATUS - BK: Superestrutura = SUP, Infraestrutura = Infra",
  "disc": {
   "SUP": {
-   "tot": 80,
-   "apr": 45,
-   "tra": 22,
+   "tot": 43,
+   "apr": 28,
+   "tra": 10,
    "situacoes": [
     [
      "Em tratamento",
-     22
-    ],
-    [
-     "Em desenvolvimento",
-     9
-    ],
-    [
-     "Em análise Vale",
-     3
+     10
     ],
     [
      "Em análise OIA",
+     2
+    ],
+    [
+     "Em desenvolvimento",
+     2
+    ],
+    [
+     "Em análise Vale",
      1
     ]
    ],
    "pendentes": [
     [
-     "PANDROL",
-     6
+     "SOMAFEL",
+     3
     ],
     [
      "CONPREM",
-     4
+     2
+    ],
+    [
+     "PANDROL",
+     2
     ],
     [
      "PEDREIRA BELA VISTA",
-     3
+     1
     ],
     [
      "PEDREIRA ITAPACI",
-     3
+     1
     ],
     [
      "BR RAILPARTS",
-     3
+     1
     ],
     [
      "CONDUTEC",
-     3
+     1
     ],
     [
      "AMW",
-     3
+     1
     ],
     [
      "VIA FÉRREA",
-     3
+     1
     ],
     [
      "GSA",
-     3
-    ],
-    [
-     "SOMAFEL",
-     3
+     1
     ],
     [
      "BRR EQUIPAMENTOS",
@@ -74,17 +74,17 @@
    ]
   },
   "INFRA": {
-   "tot": 58,
-   "apr": 43,
-   "tra": 8,
+   "tot": 41,
+   "apr": 30,
+   "tra": 6,
    "situacoes": [
     [
      "Em tratamento",
-     8
+     6
     ],
     [
      "Em desenvolvimento",
-     6
+     4
     ],
     [
      "Em análise OIA",
@@ -93,15 +93,11 @@
    ],
    "pendentes": [
     [
-     "CIVIL MASTER",
-     5
-    ],
-    [
      "ÁPIA",
      4
     ],
     [
-     "DR",
+     "CIVIL MASTER",
      3
     ],
     [
@@ -115,92 +111,60 @@
     [
      "GSA",
      1
+    ],
+    [
+     "DR",
+     1
     ]
    ]
   }
  },
  "emp": {
   "CONDUTEC": {
-   "tot": 20,
-   "apr": 17
-  },
-  "ABS | Pré moldados": {
-   "tot": 11,
-   "apr": 11
-  },
-  "BR RAILPARTS": {
-   "tot": 11,
-   "apr": 8
-  },
-  "H F SISTEMAS FREIO": {
-   "tot": 9,
+   "tot": 10,
    "apr": 9
   },
   "ÁPIA": {
    "tot": 6,
    "apr": 2
   },
-  "GSA": {
-   "tot": 6,
-   "apr": 2
-  },
-  "PANDROL": {
-   "tot": 6,
-   "apr": 0
-  },
-  "CORRPLASTIK": {
+  "ABS | Pré moldados": {
    "tot": 5,
    "apr": 5
   },
-  "CIVIL MASTER": {
+  "BR RAILPARTS": {
    "tot": 5,
-   "apr": 0
+   "apr": 4
   },
-  "CONPREM": {
+  "H F SISTEMAS FREIO": {
    "tot": 5,
-   "apr": 1
+   "apr": 5
   },
   "SOMAFEL": {
    "tot": 4,
    "apr": 1
   },
-  "PEDREIRA BELA VISTA": {
-   "tot": 3,
-   "apr": 0
-  },
-  "PEDREIRA ITAPACI": {
-   "tot": 3,
-   "apr": 0
-  },
   "ATERPA": {
    "tot": 3,
    "apr": 2
-  },
-  "BRAZABE": {
-   "tot": 3,
-   "apr": 3
-  },
-  "CHINA RAILWAY": {
-   "tot": 3,
-   "apr": 3
   },
   "EMPA": {
    "tot": 3,
    "apr": 2
   },
-  "AMW": {
+  "GSA": {
+   "tot": 3,
+   "apr": 1
+  },
+  "CIVIL MASTER": {
    "tot": 3,
    "apr": 0
   },
-  "VIA FÉRREA": {
+  "CONPREM": {
    "tot": 3,
-   "apr": 0
+   "apr": 1
   },
-  "DR": {
-   "tot": 3,
-   "apr": 0
-  },
-  "CHENXIN HEAVY INDUSTRY": {
+  "BRAZABE": {
    "tot": 2,
    "apr": 2
   },
@@ -212,7 +176,11 @@
    "tot": 2,
    "apr": 2
   },
-  "MOLDI": {
+  "CHINA RAILWAY": {
+   "tot": 2,
+   "apr": 2
+  },
+  "CORRPLASTIK": {
    "tot": 2,
    "apr": 2
   },
@@ -236,11 +204,31 @@
    "tot": 2,
    "apr": 2
   },
+  "PANDROL": {
+   "tot": 2,
+   "apr": 0
+  },
+  "PEDREIRA BELA VISTA": {
+   "tot": 1,
+   "apr": 0
+  },
+  "PEDREIRA ITAPACI": {
+   "tot": 1,
+   "apr": 0
+  },
   "BRAFER": {
    "tot": 1,
    "apr": 1
   },
+  "CHENXIN HEAVY INDUSTRY": {
+   "tot": 1,
+   "apr": 1
+  },
   "FRANCISCON": {
+   "tot": 1,
+   "apr": 1
+  },
+  "MOLDI": {
    "tot": 1,
    "apr": 1
   },
@@ -255,6 +243,18 @@
   "PANDOLFI MADEIRAS": {
    "tot": 1,
    "apr": 1
+  },
+  "AMW": {
+   "tot": 1,
+   "apr": 0
+  },
+  "VIA FÉRREA": {
+   "tot": 1,
+   "apr": 0
+  },
+  "DR": {
+   "tot": 1,
+   "apr": 0
   }
  },
  "criterioEmp": "Empresa = coluna Empresa da planilha STATUS - BK (nomes padronizados: ÁPIA, ATERPA, EMPA, GSA, CIVIL MASTER, SOMAFEL, CONPREM)"
